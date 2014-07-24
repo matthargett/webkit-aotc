@@ -56,6 +56,23 @@ String::String(const UChar* str)
     m_impl = StringImpl::create(str, lengthOfNullTerminatedString(str));
 }
 
+String::String(ByteStreamConstructorTag, const char* b, unsigned length)
+{
+    if (!b) {
+        m_impl = 0;
+        return;
+    }
+    ASSERT(*b);
+    if (*b == sizeof(LChar)) {
+        ASSERT((length - 1) % sizeof(LChar) == 0);
+        m_impl = StringImpl::create(reinterpret_cast<const LChar*>(b + 1), (length - 1) * sizeof(char) / sizeof(LChar));
+    } else {
+        ASSERT(*b == sizeof(UChar));
+        ASSERT((length - 1) % sizeof(UChar) == 0);
+        m_impl = StringImpl::create(reinterpret_cast<const UChar*>(b + 1), (length - 1) * sizeof(char) / sizeof(UChar));
+    }
+}
+
 // Construct a string with latin1 data.
 String::String(const LChar* characters, unsigned length)
 {

@@ -62,6 +62,7 @@ set(JavaScriptCore_SOURCES
     bytecode/BytecodeLivenessAnalysis.cpp
     bytecode/CallLinkInfo.cpp
     bytecode/CallLinkStatus.cpp
+    bytecode/CodeBlockDatabase.cpp
     bytecode/CodeBlock.cpp
     bytecode/CodeBlockHash.cpp
     bytecode/CodeBlockJettisoningWatchpoint.cpp

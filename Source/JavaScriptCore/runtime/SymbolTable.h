@@ -138,6 +138,8 @@ struct SymbolTableEntry {
         intptr_t m_bits;
     };
 
+    enum BitsTag { Bits };
+
     SymbolTableEntry()
         : m_bits(SlimFlag)
     {
@@ -162,6 +164,25 @@ struct SymbolTableEntry {
         freeFatEntry();
     }
     
+    SymbolTableEntry(BitsTag, intptr_t bits)
+        : m_bits(bits | SlimFlag)
+    {
+        if (!(bits & SlimFlag))
+            prepareToWatch();
+        else
+            ASSERT(!isFat());
+    }
+
+    SymbolTableEntry(BitsTag, intptr_t bits, int index)
+        : m_bits(bits | SlimFlag)
+    {
+        pack(index, bits & ReadOnlyFlag, bits & DontEnumFlag);
+        if (!(bits & SlimFlag))
+            prepareToWatch();
+        else
+            ASSERT(!isFat());
+    }
+
     SymbolTableEntry(const SymbolTableEntry& other)
         : m_bits(SlimFlag)
     {
@@ -187,6 +208,11 @@ struct SymbolTableEntry {
         return static_cast<int>(bits() >> FlagBits);
     }
     
+    intptr_t getBits() const
+    {
+        return bits();
+    }
+
     ALWAYS_INLINE Fast getFast() const
     {
         return Fast(*this);

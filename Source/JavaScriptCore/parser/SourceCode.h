@@ -29,8 +29,11 @@
 #ifndef SourceCode_h
 #define SourceCode_h
 
+#include "CodeBlockDatabase.h"
 #include "SourceProvider.h"
 #include <wtf/RefPtr.h>
+#include <wtf/text/StringBuilder.h>
+
 
 namespace JSC {
 
@@ -57,6 +60,7 @@ namespace JSC {
             , m_firstLine(1)
             , m_startColumn(1)
         {
+            ASSERT(!isBytecode());
         }
 
         SourceCode(PassRefPtr<SourceProvider> provider, int firstLine, int startColumn)
@@ -66,6 +70,7 @@ namespace JSC {
             , m_firstLine(std::max(firstLine, 1))
             , m_startColumn(std::max(startColumn, 1))
         {
+            ASSERT(!isBytecode());
         }
 
         SourceCode(PassRefPtr<SourceProvider> provider, int start, int end, int firstLine, int startColumn)
@@ -77,12 +82,24 @@ namespace JSC {
         {
         }
 
+        SourceCode(PassRefPtr<SourceProvider> provider, int startOffset)
+            : m_provider(provider)
+            , m_startChar(startOffset)
+            , m_endChar(startOffset)
+            , m_firstLine(0)
+            , m_startColumn(0)
+        {
+            ASSERT(isBytecode());
+        }
+
         bool isHashTableDeletedValue() const { return m_provider.isHashTableDeletedValue(); }
 
         String toString() const
         {
             if (!m_provider)
                 return String();
+            if (m_provider->isDatabaseProvider())
+                return String("{ /* Source Unavailable */ }");
             return m_provider->getRange(m_startChar, m_endChar);
         }
         
@@ -94,15 +111,29 @@ namespace JSC {
                 return SourceProvider::nullID;
             return m_provider->asID();
         }
-        
+
+        bool isBytecode() const { return m_provider->isDatabaseProvider(); }
+
+        CodeBlockDatabase* codeBlockDatabaseToLoad() const
+        {
+            ASSERT(m_provider->isDatabaseProvider());
+            return m_provider->codeBlockDatabaseToLoad();
+        }
+
+        CodeBlockDatabase* codeBlockDatabaseToSave() const
+        {
+            ASSERT(m_provider->writingToDatabase());
+            return m_provider->codeBlockDatabaseToSave();
+        }
+
         bool isNull() const { return !m_provider; }
         SourceProvider* provider() const { return m_provider.get(); }
         int firstLine() const { return m_firstLine; }
         int startColumn() const { return m_startColumn; }
         int startOffset() const { return m_startChar; }
         int endOffset() const { return m_endChar; }
-        int length() const { return m_endChar - m_startChar; }
-        
+        int length() const { return isBytecode() ? -1 : m_endChar - m_startChar; }
+
         SourceCode subExpression(unsigned openBrace, unsigned closeBrace, int firstLine, int startColumn);
 
     private:
@@ -124,6 +155,15 @@ namespace JSC {
         ASSERT(provider()->source()[closeBrace] == '}');
         startColumn += 1; // Convert to base 1.
         return SourceCode(provider(), openBrace, closeBrace + 1, firstLine, startColumn);
+    }
+
+    inline SourceCode makeBytecodeSource(const String& fileName)
+    {
+        StringBuilder url;
+        url.append("[BytecodeDB ");
+        url.append(fileName);
+        url.append("]");
+        return SourceCode(DatabaseSourceProvider::create(fileName, url.toString()), 0);
     }
 
 } // namespace JSC

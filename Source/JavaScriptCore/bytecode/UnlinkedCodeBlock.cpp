@@ -63,12 +63,14 @@ static UnlinkedFunctionCodeBlock* generateFunctionCodeBlock(VM& vm, UnlinkedFunc
     body->finishParsing(executable->parameters(), executable->name(), executable->functionMode());
     executable->recordParse(body->features(), body->hasCapturedVariables());
     
-    UnlinkedFunctionCodeBlock* result = UnlinkedFunctionCodeBlock::create(&vm, FunctionCode, ExecutableInfo(body->needsActivation(), body->usesEval(), body->isStrictMode(), kind == CodeForConstruct, functionKind == UnlinkedBuiltinFunction));
+    UnlinkedFunctionCodeBlock* result = UnlinkedFunctionCodeBlock::create(&vm, FunctionCode, ExecutableInfo(body->needsActivation(), body->usesEval(), body->isStrictMode(), kind == CodeForConstruct, functionKind == UnlinkedBuiltinFunction), executable);
     OwnPtr<BytecodeGenerator> generator(adoptPtr(new BytecodeGenerator(vm, body.get(), result, debuggerMode, profilerMode)));
     error = generator->generate();
     body->destroyData();
+
     if (error.m_type != ParserError::ErrorNone)
         return 0;
+
     return result;
 }
 
@@ -100,8 +102,34 @@ UnlinkedFunctionExecutable::UnlinkedFunctionExecutable(VM* vm, Structure* struct
     , m_unlinkedBodyEndColumn(m_lineCount ? node->endColumn() : node->endColumn() - node->startColumn())
     , m_startOffset(node->source().startOffset() - source.startOffset())
     , m_sourceLength(node->source().length())
+    , m_sourceOffset(node->source().startOffset())
     , m_features(node->features())
     , m_functionMode(node->functionMode())
+{
+}
+
+UnlinkedFunctionExecutable::UnlinkedFunctionExecutable(VM* vm, Structure* structure, const SourceCode& source, Identifier name, Identifier inferredName, bool strict, bool usesArguments, size_t shiftOffset)
+    : Base(*vm, structure)
+//    , m_numCapturedVariables(node->capturedVariableCount())
+    , m_forceUsesArguments(usesArguments)
+    , m_isInStrictContext(strict)
+//    , m_hasCapturedVariables(node->hasCapturedVariables())
+    , m_isFromGlobalCode(false)
+    , m_isBuiltinFunction(false)
+    , m_name(name)
+    , m_inferredName(inferredName)
+//    , m_parameters(node->parameters())
+//    , m_firstLineOffset(node->firstLine() - source.firstLine())
+//    , m_lineCount(node->lastLine() - node->firstLine())
+//    , m_unlinkedFunctionNameStart(node->functionNameStart() - source.startOffset())
+//    , m_unlinkedBodyStartColumn(node->startColumn())
+//    , m_unlinkedBodyEndColumn(m_lineCount ? node->endColumn() : node->endColumn() - node->startColumn())
+    , m_startOffset(source.startOffset() - shiftOffset)
+    , m_sourceLength(-1)
+    , m_sourceOffset(source.startOffset())
+//    , m_sourceOffset(node->source().startOffset())
+//    , m_features(node->features())
+//    , m_functionMode(node->functionMode())
 {
 }
 
@@ -195,6 +223,10 @@ String UnlinkedFunctionExecutable::paramString() const
         parameters.at(pos)->toString(builder);
     }
     return builder.toString();
+}
+
+
+void UnlinkedFunctionExecutable::saveBytecode() {
 }
 
 UnlinkedCodeBlock::UnlinkedCodeBlock(VM* vm, Structure* structure, CodeType codeType, const ExecutableInfo& info)
@@ -450,6 +482,11 @@ const UnlinkedInstructionStream& UnlinkedCodeBlock::instructions() const
 {
     ASSERT(m_unlinkedInstructions.get());
     return *m_unlinkedInstructions;
+}
+
+UnlinkedInstructionStream* UnlinkedCodeBlock::instructionsPointer()
+{
+    return m_unlinkedInstructions.get();
 }
 
 }

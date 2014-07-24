@@ -83,9 +83,7 @@ public:
 
     bool isNull() const { return m_sourceCode.isNull(); }
 
-    // To save memory, we compute our string on demand. It's expected that source
-    // providers cache their strings to make this efficient.
-    String string() const { return m_sourceCode.toString(); }
+    String string() const;
 
     bool operator==(const SourceCodeKey& other) const
     {

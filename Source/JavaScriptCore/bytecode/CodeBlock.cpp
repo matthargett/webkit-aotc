@@ -3378,9 +3378,8 @@ bool CodeBlock::usesOpcode(OpcodeID opcodeID)
 {
     Interpreter* interpreter = vm()->interpreter;
     Instruction* instructionsBegin = instructions().begin();
-    unsigned instructionCount = instructions().size();
     
-    for (unsigned bytecodeOffset = 0; bytecodeOffset < instructionCount; ) {
+    for (unsigned bytecodeOffset = 0; bytecodeOffset < instructionCount(); ) {
         switch (interpreter->getOpcodeID(instructionsBegin[bytecodeOffset].u.opcode)) {
 #define DEFINE_OP(curOpcode, length)        \
         case curOpcode:                     \

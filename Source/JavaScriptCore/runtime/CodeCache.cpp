@@ -36,6 +36,20 @@
 
 namespace JSC {
 
+String SourceCodeKey::string() const
+{
+    if (m_sourceCode.isBytecode()) {
+        ASSERT_NOT_REACHED();
+        StringBuilder builder;
+        builder.append("Database");
+        builder.appendNumber(reinterpret_cast<uintptr_t>(static_cast<void*>(m_sourceCode.provider())));
+        builder.append(' ');
+        builder.appendNumber(m_sourceCode.startOffset());
+        return builder.toString();
+    }
+    return m_sourceCode.toString();
+}
+
 const double CodeCacheMap::workingSetTime = 10.0;
 
 void CodeCacheMap::pruneSlowCase()
@@ -126,7 +140,9 @@ UnlinkedCodeBlockType* CodeCache::getGlobalCodeBlock(VM& vm, ExecutableType* exe
 
 UnlinkedProgramCodeBlock* CodeCache::getProgramCodeBlock(VM& vm, ProgramExecutable* executable, const SourceCode& source, JSParserStrictness strictness, DebuggerMode debuggerMode, ProfilerMode profilerMode, ParserError& error)
 {
-    return getGlobalCodeBlock<UnlinkedProgramCodeBlock>(vm, executable, source, strictness, debuggerMode, profilerMode, error);
+    UnlinkedProgramCodeBlock* result = getGlobalCodeBlock<UnlinkedProgramCodeBlock>(vm, executable, source, strictness, debuggerMode, profilerMode, error);
+
+    return result;
 }
 
 UnlinkedEvalCodeBlock* CodeCache::getEvalCodeBlock(VM& vm, EvalExecutable* executable, const SourceCode& source, JSParserStrictness strictness, DebuggerMode debuggerMode, ProfilerMode profilerMode, ParserError& error)

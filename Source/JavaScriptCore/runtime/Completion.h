@@ -34,8 +34,9 @@ namespace JSC {
     class VM;
 
     JS_EXPORT_PRIVATE bool checkSyntax(VM&, const SourceCode&, ParserError&);
-    JS_EXPORT_PRIVATE bool checkSyntax(ExecState*, const SourceCode&, JSValue* exception = 0);
-    JS_EXPORT_PRIVATE JSValue evaluate(ExecState*, const SourceCode&, JSValue thisValue = JSValue(), JSValue* exception = 0);
+    JS_EXPORT_PRIVATE bool checkSyntax(ExecState*, const SourceCode&, JSValue* = 0);
+    JS_EXPORT_PRIVATE JSValue evaluate(ExecState*, const SourceCode&, JSValue = JSValue(), JSValue* = 0);
+    JS_EXPORT_PRIVATE bool dumpBytecodeFull(ExecState*, const SourceCode&, JSValue*);
 
 } // namespace JSC
 

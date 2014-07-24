@@ -78,7 +78,7 @@ void ctiPatchCallByReturnAddress(CodeBlock* codeblock, ReturnAddressPtr returnAd
 JIT::JIT(VM* vm, CodeBlock* codeBlock)
     : JSInterfaceJIT(vm, codeBlock)
     , m_interpreter(vm->interpreter)
-    , m_labels(codeBlock ? codeBlock->numberOfInstructions() : 0)
+    , m_labels(codeBlock ? codeBlock->instructionCount() : 0)
     , m_bytecodeOffset((unsigned)-1)
     , m_getByIdIndex(UINT_MAX)
     , m_putByIdIndex(UINT_MAX)
@@ -137,7 +137,7 @@ void JIT::privateCompileMainPass()
     jitAssertArgumentCountSane();
     
     Instruction* instructionsBegin = m_codeBlock->instructions().begin();
-    unsigned instructionCount = m_codeBlock->instructions().size();
+    unsigned instructionCount = m_codeBlock->instructionCount();
 
     m_callLinkInfoIndex = 0;
 

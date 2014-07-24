@@ -52,6 +52,9 @@ public:
 
     VM* vm() const { return m_vm; }
 
+    virtual bool isDatabaseProvider() const override { return false; }
+    virtual CodeBlockDatabase* codeBlockDatabaseToLoad() const override { return NULL; }
+
 private:
     OpaqueJSScript(VM* vm, const String& url, int startingLineNumber, const String& source)
         : SourceProvider(url, TextPosition(OrdinalNumber::fromOneBasedInt(startingLineNumber), OrdinalNumber::first()))

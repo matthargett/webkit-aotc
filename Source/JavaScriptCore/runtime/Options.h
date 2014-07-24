@@ -255,6 +255,9 @@ typedef OptionRange optionRange;
     v(bool, forceWeakRandomSeed, false) \
     v(unsigned, forcedWeakRandomSeed, 0) \
     \
+    v(unsigned, compression, 0) \
+    v(bool, saveBytecode, false) \
+    \
     v(bool, useZombieMode, false) \
     v(bool, objectsAreImmortal, false) \
     v(bool, showObjectStatistics, false) \

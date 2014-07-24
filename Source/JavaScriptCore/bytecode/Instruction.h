@@ -95,7 +95,7 @@ struct Instruction {
     Instruction(ArrayAllocationProfile* profile) { u.arrayAllocationProfile = profile; }
     Instruction(ObjectAllocationProfile* profile) { u.objectAllocationProfile = profile; }
     Instruction(WriteBarrier<Unknown>* registerPointer) { u.registerPointer = registerPointer; }
-    Instruction(Special::Pointer pointer) { u.specialPointer = pointer; }
+    Instruction(Special::Pointer pointer) { u.jsCell.clear(); u.specialPointer = pointer; }
     Instruction(StringImpl* uid) { u.uid = uid; }
     Instruction(bool* predicatePointer) { u.predicatePointer = predicatePointer; }
 

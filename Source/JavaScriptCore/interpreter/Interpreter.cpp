@@ -806,9 +806,11 @@ JSValue Interpreter::execute(ProgramExecutable* program, CallFrame* callFrame, J
     Vector<JSONPData> JSONPData;
     bool parseResult;
     const String programSource = program->source().toString();
-    if (programSource.isNull())
+    if (programSource.isNull() && !program->source().isBytecode())
         return jsUndefined();
-    if (programSource.is8Bit()) {
+    if (program->source().isBytecode()) {
+        parseResult = false;
+    } else if (programSource.is8Bit()) {
         LiteralParser<LChar> literalParser(callFrame, programSource.characters8(), programSource.length(), JSONP);
         parseResult = literalParser.tryJSONPParse(JSONPData, scope->globalObject()->globalObjectMethodTable()->supportsRichSourceInfo(scope->globalObject()));
     } else {

@@ -125,8 +125,29 @@ Deprecated::ScriptValue ScriptController::evaluateInWorld(const ScriptSourceCode
 {
     JSLockHolder lock(world.vm());
 
+#if 1
+    String sourceURL = ustringToString(sourceCode.jsSourceCode().provider()->url());
+    UString usourceURL = sourceCode.jsSourceCode().provider()->url();
+    SourceCode jsSourceCode;
+
+    fprintf(stderr, "Trying to replace with bytecode.\n");
+    UString path = makeUString(usourceURL.substringSharingImpl(7, usourceURL.length() - 7), ".bytecode");
+    fprintf(stderr, "File: '%s'\n", path.utf8().data());
+    FILE *fp;
+    if (!(fp = fopen((path.utf8().data()), "r"))) {
+        fprintf(stderr, "Cannot open bytecode file.");
+        jsSourceCode = sourceCode.jsSourceCode();
+    } else {
+        fprintf(stderr, "Opening bytecode.");
+        fclose(fp);
+        jsSourceCode = JSC::makeBytecodeSource(path);
+        //FIXME: connect provider!
+    }
+#else
+    // Original (non-AOTC) code:
     const SourceCode& jsSourceCode = sourceCode.jsSourceCode();
     String sourceURL = jsSourceCode.provider()->url();
+#endif
 
     // evaluate code. Returns the JS return value or 0
     // if there was none, an error occurred or the type couldn't be converted.

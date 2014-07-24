@@ -1412,8 +1412,8 @@ namespace JSC {
         }
 
         const SourceCode& source() const { return m_source; }
-        const String& sourceURL() const { return m_source.provider()->url(); }
-        intptr_t sourceID() const { return m_source.providerID(); }
+//        const String& sourceURL() const { return m_source.provider()->url(); }
+//        intptr_t sourceID() const { return m_source.providerID(); }
 
         int startLine() const { return m_startLineNumber; }
         int startStartOffset() const { return m_startStartOffset; }
@@ -1513,6 +1513,7 @@ namespace JSC {
         WTF_MAKE_NONCOPYABLE(FunctionParameters);
     public:
         static PassRefPtr<FunctionParameters> create(ParameterNode*);
+        static PassRefPtr<FunctionParameters> create() { return adoptRef(new FunctionParameters()); }
         ~FunctionParameters();
 
         unsigned size() const { return m_size; }
@@ -1520,6 +1521,7 @@ namespace JSC {
 
     private:
         FunctionParameters(ParameterNode*, unsigned size);
+        FunctionParameters() {}
 
         DeconstructionPatternNode** patterns() { return &m_storage; }
 
@@ -1576,12 +1578,19 @@ namespace JSC {
 
         FunctionBodyNode* body() { return m_body; }
 
+/*        static const int NoIndex = -1;
+        int getIndex() { return m_index; }
+        void setIndex(int index) { m_index = index; }
+#ifndef NDEBUG
+        BytecodeGenerator* m_generator;
+#endif*/
     private:
         virtual RegisterID* emitBytecode(BytecodeGenerator&, RegisterID* = 0) override;
 
         virtual bool isFuncExprNode() const override { return true; }
 
         FunctionBodyNode* m_body;
+        //int m_index;
     };
 
     class DeconstructionPatternNode : public RefCounted<DeconstructionPatternNode> {

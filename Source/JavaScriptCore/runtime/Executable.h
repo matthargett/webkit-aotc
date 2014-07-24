@@ -390,6 +390,14 @@ public:
     unsigned startColumn() const { return m_startColumn; }
     unsigned endColumn() const { return m_endColumn; }
 
+    void setFeatures(CodeFeatures features, bool hasCapturedVariables)
+    {
+        m_features = features;
+        m_hasCapturedVariables = hasCapturedVariables;
+    }
+
+    bool hasCapturedVariables() const { return m_hasCapturedVariables; }
+
     bool usesEval() const { return m_features & EvalFeature; }
     bool usesArguments() const { return m_features & ArgumentsFeature; }
     bool needsActivation() const { return m_hasCapturedVariables || m_features & (EvalFeature | WithFeature | CatchFeature); }

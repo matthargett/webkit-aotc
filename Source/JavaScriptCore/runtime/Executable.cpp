@@ -29,8 +29,10 @@
 #include "BatchedTransitionOptimizer.h"
 #include "BytecodeGenerator.h"
 #include "CodeBlock.h"
+#include "CodeBlockDatabase.h"
 #include "DFGDriver.h"
 #include "JIT.h"
+#include "JSActivation.h"
 #include "LLIntEntrypoint.h"
 #include "JSCInlines.h"
 #include "Parser.h"
@@ -219,9 +221,18 @@ PassRefPtr<CodeBlock> ScriptExecutable::newCodeBlockFor(
     ParserError error;
     DebuggerMode debuggerMode = globalObject->hasDebugger() ? DebuggerOn : DebuggerOff;
     ProfilerMode profilerMode = globalObject->hasProfiler() ? ProfilerOn : ProfilerOff;
-    UnlinkedFunctionCodeBlock* unlinkedCodeBlock =
-        executable->m_unlinkedExecutable->codeBlockFor(
+
+    UnlinkedFunctionCodeBlock* unlinkedCodeBlock;
+    if (source().isBytecode()) {
+        CodeBlockDatabase* codeDb = source().codeBlockDatabaseToLoad();
+        unlinkedCodeBlock = codeDb->loadFunctionCodeBlock(*scope, executable, kind);
+    } else {
+        unlinkedCodeBlock = executable->m_unlinkedExecutable->codeBlockFor(
             *vm, executable->m_source, kind, debuggerMode, profilerMode, error);
+        unlinkedCodeBlock->setSourceOffset(executable->source().startOffset());
+    }
+
+
     recordParse(executable->m_unlinkedExecutable->features(), executable->m_unlinkedExecutable->hasCapturedVariables(), lineNo(), lastLine(), startColumn(), endColumn()); 
     if (!unlinkedCodeBlock) {
         exception = vm->throwException(
@@ -230,6 +241,13 @@ PassRefPtr<CodeBlock> ScriptExecutable::newCodeBlockFor(
         return 0;
     }
 
+    if (Options::saveBytecode()) {
+        // For functions created with "new Function(...)" we should not try to save anything.
+        if (executable->source().provider()->writingToDatabase()) {
+            CodeBlockDatabase* codeDb = executable->source().codeBlockDatabaseToSave();
+            codeDb->saveFunctionCodeBlock(*scope, unlinkedCodeBlock);
+        }
+    }
     // Parsing reveals whether our function uses features that require a separate function name object in the scope chain.
     // Be sure to add this scope before linking the bytecode because this scope will change the resolution depth of non-local variables.
     if (!executable->m_didParseForTheFirstTime) {
@@ -472,7 +490,16 @@ JSObject* ProgramExecutable::initializeGlobalProperties(VM& vm, CallFrame* callF
     ASSERT(&globalObject->vm() == &vm);
 
     JSObject* exception = 0;
-    UnlinkedProgramCodeBlock* unlinkedCodeBlock = globalObject->createProgramCodeBlock(callFrame, this, &exception);
+    UnlinkedProgramCodeBlock* unlinkedCodeBlock;
+
+    if (source().isBytecode()) {
+        CodeBlockDatabase* codeDb = source().codeBlockDatabaseToLoad();
+        codeDb->open(false);
+        unlinkedCodeBlock = codeDb->loadProgramCodeBlock(scope, this);
+    } else {
+        unlinkedCodeBlock = globalObject->createProgramCodeBlock(callFrame, this, &exception);
+    }
+
     if (exception)
         return exception;
 
@@ -495,6 +522,23 @@ JSObject* ProgramExecutable::initializeGlobalProperties(VM& vm, CallFrame* callF
         else
             globalObject->addVar(callFrame, variableDeclarations[i].first);
     }
+
+    if (Options::saveBytecode() || BytecodeGenerator::saveBytecode()) {
+        CodeBlockDatabase* codeDb = source().codeBlockDatabaseToSave();
+        codeDb->open(true);
+        codeDb->saveProgramCodeBlock(scope, unlinkedCodeBlock);
+
+        if (BytecodeGenerator::saveBytecode()) {
+            for (size_t i = 0; i < functionDeclarations.size(); ++i) {
+                UnlinkedFunctionExecutable* function = functionDeclarations[i].second.get();
+                function->saveBytecode();
+            }
+            for (size_t i = 0; i < unlinkedCodeBlock->numberOfFunctionExprs(); ++i) {
+                unlinkedCodeBlock->functionExpr(i)->saveBytecode();
+            }
+        }
+    }
+
     return 0;
 }
 
@@ -606,6 +650,7 @@ FunctionExecutable* FunctionExecutable::fromGlobalCode(const Identifier& name, E
     unsigned startOffsetExcludingOpenBrace = startOffset + 1;
     unsigned endOffsetExcludingCloseBrace = startOffset + sourceLength - 1;
     SourceCode bodySource(source.provider(), startOffsetExcludingOpenBrace, endOffsetExcludingCloseBrace, firstLine, startColumn);
+    //SourceCode bodySource(source, startOffsetExcludingOpenBrace, endOffsetExcludingCloseBrace, firstLine, startColumn);
 
     return FunctionExecutable::create(exec->vm(), bodySource, unlinkedExecutable, firstLine, firstLine + lineCount, startColumn, endColumnExcludingBraces, false);
 }

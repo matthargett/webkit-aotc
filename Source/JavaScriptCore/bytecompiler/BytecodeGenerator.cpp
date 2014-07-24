@@ -58,6 +58,18 @@ void Label::setLocation(unsigned location)
         m_generator->m_instructions[m_unresolvedJumps[i].second].u.operand = m_location - m_unresolvedJumps[i].first;
 }
 
+static bool s_saveBytecode = false;
+
+void BytecodeGenerator::setSaveBytecode()
+{
+    s_saveBytecode = true;
+}
+
+bool BytecodeGenerator::saveBytecode()
+{
+    return s_saveBytecode;
+}
+
 ParserError BytecodeGenerator::generate()
 {
     SamplingRegion samplingRegion("Bytecode Generation");
@@ -118,6 +130,10 @@ ParserError BytecodeGenerator::generate()
     if (m_codeBlock->symbolTable())
         m_codeBlock->setSymbolTable(m_codeBlock->symbolTable()->cloneCapturedNames(*m_codeBlock->vm()));
 
+    /*ASSERT(m_codeBlock->m_activation == CodeBlock::UninitializedActivation);
+    m_codeBlock->m_activation = (m_hasCreatedActivation || m_hasOpCreateActivation) ?
+        CodeBlock::CreatedActivation : CodeBlock::NoActivation;*/
+
     if (m_expressionTooDeep)
         return ParserError(ParserError::OutOfMemory);
     return ParserError(ParserError::ErrorNone);
@@ -132,6 +148,8 @@ bool BytecodeGenerator::addVar(
     int index = virtualRegisterForLocal(m_calleeRegisters.size()).offset();
     SymbolTableEntry newEntry(index, constantMode == IsConstant ? ReadOnly : 0);
     SymbolTable::Map::AddResult result = symbolTable().add(locker, ident.impl(), newEntry);
+    m_codeBlock->m_symbols.append(ident.impl());
+    m_codeBlock->m_regForSymbols.append(newEntry.getBits());
 
     if (!result.isNewEntry) {
         r0 = &registerFor(result.iterator->value.getIndex());
@@ -172,6 +190,7 @@ BytecodeGenerator::BytecodeGenerator(VM& vm, ProgramNode* programNode, UnlinkedP
     , m_codeType(GlobalCode)
     , m_nextConstantOffset(0)
     , m_globalConstantIndex(0)
+    , m_hasOpCreateActivation(false)
     , m_firstLazyFunction(0)
     , m_lastLazyFunction(0)
     , m_staticPropertyAnalyzer(&m_instructions)
@@ -190,6 +209,9 @@ BytecodeGenerator::BytecodeGenerator(VM& vm, ProgramNode* programNode, UnlinkedP
 
     const VarStack& varStack = programNode->varStack();
     const FunctionStack& functionStack = programNode->functionStack();
+
+    //FIXME: is codeBlock->symbolTable unused for programCodeBlock?
+    //m_codeBlock->setSymbolTable(m_symbolTable);
 
     for (size_t i = 0; i < functionStack.size(); ++i) {
         FunctionBodyNode* function = functionStack[i];
@@ -216,6 +238,7 @@ BytecodeGenerator::BytecodeGenerator(VM& vm, FunctionBodyNode* functionBody, Unl
     , m_codeType(FunctionCode)
     , m_nextConstantOffset(0)
     , m_globalConstantIndex(0)
+    , m_hasOpCreateActivation(false)
     , m_firstLazyFunction(0)
     , m_lastLazyFunction(0)
     , m_staticPropertyAnalyzer(&m_instructions)
@@ -410,7 +433,7 @@ BytecodeGenerator::BytecodeGenerator(VM& vm, FunctionBodyNode* functionBody, Unl
         emitOpcode(op_to_this);
         instructions().append(kill(&m_thisRegister));
         instructions().append(0);
-    }
+    } // here fix create_this<->to_this difference?
 }
 
 BytecodeGenerator::BytecodeGenerator(VM& vm, EvalNode* evalNode, UnlinkedEvalCodeBlock* codeBlock, DebuggerMode debuggerMode, ProfilerMode profilerMode)
@@ -428,6 +451,7 @@ BytecodeGenerator::BytecodeGenerator(VM& vm, EvalNode* evalNode, UnlinkedEvalCod
     , m_codeType(EvalCode)
     , m_nextConstantOffset(0)
     , m_globalConstantIndex(0)
+    , m_hasOpCreateActivation(false)
     , m_firstLazyFunction(0)
     , m_lastLazyFunction(0)
     , m_staticPropertyAnalyzer(&m_instructions)
@@ -501,7 +525,10 @@ void BytecodeGenerator::addParameter(const Identifier& ident, int parameterIndex
     // Parameters overwrite var declarations, but not function declarations.
     StringImpl* rep = ident.impl();
     if (!m_functions.contains(rep)) {
-        symbolTable().set(rep, parameterIndex);
+        SymbolTableEntry newEntry = SymbolTableEntry(parameterIndex);
+        symbolTable().set(rep, newEntry);
+        m_codeBlock->m_symbols.append(rep);
+        m_codeBlock->m_regForSymbols.append(newEntry.getBits());
         RegisterID& parameter = registerFor(parameterIndex);
         parameter.setIndex(parameterIndex);
     }
@@ -995,6 +1022,7 @@ unsigned BytecodeGenerator::addRegExp(RegExp* r)
 
 RegisterID* BytecodeGenerator::emitMove(RegisterID* dst, CaptureMode captureMode, RegisterID* src)
 {
+//    ASSERT(dst->index() != thisRegister()->index());
     m_staticPropertyAnalyzer.mov(dst->index(), src->index());
 
     emitOpcode(captureMode == IsCaptured ? op_captured_mov : op_mov);
@@ -1593,11 +1621,27 @@ RegisterID* BytecodeGenerator::emitNewRegExp(RegisterID* dst, RegExp* regExp)
     return dst;
 }
 
-RegisterID* BytecodeGenerator::emitNewFunctionExpression(RegisterID* r0, FuncExprNode* n)
+RegisterID* BytecodeGenerator::emitNewFunctionExpression(RegisterID* r0, FuncExprNode* node)
 {
-    FunctionBodyNode* function = n->body();
-    unsigned index = m_codeBlock->addFunctionExpr(makeFunction(function));
-    
+    FunctionBodyNode* functionBody = node->body();
+    UnlinkedFunctionExecutable* function = makeFunction(functionBody);
+
+    int index;
+/*    index = node->getIndex();
+    if (index == FuncExprNode::NoIndex) {
+#ifndef NDEBUG
+        node->m_generator = this;
+#endif*/
+        index = m_codeBlock->addFunctionExpr(function);
+/*        node->setIndex(index);
+    }
+#ifndef NDEBUG
+    ASSERT(node->m_generator == this);
+#endif*/
+
+    /*if (m_dynamicScopeDepth)
+        function->setDynamicScope(true);*/
+
     createActivationIfNecessary();
     emitOpcode(op_new_func_exp);
     instructions().append(r0->index());
@@ -1630,6 +1674,7 @@ void BytecodeGenerator::createActivationIfNecessary()
 {
     if (!m_activationRegister)
         return;
+    m_hasOpCreateActivation = true;
     emitOpcode(op_create_activation);
     instructions().append(m_activationRegister->index());
 }
@@ -1847,7 +1892,9 @@ RegisterID* BytecodeGenerator::emitReturn(RegisterID* src)
         instructions().append(m_thisRegister.index());
         return src;
     }
-    return emitUnaryNoDstOp(op_ret, src);
+    emitOpcode(op_ret);
+    instructions().append(src->index());
+    return src;
 }
 
 RegisterID* BytecodeGenerator::emitUnaryNoDstOp(OpcodeID opcodeID, RegisterID* src)

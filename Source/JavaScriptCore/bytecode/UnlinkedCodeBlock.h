@@ -89,12 +89,20 @@ enum UnlinkedFunctionKind {
 class UnlinkedFunctionExecutable : public JSCell {
 public:
     friend class BuiltinExecutables;
+    friend class CodeBlockDatabase;
     friend class CodeCache;
     friend class VM;
     typedef JSCell Base;
     static UnlinkedFunctionExecutable* create(VM* vm, const SourceCode& source, FunctionBodyNode* node, bool isFromGlobalCode, UnlinkedFunctionKind unlinkedFunctionKind)
     {
         UnlinkedFunctionExecutable* instance = new (NotNull, allocateCell<UnlinkedFunctionExecutable>(vm->heap)) UnlinkedFunctionExecutable(vm, vm->unlinkedFunctionExecutableStructure.get(), source, node, isFromGlobalCode, unlinkedFunctionKind);
+        instance->finishCreation(*vm);
+        return instance;
+    }
+
+    static UnlinkedFunctionExecutable* create(VM* vm, const SourceCode& source, Identifier name, Identifier inferredName, bool strict, bool forceUsesArguments, size_t shift)
+    {
+        UnlinkedFunctionExecutable* instance = new (NotNull, allocateCell<UnlinkedFunctionExecutable>(vm->heap)) UnlinkedFunctionExecutable(vm, vm->unlinkedFunctionExecutableStructure.get(), source, name, inferredName, strict, forceUsesArguments, shift);
         instance->finishCreation(*vm);
         return instance;
     }
@@ -125,6 +133,7 @@ public:
     unsigned unlinkedBodyEndColumn() const { return m_unlinkedBodyEndColumn; }
     unsigned startOffset() const { return m_startOffset; }
     unsigned sourceLength() { return m_sourceLength; }
+    unsigned sourceOffset() { return m_sourceOffset; }
 
     String paramString() const;
 
@@ -161,8 +170,11 @@ public:
 
     bool isBuiltinFunction() const { return m_isBuiltinFunction; }
 
+    void saveBytecode();
+
 private:
     UnlinkedFunctionExecutable(VM*, Structure*, const SourceCode&, FunctionBodyNode*, bool isFromGlobalCode, UnlinkedFunctionKind);
+    UnlinkedFunctionExecutable(VM*, Structure*, const SourceCode&, Identifier, Identifier, bool, bool, size_t);
     WriteBarrier<UnlinkedFunctionCodeBlock> m_codeBlockForCall;
     WriteBarrier<UnlinkedFunctionCodeBlock> m_codeBlockForConstruct;
 
@@ -186,6 +198,7 @@ private:
     unsigned m_unlinkedBodyEndColumn;
     unsigned m_startOffset;
     unsigned m_sourceLength;
+    unsigned m_sourceOffset;
 
     CodeFeatures m_features;
 
@@ -265,9 +278,11 @@ public:
     enum { CallFunction, ApplyFunction };
 
     bool isConstructor() const { return m_isConstructor; }
+    void setStrictMode(bool strict) { m_isStrictMode = strict; }
     bool isStrictMode() const { return m_isStrictMode; }
     bool usesEval() const { return m_usesEval; }
 
+    void setNeedsFullScopeChain(bool needs) { m_needsFullScopeChain = needs; }
     bool needsFullScopeChain() const { return m_needsFullScopeChain; }
 
     void addExpressionInfo(unsigned instructionOffset, int divot,
@@ -365,10 +380,14 @@ public:
 
     void setInstructions(std::unique_ptr<UnlinkedInstructionStream>);
     const UnlinkedInstructionStream& instructions() const;
+    UnlinkedInstructionStream* instructionsPointer();
 
     int m_numVars;
     int m_numCapturedVars;
     int m_numCalleeRegisters;
+
+    Vector<RefPtr<StringImpl> > m_symbols;
+    Vector<intptr_t> m_regForSymbols;
 
     // Jump Tables
 
@@ -409,15 +428,23 @@ public:
 
     VM* vm() const { return m_vm; }
 
+    void setNumberOfArrayProfiles(unsigned newNumber) { m_arrayProfileCount = newNumber; }
     UnlinkedArrayProfile addArrayProfile() { return m_arrayProfileCount++; }
     unsigned numberOfArrayProfiles() { return m_arrayProfileCount; }
+
+    void setNumberOfArrayAllocationProfiles(unsigned newNumber) { m_arrayAllocationProfileCount = newNumber; }
     UnlinkedArrayAllocationProfile addArrayAllocationProfile() { return m_arrayAllocationProfileCount++; }
     unsigned numberOfArrayAllocationProfiles() { return m_arrayAllocationProfileCount; }
+
+    void setNumberOfObjectAllocationProfiles(unsigned newNumber) { m_objectAllocationProfileCount = newNumber; }
     UnlinkedObjectAllocationProfile addObjectAllocationProfile() { return m_objectAllocationProfileCount++; }
     unsigned numberOfObjectAllocationProfiles() { return m_objectAllocationProfileCount; }
+
+    void setNumberOfValueProfiles(unsigned newNumber) { m_valueProfileCount = newNumber; }
     UnlinkedValueProfile addValueProfile() { return m_valueProfileCount++; }
     unsigned numberOfValueProfiles() { return m_valueProfileCount; }
 
+    void setNumberOfLLintCallLinkInfos(unsigned newNumber) { m_llintCallLinkInfoCount = newNumber; }
     UnlinkedLLIntCallLinkInfo addLLIntCallLinkInfo() { return m_llintCallLinkInfoCount++; }
     unsigned numberOfLLintCallLinkInfos() { return m_llintCallLinkInfoCount; }
 
@@ -437,13 +464,24 @@ public:
 
     typedef Vector<JSValue> ConstantBuffer;
 
-    size_t constantBufferCount() { ASSERT(m_rareData); return m_rareData->m_constantBuffers.size(); }
+    size_t constantBufferCount() const { ASSERT(m_rareData); return m_rareData->m_constantBuffers.size(); }
+    unsigned numberOfConstantBuffers() const
+    {
+        if (!m_rareData)
+            return 0;
+        return m_rareData->m_constantBuffers.size();
+    }
     unsigned addConstantBuffer(unsigned length)
     {
         createRareDataIfNecessary();
         unsigned size = m_rareData->m_constantBuffers.size();
         m_rareData->m_constantBuffers.append(Vector<JSValue>(length));
         return size;
+    }
+    size_t getConstantBufferSize(unsigned index) const
+    {
+        ASSERT(m_rareData);
+        return m_rareData->m_constantBuffers[index].size();
     }
 
     const ConstantBuffer& constantBuffer(unsigned index) const
@@ -481,6 +519,10 @@ public:
     unsigned lineCount() const { return m_lineCount; }
     ALWAYS_INLINE unsigned startColumn() const { return 0; }
     unsigned endColumn() const { return m_endColumn; }
+    unsigned sourceOffset() { return m_sourceOffset; }
+    unsigned getID() const { return (m_sourceOffset << 1) + (m_isConstructor ? 1 : 0); }
+
+    void setSourceOffset(unsigned offset) { m_sourceOffset = offset; }
 
     void dumpExpressionRangeInfo(); // For debugging purpose only.
 
@@ -495,7 +537,6 @@ protected:
             return;
         m_symbolTable.set(vm, this, SymbolTable::create(vm));
     }
-
 private:
 
     void createRareDataIfNecessary()
@@ -526,6 +567,7 @@ private:
     unsigned m_firstLine;
     unsigned m_lineCount;
     unsigned m_endColumn;
+    unsigned m_sourceOffset;
 
     CodeFeatures m_features;
     CodeType m_codeType;
@@ -553,7 +595,6 @@ private:
     unsigned m_objectAllocationProfileCount;
     unsigned m_valueProfileCount;
     unsigned m_llintCallLinkInfoCount;
-
 public:
     struct RareData {
         WTF_MAKE_FAST_ALLOCATED;
@@ -603,6 +644,7 @@ protected:
 
 class UnlinkedProgramCodeBlock : public UnlinkedGlobalCodeBlock {
 private:
+    friend class CodeBlockDatabase;
     friend class CodeCache;
     static UnlinkedProgramCodeBlock* create(VM* vm, const ExecutableInfo& info)
     {
@@ -637,6 +679,7 @@ private:
     UnlinkedProgramCodeBlock(VM* vm, Structure* structure, const ExecutableInfo& info)
         : Base(vm, structure, GlobalCode, info)
     {
+        setSourceOffset(0);
     }
 
     VariableDeclations m_varDeclarations;
@@ -697,9 +740,9 @@ public:
 
 class UnlinkedFunctionCodeBlock : public UnlinkedCodeBlock {
 public:
-    static UnlinkedFunctionCodeBlock* create(VM* vm, CodeType codeType, const ExecutableInfo& info)
+    static UnlinkedFunctionCodeBlock* create(VM* vm, CodeType codeType, const ExecutableInfo& info, UnlinkedFunctionExecutable* exec)
     {
-        UnlinkedFunctionCodeBlock* instance = new (NotNull, allocateCell<UnlinkedFunctionCodeBlock>(vm->heap)) UnlinkedFunctionCodeBlock(vm, vm->unlinkedFunctionCodeBlockStructure.get(), codeType, info);
+        UnlinkedFunctionCodeBlock* instance = new (NotNull, allocateCell<UnlinkedFunctionCodeBlock>(vm->heap)) UnlinkedFunctionCodeBlock(vm, vm->unlinkedFunctionCodeBlockStructure.get(), codeType, info, exec);
         instance->finishCreation(*vm);
         return instance;
     }
@@ -707,11 +750,16 @@ public:
     typedef UnlinkedCodeBlock Base;
     static void destroy(JSCell*);
 
+    UnlinkedFunctionExecutable* ownerExecutable() { return m_exec; }
+
 private:
-    UnlinkedFunctionCodeBlock(VM* vm, Structure* structure, CodeType codeType, const ExecutableInfo& info)
+    UnlinkedFunctionCodeBlock(VM* vm, Structure* structure, CodeType codeType, const ExecutableInfo& info, UnlinkedFunctionExecutable* exec)
         : Base(vm, structure, codeType, info)
+        , m_exec(exec)
     {
     }
+
+    UnlinkedFunctionExecutable* m_exec;
     
 public:
     static Structure* createStructure(VM& vm, JSGlobalObject* globalObject, JSValue proto)

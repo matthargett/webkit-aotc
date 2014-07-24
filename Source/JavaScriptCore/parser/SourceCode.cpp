@@ -33,7 +33,7 @@ namespace JSC {
 
 CString SourceCode::toUTF8() const
 {
-    if (!m_provider)
+    if (!m_provider || m_provider->isDatabaseProvider())
         return CString("", 0);
     
     return m_provider->source().impl()->utf8ForRange(m_startChar, m_endChar - m_startChar);

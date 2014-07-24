@@ -239,7 +239,8 @@ void Element::finishCreation(VM& vm)
 
 }
 
-static bool fillBufferWithContentsOfFile(const String& fileName, Vector<char>& buffer);
+static bool fillBufferWithContentsOfFile(const String&, Vector<char>&);
+static bool databaseExist(const String&);
 
 static EncodedJSValue JSC_HOST_CALL functionSetElementRoot(ExecState*);
 static EncodedJSValue JSC_HOST_CALL functionCreateRoot(ExecState*);
@@ -278,12 +279,18 @@ static EncodedJSValue JSC_HOST_CALL functionSetSamplingFlags(ExecState*);
 static EncodedJSValue JSC_HOST_CALL functionClearSamplingFlags(ExecState*);
 #endif
 
+enum ScriptType {
+    SCRIPT_FILE,
+    SCRIPT_EXPR,
+    SCRIPT_BYTECODE
+};
+
 struct Script {
-    bool isFile;
+    ScriptType type;
     char* argument;
 
-    Script(bool isFile, char *argument)
-        : isFile(isFile)
+    Script(ScriptType type, char* argument)
+        : type(type)
         , argument(argument)
     {
     }
@@ -296,6 +303,8 @@ public:
         , m_dump(false)
         , m_exitCode(false)
         , m_profile(false)
+        , m_saveBytecode(false)
+        , m_bytecodeFile(0)
     {
         parseArguments(argc, argv);
     }
@@ -307,9 +316,20 @@ public:
     Vector<String> m_arguments;
     bool m_profile;
     String m_profilerOutput;
+    bool m_saveBytecode;
+    char* m_bytecodeFile;
 
     void parseArguments(int, char**);
 };
+
+static bool bytecodeNow = false;
+
+static void defaultBytecodeName(StringBuilder& builder, String& name)
+{
+    builder.append("/tmp/");
+    builder.append(name);
+    builder.append(".bytecode");
+}
 
 static const char interactivePrompt[] = ">>> ";
 
@@ -453,7 +473,7 @@ static inline String stringFromUTF(const char* utf8)
         return String(utf8, asciiLength);
     
     // Slow case - contains non-ascii characters, use fromUTF8WithLatin1Fallback.
-    ASSERT(*pos < 0);
+    //ASSERT(*pos < 0);
     ASSERT(strlen(utf8) == asciiLength + strlen(pos));
     return String::fromUTF8WithLatin1Fallback(utf8, asciiLength + strlen(pos));
 }
@@ -462,6 +482,13 @@ static inline SourceCode jscSource(const char* utf8, const String& filename)
 {
     String str = stringFromUTF(utf8);
     return makeSource(str, filename);
+}
+
+static inline SourceCode bytecodeSource(const String& filename)
+{
+    SourceCode code = makeBytecodeSource(filename);
+    code.codeBlockDatabaseToLoad()->setProvider(code.provider());
+    return code;
 }
 
 EncodedJSValue JSC_HOST_CALL functionPrint(ExecState* exec)
@@ -607,9 +634,23 @@ EncodedJSValue JSC_HOST_CALL functionVersion(ExecState*)
 EncodedJSValue JSC_HOST_CALL functionRun(ExecState* exec)
 {
     String fileName = exec->argument(0).toString(exec)->value(exec);
+    SourceCode source;
     Vector<char> script;
-    if (!fillBufferWithContentsOfFile(fileName, script))
-        return JSValue::encode(exec->vm().throwException(exec, createError(exec, "Could not open file.")));
+
+    if (bytecodeNow) {
+        StringBuilder builder;
+        defaultBytecodeName(builder, fileName);
+        String bytecodeName = builder.toString();
+        if (!databaseExist(bytecodeName))
+            return JSValue::encode(exec->vm().throwException(exec, createError(exec, "Could not open bytecode file.")));
+	source = bytecodeSource(bytecodeName);
+    } else {
+        if (!fillBufferWithContentsOfFile(fileName, script))
+            return JSValue::encode(exec->vm().throwException(exec, createError(exec, "Could not open file.")));
+        //if (!fillBufferWithContentsOfFile(fileName, script))
+        //    return JSValue::encode(throwError(exec, createError(exec, "Could not open file.")));
+        source = jscSource(script.data(), fileName);
+    }
 
     GlobalObject* globalObject = GlobalObject::create(exec->vm(), GlobalObject::createStructure(exec->vm(), jsNull()), Vector<String>());
 
@@ -622,7 +663,7 @@ EncodedJSValue JSC_HOST_CALL functionRun(ExecState* exec)
     JSValue exception;
     StopWatch stopWatch;
     stopWatch.start();
-    evaluate(globalObject->globalExec(), jscSource(script.data(), fileName), JSValue(), &exception);
+    evaluate(globalObject->globalExec(), source, JSValue(), &exception);
     stopWatch.stop();
 
     if (!!exception) {
@@ -636,14 +677,28 @@ EncodedJSValue JSC_HOST_CALL functionRun(ExecState* exec)
 EncodedJSValue JSC_HOST_CALL functionLoad(ExecState* exec)
 {
     String fileName = exec->argument(0).toString(exec)->value(exec);
+//    SourceCode source;
     Vector<char> script;
     if (!fillBufferWithContentsOfFile(fileName, script))
         return JSValue::encode(exec->vm().throwException(exec, createError(exec, "Could not open file.")));
+/*    if (bytecodeNow) {
+        StringBuilder builder;
+        defaultBytecodeName(builder, fileName);
+        String bytecodeName = builder.toString();
+        if (!databaseExist(bytecodeName))
+            return JSValue::encode(throwError(exec, createError(exec, "Could not open bytecode file.")));
+	source = bytecodeSource(bytecodeName);
+    } else {
+        if (!fillBufferWithContentsOfFile(fileName, script))
+            return JSValue::encode(throwError(exec, createError(exec, "Could not open file.")));
+        source = jscSource(script.data(), fileName);
+    }*/
 
     JSGlobalObject* globalObject = exec->lexicalGlobalObject();
     
     JSValue evaluationException;
     JSValue result = evaluate(globalObject->globalExec(), jscSource(script.data(), fileName), JSValue(), &evaluationException);
+//    JSValue result = evaluate(globalObject->globalExec(), globalObject->globalScopeChain(), source, JSValue(), &evaluationException);
     if (evaluationException)
         exec->vm().throwException(exec, evaluationException);
     return JSValue::encode(result);
@@ -880,14 +935,18 @@ int main(int argc, char** argv)
     return res;
 }
 
-static bool runWithScripts(GlobalObject* globalObject, const Vector<Script>& scripts, bool dump)
+static bool runWithScripts(GlobalObject* globalObject, const Vector<Script>& scripts, bool dump, bool saveBytecodeWithoutRun, char* bytecodeFile)
 {
     const char* script;
     String fileName;
     Vector<char> scriptBuffer;
+    SourceCode source;
 
     if (dump)
         JSC::Options::dumpGeneratedBytecodes() = true;
+
+    if (saveBytecodeWithoutRun)
+        BytecodeGenerator::setSaveBytecode();
 
     VM& vm = globalObject->vm();
 
@@ -897,23 +956,47 @@ static bool runWithScripts(GlobalObject* globalObject, const Vector<Script>& scr
 
     bool success = true;
     for (size_t i = 0; i < scripts.size(); i++) {
-        if (scripts[i].isFile) {
+        if (scripts[i].type == SCRIPT_FILE) {
             fileName = scripts[i].argument;
             if (!fillBufferWithContentsOfFile(fileName, scriptBuffer))
                 return false; // fail early so we can catch missing files
             script = scriptBuffer.data();
-        } else {
+            source = jscSource(script, fileName);
+
+            if (BytecodeGenerator::saveBytecode() || Options::saveBytecode()) {
+                StringBuilder builder;
+                if (bytecodeFile && strlen(bytecodeFile))
+                    builder.append(bytecodeFile);
+                else
+                    defaultBytecodeName(builder, fileName);
+                source.provider()->connectCodeBlockDatabaseToSave(builder.toString());
+            }
+        } else if (scripts[i].type == SCRIPT_EXPR) {
             script = scripts[i].argument;
             fileName = "[Command Line]";
+            source = jscSource(script, fileName);
+        } else if (scripts[i].type == SCRIPT_BYTECODE) {
+            fileName = scripts[i].argument;
+            if (!databaseExist(fileName))
+                return false; // fail early so we can catch missing files
+            script = 0;
+            bytecodeNow = true;
+            source = bytecodeSource(fileName);
         }
 
         vm.startSampling();
 
         JSValue evaluationException;
-        JSValue returnValue = evaluate(globalObject->globalExec(), jscSource(script, fileName), JSValue(), &evaluationException);
-        success = success && !evaluationException;
-        if (dump && !evaluationException)
-            printf("End: %s\n", returnValue.toString(globalObject->globalExec())->value(globalObject->globalExec()).utf8().data());
+        if (BytecodeGenerator::saveBytecode()) {
+            success = dumpBytecodeFull(globalObject->globalExec(), source, &evaluationException);
+            ASSERT(success || evaluationException);
+        } else {
+            JSValue returnValue = evaluate(globalObject->globalExec(), source, JSValue(), &evaluationException);
+            success = success && !evaluationException;
+            if (dump && !evaluationException)
+                printf("End: %s\n", returnValue.toString(globalObject->globalExec())->value(globalObject->globalExec()).utf8().data());
+        }
+        bytecodeNow = false;
         if (evaluationException) {
             printf("Exception: %s\n", evaluationException.toString(globalObject->globalExec())->value(globalObject->globalExec()).utf8().data());
             Identifier stackID(globalObject->globalExec(), "stack");
@@ -1008,6 +1091,9 @@ static NO_RETURN void printUsageStatement(bool help = false)
     fprintf(stderr, "  -d         Dumps bytecode (debug builds only)\n");
     fprintf(stderr, "  -e         Evaluate argument as script code\n");
     fprintf(stderr, "  -f         Specifies a source file (deprecated)\n");
+    fprintf(stderr, "  --save     Save bytecode (only one script allowed, should be from file)\n");
+    fprintf(stderr, "  -o         Specify file name to save bytecode\n");
+    fprintf(stderr, "  -b         Load bytecode from file\n");
     fprintf(stderr, "  -h|--help  Prints this help message\n");
     fprintf(stderr, "  -i         Enables interactive mode (default if no files are specified)\n");
 #if HAVE(SIGNAL_H)
@@ -1035,13 +1121,32 @@ void CommandLine::parseArguments(int argc, char** argv)
         if (!strcmp(arg, "-f")) {
             if (++i == argc)
                 printUsageStatement();
-            m_scripts.append(Script(true, argv[i]));
+            m_scripts.append(Script(SCRIPT_FILE, argv[i]));
             continue;
         }
         if (!strcmp(arg, "-e")) {
             if (++i == argc)
                 printUsageStatement();
-            m_scripts.append(Script(false, argv[i]));
+            m_scripts.append(Script(SCRIPT_EXPR, argv[i]));
+            continue;
+        }
+        if (!strcmp(arg, "--save")) {
+            if (++i == argc)
+                printUsageStatement();
+            m_scripts.append(Script(SCRIPT_FILE, argv[i]));
+            m_saveBytecode = true;
+            continue;
+        }
+        if (!strcmp(arg, "-o")) {
+            if (++i == argc)
+                printUsageStatement();
+            m_bytecodeFile = argv[i];
+            continue;
+        }
+        if (!strcmp(arg, "-b")) {
+            if (++i == argc)
+              printUsageStatement();
+            m_scripts.append(Script(SCRIPT_BYTECODE, argv[i]));
             continue;
         }
         if (!strcmp(arg, "-i")) {
@@ -1098,11 +1203,14 @@ void CommandLine::parseArguments(int argc, char** argv)
 
         // This arg is not recognized by the VM nor by jsc. Pass it on to the
         // script.
-        m_scripts.append(Script(true, argv[i]));
+        m_scripts.append(Script(SCRIPT_FILE, argv[i]));
     }
 
     if (m_scripts.isEmpty())
         m_interactive = true;
+
+    if (m_saveBytecode && (m_scripts.size() != 1 || m_interactive))
+        printUsageStatement();
 
     for (; i < argc; ++i)
         m_arguments.append(argv[i]);
@@ -1118,16 +1226,16 @@ int jscmain(int argc, char** argv)
     // Note that the options parsing can affect VM creation, and thus
     // comes first.
     CommandLine options(argc, argv);
-    VM* vm = VM::create(LargeHeap).leakRef();
+    RefPtr<VM> vm = VM::create(LargeHeap);
     int result;
     {
-        JSLockHolder locker(vm);
+        JSLockHolder locker(vm.get());
 
         if (options.m_profile && !vm->m_perBytecodeProfiler)
             vm->m_perBytecodeProfiler = adoptPtr(new Profiler::Database(*vm));
     
         GlobalObject* globalObject = GlobalObject::create(*vm, GlobalObject::createStructure(*vm, jsNull()), options.m_arguments);
-        bool success = runWithScripts(globalObject, options.m_scripts, options.m_dump);
+        bool success = runWithScripts(globalObject, options.m_scripts, options.m_dump, options.m_saveBytecode, options.m_bytecodeFile);
         if (options.m_interactive && success)
             runInteractive(globalObject);
 
@@ -1140,9 +1248,22 @@ int jscmain(int argc, char** argv)
             if (!vm->m_perBytecodeProfiler->save(options.m_profilerOutput.utf8().data()))
                 fprintf(stderr, "could not save profiler output.\n");
         }
+
+        vm.clear();
     }
     
     return result;
+}
+
+static bool databaseExist(const String& fileName)
+{
+    FILE* f = fopen(fileName.utf8().data(), "r");
+    if (!f) {
+        fprintf(stderr, "Could not open database: %s\n", fileName.utf8().data());
+        return false;
+    }
+    fclose(f);
+    return true;
 }
 
 static bool fillBufferWithContentsOfFile(const String& fileName, Vector<char>& buffer)

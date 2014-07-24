@@ -227,6 +227,9 @@ static void recomputeDependentOptions()
     Options::useFTLJIT() = false;
 #endif
 
+    if (Options::compression() > 9)
+        Options::compression() = 9;
+
     if (Options::showDisassembly()
         || Options::showDFGDisassembly()
         || Options::showFTLDisassembly()

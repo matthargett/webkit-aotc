@@ -29,6 +29,7 @@
 #ifndef SourceProvider_h
 #define SourceProvider_h
 
+#include "CodeBlockDatabase.h"
 #include <wtf/PassOwnPtr.h>
 #include <wtf/RefCounted.h>
 #include <wtf/text/TextPosition.h>
@@ -45,6 +46,8 @@ namespace JSC {
         JS_EXPORT_PRIVATE virtual ~SourceProvider();
 
         virtual const String& source() const = 0;
+        virtual bool isDatabaseProvider() const = 0;
+        virtual CodeBlockDatabase* codeBlockDatabaseToLoad() const = 0;
         String getRange(int start, int end) const
         {
             return source().substringSharingImpl(start, end - start);
@@ -62,6 +65,20 @@ namespace JSC {
             return m_id;
         }
 
+        bool writingToDatabase() { return m_savingDatabaseCreated; }
+
+        CodeBlockDatabase* codeBlockDatabaseToSave() const
+        {
+            ASSERT(m_savingDatabaseCreated && !!m_savingDatabase);
+            return m_savingDatabase.get();
+        }
+
+        void connectCodeBlockDatabaseToSave(String name)
+        {
+            m_savingDatabase = CodeBlockDatabase::create(name);
+            m_savingDatabaseCreated = true;
+        }
+
         bool isValid() const { return m_validated; }
         void setValid() { m_validated = true; }
 
@@ -72,8 +89,10 @@ namespace JSC {
 
         String m_url;
         TextPosition m_startPosition;
+        RefPtr<CodeBlockDatabase> m_savingDatabase;
+        bool m_savingDatabaseCreated : 1;
         bool m_validated : 1;
-        uintptr_t m_id : sizeof(uintptr_t) * 8 - 1;
+        uintptr_t m_id : sizeof(uintptr_t) * 8 - 2;
     };
 
     class StringSourceProvider : public SourceProvider {
@@ -88,6 +107,8 @@ namespace JSC {
             return m_source;
         }
 
+        virtual bool isDatabaseProvider() const override { return false; }
+        virtual CodeBlockDatabase* codeBlockDatabaseToLoad() const override { return NULL; };
     private:
         StringSourceProvider(const String& source, const String& url, const TextPosition& startPosition)
             : SourceProvider(url, startPosition)
@@ -98,6 +119,35 @@ namespace JSC {
         String m_source;
     };
     
+    class DatabaseSourceProvider : public SourceProvider {
+    public:
+        static PassRefPtr<DatabaseSourceProvider> create(const String& databaseFileName, const String& url, const TextPosition& startPosition = TextPosition::minimumPosition())
+        {
+            return adoptRef(new DatabaseSourceProvider(databaseFileName, url, startPosition));
+        }
+
+        virtual const String& source() const override
+        {
+            ASSERT_NOT_REACHED();
+            return m_source;
+        }
+        //virtual String getRange(int start, int end) const override { ASSERT_NOT_REACHED(); return String(); }
+        //const StringImpl* data() const { ASSERT_NOT_REACHED(); return 0; }
+        //int length() const { ASSERT_NOT_REACHED(); return 0; }
+
+        virtual bool isDatabaseProvider() const override { return true; }
+        virtual CodeBlockDatabase* codeBlockDatabaseToLoad() const override { return m_loadingDatabase.get(); }
+    private:
+        DatabaseSourceProvider(const String& databaseFileName, const String& url, const TextPosition& startPosition)
+            : SourceProvider(url, startPosition)
+            , m_source("{ /* Bad Beef */ }")
+            , m_loadingDatabase(CodeBlockDatabase::create(databaseFileName))
+        {
+        }
+
+        String m_source;
+        RefPtr<CodeBlockDatabase> m_loadingDatabase;
+    };
 } // namespace JSC
 
 #endif // SourceProvider_h

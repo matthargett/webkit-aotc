@@ -472,6 +472,9 @@ void JSGlobalObject::reset(JSValue prototype)
     JSConsole* consoleObject = JSConsole::create(vm, m_consoleStructure.get());
     putDirectWithoutTransition(vm, Identifier(exec, "console"), consoleObject, DontEnum);
 
+    m_specialPointers[Special::CallFunction] = m_callFunction.get();
+    m_specialPointers[Special::ApplyFunction] = m_applyFunction.get();
+
     if (m_experimentsEnabled) {
         NamePrototype* privateNamePrototype = NamePrototype::create(exec, NamePrototype::createStructure(vm, this, m_objectPrototype.get()));
         m_privateNameStructure.set(vm, this, NameInstance::createStructure(vm, this, privateNamePrototype));

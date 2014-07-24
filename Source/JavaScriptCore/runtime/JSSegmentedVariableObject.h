@@ -58,6 +58,8 @@ public:
     typedef JSSymbolTableObject Base;
 
     WriteBarrier<Unknown>& registerAt(int index) { return m_registers[index]; }
+
+    size_t numberOfRegisters() { return m_registers.size(); }
     
     // This is a slow method call, which searches the register bank to find the index
     // given a pointer. It will CRASH() if it does not find the register. Only use this

@@ -39,6 +39,10 @@ public:
 
     unsigned count() const { return m_instructionCount; }
 
+    unsigned char* data() { return m_data.data(); }
+    unsigned byteSize() const { return m_data.size(); }
+    UnlinkedInstructionStream(unsigned, const Vector<unsigned char>&);
+
     class Reader {
     public:
         explicit Reader(const UnlinkedInstructionStream&);

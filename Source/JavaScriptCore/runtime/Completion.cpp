@@ -59,6 +59,25 @@ bool checkSyntax(VM& vm, const SourceCode& source, ParserError& error)
     return programNode;
 }
 
+bool dumpBytecodeFull(ExecState* exec, const SourceCode& source, JSValue* returnedException)
+{
+    ProgramExecutable* program = ProgramExecutable::create(exec, source);
+    JSScope *scope = exec->scope();
+    VM& vm = *scope->vm();
+    JSObject* error = program->initializeGlobalProperties(vm, exec, scope);
+    if (error) {
+        if (returnedException) {
+            *returnedException = exec->vm().throwException(exec, error);
+            ASSERT(*returnedException);
+        }
+        ASSERT(exec->hadException());
+        exec->clearException();
+        return false;
+    }
+    ASSERT(!exec->hadException());
+    return true;
+}
+
 JSValue evaluate(ExecState* exec, const SourceCode& source, JSValue thisValue, JSValue* returnedException)
 {
     JSLockHolder lock(exec);

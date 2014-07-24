@@ -161,6 +161,9 @@ namespace JSC {
         typedef DeclarationStacks::VarStack VarStack;
         typedef DeclarationStacks::FunctionStack FunctionStack;
 
+        static void setSaveBytecode();
+        static bool saveBytecode();
+
         BytecodeGenerator(VM&, ProgramNode*, UnlinkedProgramCodeBlock*, DebuggerMode, ProfilerMode);
         BytecodeGenerator(VM&, FunctionBodyNode*, UnlinkedFunctionCodeBlock*, DebuggerMode, ProfilerMode);
         BytecodeGenerator(VM&, EvalNode*, UnlinkedEvalCodeBlock*, DebuggerMode, ProfilerMode);
@@ -660,6 +663,8 @@ namespace JSC {
         unsigned m_globalConstantIndex;
 
         int m_globalVarStorageOffset;
+
+        bool m_hasOpCreateActivation;
 
         int m_firstLazyFunction;
         int m_lastLazyFunction;

@@ -419,6 +419,17 @@ public:
     ALWAYS_INLINE const LChar* characters8() const { ASSERT(is8Bit()); return m_data8; }
     ALWAYS_INLINE const UChar* characters16() const { ASSERT(!is8Bit()); return m_data16; }
 
+    void toBytes(Vector<char> &b)
+    {
+        if (!is8Bit()) {
+            b.append(sizeof(UChar));
+            b.append(reinterpret_cast<const char*>(m_data16), m_length * sizeof(UChar) / sizeof(char));
+        } else {
+            b.append(sizeof(LChar));
+            b.append(reinterpret_cast<const char*>(m_data8), m_length * sizeof(LChar) / sizeof(char));
+        }
+    }
+
     template <typename CharType>
     ALWAYS_INLINE const CharType *characters() const;
 

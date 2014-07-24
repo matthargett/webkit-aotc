@@ -87,7 +87,7 @@ public:
     String() { }
 
     // Construct a string with UTF-16 data.
-    WTF_EXPORT_STRING_API String(const UChar* characters, unsigned length);
+    WTF_EXPORT_STRING_API String(const UChar*, unsigned);
 
     // Construct a string by copying the contents of a vector.  To avoid
     // copying, consider using String::adopt instead.
@@ -104,12 +104,12 @@ public:
     WTF_EXPORT_STRING_API String(const UChar*);
 
     // Construct a string with latin1 data.
-    WTF_EXPORT_STRING_API String(const LChar* characters, unsigned length);
-    WTF_EXPORT_STRING_API String(const char* characters, unsigned length);
+    WTF_EXPORT_STRING_API String(const LChar*, unsigned);
+    WTF_EXPORT_STRING_API String(const char*, unsigned);
 
     // Construct a string with latin1 data, from a null-terminated source.
-    WTF_EXPORT_STRING_API String(const LChar* characters);
-    WTF_EXPORT_STRING_API String(const char* characters);
+    WTF_EXPORT_STRING_API String(const LChar*);
+    WTF_EXPORT_STRING_API String(const char*);
 
     // Construct a string referencing an existing StringImpl.
     String(StringImpl& impl) : m_impl(&impl) { }
@@ -118,8 +118,12 @@ public:
     String(PassRef<StringImpl> impl) : m_impl(std::move(impl)) { }
     String(RefPtr<StringImpl>&& impl) : m_impl(impl) { }
 
+    // Construct a string from a byte stream from database.
+    enum ByteStreamConstructorTag { ByteStreamConstructor };
+    String(ByteStreamConstructorTag, const char*, unsigned);
+
     // Construct a string from a constant string literal.
-    WTF_EXPORT_STRING_API String(ASCIILiteral characters);
+    WTF_EXPORT_STRING_API String(ASCIILiteral);
 
     // Construct a string from a constant string literal.
     // This constructor is the "big" version, as it put the length in the function call and generate bigger code.
@@ -184,6 +188,12 @@ public:
         if (!m_impl)
             return 0;
         return m_impl->length() * (is8Bit() ? sizeof(LChar) : sizeof(UChar));
+    }
+
+    void toBytes(Vector<char>& b) const
+    {
+        if (m_impl)
+            m_impl->toBytes(b);
     }
 
     WTF_EXPORT_STRING_API CString ascii() const;

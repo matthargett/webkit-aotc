@@ -35,6 +35,8 @@ namespace JSC {
 SourceProvider::SourceProvider(const String& url, const TextPosition& startPosition)
     : m_url(url)
     , m_startPosition(startPosition)
+    , m_savingDatabase(0)
+    , m_savingDatabaseCreated(false)
     , m_validated(false)
     , m_id(0)
 {

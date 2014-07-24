@@ -177,6 +177,12 @@ UnlinkedInstructionStream::UnlinkedInstructionStream(const Vector<UnlinkedInstru
     m_data = RefCountedArray<unsigned char>(buffer);
 }
 
+UnlinkedInstructionStream::UnlinkedInstructionStream(unsigned count, const Vector<unsigned char>& buffer)
+    : m_instructionCount(count)
+{
+    m_data = RefCountedArray<unsigned char>(buffer);
+}
+
 #ifndef NDEBUG
 const RefCountedArray<UnlinkedInstruction>& UnlinkedInstructionStream::unpackForDebugging() const
 {
