@@ -623,9 +623,18 @@ void CodeBlockDatabase::readConstantBuffers(BytesPointer* p, UnlinkedCodeBlock* 
 void CodeBlockDatabase::writeSymbolTable(BytesData& data, UnlinkedCodeBlock* codeBlock)
 {
     BytesData temp;
+    bool global = (codeBlock->getID() == 0);
+    ASSERT(codeBlock->codeType() == global ? GlobalCode : FunctionCode);
     size_t elems, num = codeBlock->m_symbols.size();
     ASSERT(num == codeBlock->m_regForSymbols.size());
     writeNum(data, num);
+    if (!global) {
+        ASSERT(codeBlock->symbolTable());
+        int captureStart = codeBlock->symbolTable()->captureStart();
+        int captureEnd = codeBlock->symbolTable()->captureEnd();
+        writeNum(data, captureStart);
+        writeNum(data, captureEnd);
+    }
     for (size_t i = 0; i < num; i++) {
         writeInt64(data, codeBlock->m_regForSymbols[i]);
         codeBlock->m_symbols[i]->toBytes(temp);
@@ -639,11 +648,18 @@ void CodeBlockDatabase::writeSymbolTable(BytesData& data, UnlinkedCodeBlock* cod
 void CodeBlockDatabase::readSymbolTable(BytesPointer* p, UnlinkedCodeBlock* codeBlock)
 {
     ASSERT(codeBlock->m_regForSymbols.size() == 0);
+    bool global = (codeBlock->getID() == 0);
+    ASSERT(codeBlock->codeType() == global ? GlobalCode : FunctionCode);
     bool empty = !(codeBlock->symbolTable()->size());
     ASSERT(empty || codeBlock->codeType() == GlobalCode);
     ExecState* exec = m_scope->globalObject()->globalExec();
 
     size_t elems, num = readNum(p);
+
+    if (!global) {
+        codeBlock->symbolTable()->setCaptureStart(readNum(p));
+        codeBlock->symbolTable()->setCaptureEnd(readNum(p));
+    }
 
     for (size_t i = 0; i < num; i++) {
         codeBlock->m_regForSymbols.append(readInt64(p));
