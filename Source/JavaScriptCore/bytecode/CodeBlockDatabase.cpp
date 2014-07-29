@@ -3,6 +3,7 @@
 #include "CodeBlockDatabase.h"
 #include "JSCJSValueInlines.h"
 #include "JSFunctionInlines.h"
+#include "NodeConstructors.h"
 #include "Strong.h"
 #include "StrongInlines.h"
 #include "UnlinkedCodeBlock.h"
