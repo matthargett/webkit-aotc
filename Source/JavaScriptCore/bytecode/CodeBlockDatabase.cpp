@@ -635,6 +635,19 @@ void CodeBlockDatabase::writeSymbolTable(BytesData& data, UnlinkedCodeBlock* cod
         writeNum(data, captureStart);
         writeNum(data, captureEnd);
     }
+    else {
+      SymbolTable *globalSymbol = m_scope->globalObject()->symbolTable();
+      ConcurrentJITLocker locker(m_scope->globalObject()->symbolTable()->m_lock);
+      writeNum(data, globalSymbol->size(locker));
+      for (SymbolTable::Map::iterator iter = globalSymbol->begin(locker), end = globalSymbol->end(locker); iter != end; ++iter) {
+	  writeInt64(data, iter->value.getBits());
+	  iter->key.get()->toBytes(temp);
+	  elems = temp.size();
+	  writeNum(data, elems);
+	  data.append(temp.data(), elems);
+          temp.clear();
+      }
+    }
     for (size_t i = 0; i < num; i++) {
         writeInt64(data, codeBlock->m_regForSymbols[i]);
         codeBlock->m_symbols[i]->toBytes(temp);
@@ -660,6 +673,21 @@ void CodeBlockDatabase::readSymbolTable(BytesPointer* p, UnlinkedCodeBlock* code
         codeBlock->symbolTable()->setCaptureStart(readNum(p));
         codeBlock->symbolTable()->setCaptureEnd(readNum(p));
     }
+    else {
+      size_t size = readNum(p);
+      for (size_t i = 0; i < size; i++) {
+	  SymbolTableEntry newEntry = SymbolTableEntry(SymbolTableEntry::Bits, readInt64(p));
+	  //SymbolTableEntry newEntry = SymbolTableEntry(SymbolTableEntry::Bits, readInt64(p), m_scope->globalObject()->symbolTable()->size());
+	  elems = readNum(p);
+	  Identifier ident(exec, String(String::ByteStreamConstructor, *p, elems));
+	  *p += elems;
+
+	  ConcurrentJITLocker locker(m_scope->globalObject()->symbolTable()->m_lock);
+	  SymbolTable::Map::AddResult result = m_scope->globalObject()->symbolTable()->add(locker, ident.impl(), newEntry);
+	  //if (!result.isNewEntry)
+	  //    result.iterator->value.prepareToWatch();
+      }
+   }
 
     for (size_t i = 0; i < num; i++) {
         codeBlock->m_regForSymbols.append(readInt64(p));
