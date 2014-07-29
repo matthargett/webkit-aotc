@@ -1508,12 +1508,14 @@ namespace JSC {
         unsigned m_endColumn;
     };
 
+    class BindingNode;
+
     class FunctionParameters : public RefCounted<FunctionParameters> {
         WTF_MAKE_FAST_ALLOCATED;
         WTF_MAKE_NONCOPYABLE(FunctionParameters);
     public:
         static PassRefPtr<FunctionParameters> create(ParameterNode*);
-        static PassRefPtr<FunctionParameters> create() { return adoptRef(new FunctionParameters()); }
+        static PassRefPtr<FunctionParameters> create(Vector<BindingNode*>);
         ~FunctionParameters();
 
         unsigned size() const { return m_size; }
@@ -1521,7 +1523,7 @@ namespace JSC {
 
     private:
         FunctionParameters(ParameterNode*, unsigned size);
-        FunctionParameters() {}
+        FunctionParameters(Vector<BindingNode*>);
 
         DeconstructionPatternNode** patterns() { return &m_storage; }
 

@@ -181,6 +181,24 @@ FunctionParameters::FunctionParameters(ParameterNode* firstParameter, unsigned s
     }
 }
 
+PassRefPtr<FunctionParameters> FunctionParameters::create(Vector<BindingNode*> nodes)
+{
+    unsigned parameterCount = nodes.size();
+
+    size_t objectSize = sizeof(FunctionParameters) - sizeof(void*) + sizeof(DeconstructionPatternNode*) * parameterCount;
+    void* slot = fastMalloc(objectSize);
+    return adoptRef(new (slot) FunctionParameters(nodes));
+}
+
+FunctionParameters::FunctionParameters(Vector<BindingNode*> nodes)
+    : m_size(nodes.size())
+{
+    unsigned i;
+    for (i = 0; i < nodes.size(); i++) {
+        patterns()[i] = nodes[i];
+    }
+}
+
 FunctionParameters::~FunctionParameters()
 {
     for (unsigned i = 0; i < m_size; ++i)

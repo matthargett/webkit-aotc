@@ -39,11 +39,6 @@ namespace JSC {
             return adoptRef(new CodeBlockDatabase(fileName));
         }
 
-/*        static PassRefPtr<CodeBlockDatabase> create(const String& fileName, PassRefPtr<SourceProvider> provider)
-        {
-            return adoptRef(new CodeBlockDatabase(fileName, provider));
-        }*/
-
         void setProvider(PassRefPtr<SourceProvider> provider)
         {
             ASSERT(!m_provider || m_provider == provider);
@@ -119,8 +114,8 @@ namespace JSC {
         bool readBool(BytesPointer*);
         void writeEncodedJSValue(BytesData&, EncodedJSValue);
         EncodedJSValue readEncodedJSValue(BytesPointer*);
-        void writeObject(BytesData&, JSValue);
-        JSValue readObject(BytesPointer*);
+        void writeObject(BytesData&, JSValue, bool);
+        JSValue readObject(BytesPointer*, bool);
         //void writeInsn(BytesData&, Instruction);
         //Instruction readInsn(BytesPointer*);
 
@@ -135,6 +130,7 @@ namespace JSC {
         enum SavingType { NoType, WithoutRun, WithRun } m_savingType;
 
         HashMap<int, int> m_newRegIndex;
+        Vector<JSValue> m_strings;
 
         Vector<int> m_blockIDs;
         Vector<int> m_start;

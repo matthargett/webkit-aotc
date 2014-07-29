@@ -664,7 +664,7 @@ namespace JSC {
 
         int m_globalVarStorageOffset;
 
-        bool m_hasOpCreateActivation;
+//        bool m_hasOpCreateActivation;
 
         int m_firstLazyFunction;
         int m_lastLazyFunction;

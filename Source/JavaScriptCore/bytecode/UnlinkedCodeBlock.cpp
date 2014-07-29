@@ -31,6 +31,7 @@
 #include "ClassInfo.h"
 #include "CodeCache.h"
 #include "Executable.h"
+#include "JSNameScope.h"
 #include "JSString.h"
 #include "JSCInlines.h"
 #include "Parser.h"
@@ -108,7 +109,7 @@ UnlinkedFunctionExecutable::UnlinkedFunctionExecutable(VM* vm, Structure* struct
 {
 }
 
-UnlinkedFunctionExecutable::UnlinkedFunctionExecutable(VM* vm, Structure* structure, const SourceCode& source, Identifier name, Identifier inferredName, bool strict, bool usesArguments, size_t shiftOffset)
+UnlinkedFunctionExecutable::UnlinkedFunctionExecutable(VM* vm, Structure* structure, const SourceCode& source, Identifier name, Identifier inferredName, bool strict, bool usesArguments, PassRefPtr<FunctionParameters> parameters, size_t shiftOffset)
     : Base(*vm, structure)
 //    , m_numCapturedVariables(node->capturedVariableCount())
     , m_forceUsesArguments(usesArguments)
@@ -118,16 +119,15 @@ UnlinkedFunctionExecutable::UnlinkedFunctionExecutable(VM* vm, Structure* struct
     , m_isBuiltinFunction(false)
     , m_name(name)
     , m_inferredName(inferredName)
-//    , m_parameters(node->parameters())
-//    , m_firstLineOffset(node->firstLine() - source.firstLine())
-//    , m_lineCount(node->lastLine() - node->firstLine())
+    , m_parameters(parameters)
+    , m_firstLineOffset(0)
+    , m_lineCount(0)
 //    , m_unlinkedFunctionNameStart(node->functionNameStart() - source.startOffset())
-//    , m_unlinkedBodyStartColumn(node->startColumn())
-//    , m_unlinkedBodyEndColumn(m_lineCount ? node->endColumn() : node->endColumn() - node->startColumn())
+    , m_unlinkedBodyStartColumn(1)
+    , m_unlinkedBodyEndColumn(1)
     , m_startOffset(source.startOffset() - shiftOffset)
     , m_sourceLength(-1)
     , m_sourceOffset(source.startOffset())
-//    , m_sourceOffset(node->source().startOffset())
 //    , m_features(node->features())
 //    , m_functionMode(node->functionMode())
 {
@@ -225,8 +225,61 @@ String UnlinkedFunctionExecutable::paramString() const
     return builder.toString();
 }
 
+void UnlinkedFunctionExecutable::saveCodeBlockFor(ExecState* exec, ScriptExecutable* function, CodeSpecializationKind kind) {
+    // We assume that all parser problems are detected on global level
+    JSGlobalObject* globalObject = exec->scope()->globalObject();
+    ParserError error;
+    DebuggerMode debuggerMode = globalObject->hasDebugger() ? DebuggerOn : DebuggerOff;
+    ProfilerMode profilerMode = globalObject->hasProfiler() ? ProfilerOn : ProfilerOff;
+    UnlinkedFunctionCodeBlock* codeBlock = codeBlockFor(exec->vm(), function->source(), kind, debuggerMode, profilerMode, error);
+    ASSERT_UNUSED(error, error.m_type == ParserError::ErrorNone);
+    ASSERT(codeBlock);
+    codeBlock->setSourceOffset(function->source().startOffset());
 
-void UnlinkedFunctionExecutable::saveBytecode() {
+    ASSERT(function->source().provider()->writingToDatabase());
+    CodeBlockDatabase* codeDb = function->source().codeBlockDatabaseToSave();
+    codeDb->saveFunctionCodeBlock(exec->scope(), codeBlock);
+
+    /*ASSERT(codeBlock->m_activation != CodeBlock::UninitializedActivation);
+    if (codeBlock->m_activation == CodeBlock::CreatedActivation) {
+        JSActivation* activation = JSActivation::create(exec->globalData(), exec, this);
+        exec->setScopeChain(activation);
+    }*/
+
+    for (size_t i = 0; i < codeBlock->numberOfFunctionDecls(); ++i) {
+        codeBlock->functionDecl(i)->saveBytecode(exec, function, false);
+    }
+
+    for (size_t i = 0; i < codeBlock->numberOfFunctionExprs(); ++i) {
+        codeBlock->functionExpr(i)->saveBytecode(exec, function, true);
+    }
+
+    /*if (codeBlock->m_activation == CodeBlock::CreatedActivation)
+        exec->setScope(exec->scope()->next());*/
+}
+
+
+void UnlinkedFunctionExecutable::saveBytecode(ExecState* exec, ScriptExecutable* owner, bool isExpr) {
+    unsigned firstLine = owner->lineNo() + m_firstLineOffset;
+    unsigned startOffset = owner->source().startOffset() + m_startOffset;
+    bool startColumnIsOnOwnerStartLine = !m_firstLineOffset;
+    unsigned startColumn = m_unlinkedBodyStartColumn + (startColumnIsOnOwnerStartLine ? owner->startColumn() : 1);
+    bool endColumnIsOnStartLine = !m_lineCount;
+    unsigned endColumn = m_unlinkedBodyEndColumn + (endColumnIsOnStartLine ? startColumn : 1);
+    SourceCode code(owner->source().provider(), startOffset, startOffset + m_sourceLength, firstLine, startColumn);
+    FunctionExecutable* functionExecutable = FunctionExecutable::create(exec->vm(), code, this, firstLine, firstLine + m_lineCount, startColumn, endColumn);
+
+    if (isExpr && !name().isNull()) {
+          JSFunction* function = JSFunction::create(exec->vm(), functionExecutable, exec->scope());
+          JSNameScope* object = JSNameScope::create(exec, name(), function, ReadOnly | DontDelete);
+          exec->setScope(object);
+    }
+
+    saveCodeBlockFor(exec, functionExecutable, CodeForCall);
+    saveCodeBlockFor(exec, functionExecutable, CodeForConstruct);
+
+    if (isExpr && !name().isNull())
+        exec->setScope(exec->scope()->next());
 }
 
 UnlinkedCodeBlock::UnlinkedCodeBlock(VM* vm, Structure* structure, CodeType codeType, const ExecutableInfo& info)

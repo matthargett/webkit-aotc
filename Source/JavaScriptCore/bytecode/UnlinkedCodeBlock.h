@@ -33,6 +33,7 @@
 #include "Identifier.h"
 #include "JSCell.h"
 #include "JSString.h"
+#include "Nodes.h"
 #include "ParserModes.h"
 #include "RegExp.h"
 #include "SpecialPointer.h"
@@ -100,9 +101,9 @@ public:
         return instance;
     }
 
-    static UnlinkedFunctionExecutable* create(VM* vm, const SourceCode& source, Identifier name, Identifier inferredName, bool strict, bool forceUsesArguments, size_t shift)
+    static UnlinkedFunctionExecutable* create(VM* vm, const SourceCode& source, Identifier name, Identifier inferredName, bool strict, bool forceUsesArguments, PassRefPtr<FunctionParameters> parameters, size_t shift)
     {
-        UnlinkedFunctionExecutable* instance = new (NotNull, allocateCell<UnlinkedFunctionExecutable>(vm->heap)) UnlinkedFunctionExecutable(vm, vm->unlinkedFunctionExecutableStructure.get(), source, name, inferredName, strict, forceUsesArguments, shift);
+        UnlinkedFunctionExecutable* instance = new (NotNull, allocateCell<UnlinkedFunctionExecutable>(vm->heap)) UnlinkedFunctionExecutable(vm, vm->unlinkedFunctionExecutableStructure.get(), source, name, inferredName, strict, forceUsesArguments, parameters, shift);
         instance->finishCreation(*vm);
         return instance;
     }
@@ -170,11 +171,12 @@ public:
 
     bool isBuiltinFunction() const { return m_isBuiltinFunction; }
 
-    void saveBytecode();
+    void saveCodeBlockFor(ExecState*, ScriptExecutable*, CodeSpecializationKind);
+    void saveBytecode(ExecState*, ScriptExecutable*, bool);
 
 private:
     UnlinkedFunctionExecutable(VM*, Structure*, const SourceCode&, FunctionBodyNode*, bool isFromGlobalCode, UnlinkedFunctionKind);
-    UnlinkedFunctionExecutable(VM*, Structure*, const SourceCode&, Identifier, Identifier, bool, bool, size_t);
+    UnlinkedFunctionExecutable(VM*, Structure*, const SourceCode&, Identifier, Identifier, bool, bool, PassRefPtr<FunctionParameters>, size_t);
     WriteBarrier<UnlinkedFunctionCodeBlock> m_codeBlockForCall;
     WriteBarrier<UnlinkedFunctionCodeBlock> m_codeBlockForConstruct;
 

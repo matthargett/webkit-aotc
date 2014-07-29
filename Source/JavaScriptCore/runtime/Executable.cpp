@@ -531,10 +531,10 @@ JSObject* ProgramExecutable::initializeGlobalProperties(VM& vm, CallFrame* callF
         if (BytecodeGenerator::saveBytecode()) {
             for (size_t i = 0; i < functionDeclarations.size(); ++i) {
                 UnlinkedFunctionExecutable* function = functionDeclarations[i].second.get();
-                function->saveBytecode();
+                function->saveBytecode(callFrame, this, false);
             }
             for (size_t i = 0; i < unlinkedCodeBlock->numberOfFunctionExprs(); ++i) {
-                unlinkedCodeBlock->functionExpr(i)->saveBytecode();
+                unlinkedCodeBlock->functionExpr(i)->saveBytecode(callFrame, this, true);
             }
         }
     }

@@ -80,18 +80,9 @@ CodeBlockDatabase::CodeBlockDatabase(const String& file_name)
     , m_fileWrite(false)
     , m_provider(0)
     , m_savingType(NoType)
+    , m_strings()
 {
 }
-
-/*CodeBlockDatabase::CodeBlockDatabase(const String& file_name, PassRefPtr<SourceProvider> provider)
-    : m_scope(0)
-    , m_file_name(file_name)
-    , m_file(0)
-    , m_fileWrite(false)
-    , m_provider(provider)
-    , m_savingType(NoType)
-{
-}*/
 
 CodeBlockDatabase::~CodeBlockDatabase()
 {
@@ -208,15 +199,15 @@ UnlinkedFunctionCodeBlock* CodeBlockDatabase::loadFunctionCodeBlock(JSScope* sco
     unsigned blockID = codeBlock->getID();
     ASSERT(blockID > 0);
     ASSERT(m_savingType != NoType);
-    if (m_savingType == WithoutRun)
-        blockID &= ~1; // Should load codeForCall and patch it into codeForConstruct
+    /*if (m_savingType == WithoutRun)
+        blockID &= ~1; // Should load codeForCall and patch it into codeForConstruct*/
     loadCodeBlock(codeBlock, blockID);
     return codeBlock;
 }
 
 void CodeBlockDatabase::writeFunction(BytesData& data, UnlinkedFunctionExecutable* function)
 {
-    dataLogF("func start offset: %d\n", function->sourceOffset());
+    //dataLogF("func start offset: %d\n", function->sourceOffset());
     size_t num, len;
     BytesData temp;
 
@@ -276,15 +267,23 @@ UnlinkedFunctionExecutable* CodeBlockDatabase::readFunction(BytesPointer* p, Unl
     bool strict = options & StrictModeFeature;
     bool forceUsesArguments = options & ForceUsesArgumentsFeature;
     SourceCode source(m_provider.get(), offset);
-    UnlinkedFunctionExecutable* function = UnlinkedFunctionExecutable::create(&exec->vm(), source, name, inferredName, strict, forceUsesArguments, codeBlock->sourceOffset());
     //parameters
     num = readNum(p);
+    JSTextPosition start;
+    JSTextPosition end;
+    Vector<RefPtr<BindingNode> > nodesPtr;
+    Vector<BindingNode*> nodes;
     for (size_t i = 0; i < num; i++) {
         len = readNum(p);
-        Identifier param(exec, String(String::ByteStreamConstructor, *p, len));
+        Identifier ident(exec, String(String::ByteStreamConstructor, *p, len));
         *p += len;
-        //function->parameters()->append(param);
+        RefPtr<BindingNode> node = BindingNode::create(&exec->vm(), ident, start, end);
+        nodesPtr.append(node);
+        node->ref(); //FIXME: memory leak?
+        nodes.append(node.get());
     }
+    RefPtr<FunctionParameters> params = FunctionParameters::create(nodes);
+    UnlinkedFunctionExecutable* function = UnlinkedFunctionExecutable::create(&exec->vm(), source, name, inferredName, strict, forceUsesArguments, params, codeBlock->sourceOffset());
     return function;
 }
 
@@ -352,7 +351,7 @@ void CodeBlockDatabase::readFunctions(BytesPointer* p, UnlinkedCodeBlock* codeBl
             UnlinkedFunctionExecutable* unlinkedFunction = readFunction(p, codeBlock);
             (static_cast<UnlinkedProgramCodeBlock*>(codeBlock))->addFunctionDeclaration(exec->vm(), unlinkedFunction->name(), unlinkedFunction);
             SourceCode source(m_provider.get(), unlinkedFunction->sourceOffset());
-            FunctionExecutable* function = FunctionExecutable::create(exec->vm(), source, unlinkedFunction, -1, -1, 0,0);
+            FunctionExecutable* function = FunctionExecutable::create(exec->vm(), source, unlinkedFunction, 0, 0, 0, 0);
             globalObject->removeDirect(exec->vm(), function->name());
             JSValue value = JSFunction::create(exec->vm(), function, m_scope);
             SymbolTableEntry entry = globalObject->symbolTable()->get(function->name().impl());
@@ -443,7 +442,7 @@ Instruction CodeBlockDatabase::readInsn(BytesPointer* p)
 
 void CodeBlockDatabase::writeCodeBlockInternals(BytesData& data, UnlinkedCodeBlock* codeBlock)
 {
-    if (codeBlock->getID()) { // Save FunctionExecutable features
+    if (codeBlock->getID()) { // Save UnlinkedFunctionExecutable features
         ASSERT(codeBlock->codeType() == FunctionCode);
         UnlinkedFunctionExecutable *func = (static_cast<UnlinkedFunctionCodeBlock*>(codeBlock))->ownerExecutable();
         int features = func->features();
@@ -482,7 +481,7 @@ void CodeBlockDatabase::readCodeBlockInternals(BytesPointer* p, UnlinkedCodeBloc
     } else {
         ASSERT(codeBlock->codeType() == GlobalCode);
         ASSERT(m_programExecutable);
-        m_programExecutable->recordParse(0, false, -1, -1, 0, 0);
+        m_programExecutable->recordParse(0, false, 0, 0, 0, 0);
     }
 
     // Load UnlinkedCodeBlock info
@@ -518,7 +517,7 @@ void CodeBlockDatabase::readJumpTargets(BytesPointer* p, UnlinkedCodeBlock* code
     ASSERT(codeBlock->numberOfJumpTargets() == num);
 }
 
-void CodeBlockDatabase::writeObject(BytesData& data, JSValue v)
+void CodeBlockDatabase::writeObject(BytesData& data, JSValue v, bool fromCache)
 {
     bool isCell = v.isCell();
     writeBool(data, isCell);
@@ -534,11 +533,24 @@ void CodeBlockDatabase::writeObject(BytesData& data, JSValue v)
         case GlobalObjectType:
             break;
         case StringType:
-            asString(v)->value(exec).toBytes(temp);
-            len = temp.size();
-            writeNum(data, len);
-            data.append(temp.data(), len);
-            temp.clear();
+            if (fromCache) {
+                unsigned found = m_strings.size();
+                for (unsigned i = 0; i < m_strings.size(); i++) {
+                    if (asString(v) == m_strings[i]) {
+                        found = i;
+                        break;
+                    }
+                }
+                ASSERT(found < m_strings.size());
+                writeNum(data, found);
+            } else {
+                m_strings.append(asString(v));
+                asString(v)->value(exec).toBytes(temp);
+                len = temp.size();
+                writeNum(data, len);
+                data.append(temp.data(), len);
+                temp.clear();
+            }
             break;
         default:
             dataLogF("Not implemented\n");
@@ -549,7 +561,7 @@ void CodeBlockDatabase::writeObject(BytesData& data, JSValue v)
     }
 }
 
-JSValue CodeBlockDatabase::readObject(BytesPointer* p)
+JSValue CodeBlockDatabase::readObject(BytesPointer* p, bool fromCache)
 {
     bool b = readBool(p);
     JSValue v;
@@ -562,9 +574,14 @@ JSValue CodeBlockDatabase::readObject(BytesPointer* p)
             v = JSValue(m_scope->globalObject());
             break;
         case StringType:
-            len = readNum(p);
-            v = JSValue(jsOwnedString(exec, String(String::ByteStreamConstructor, *p, len)));
-            *p += len;
+            if (fromCache) {
+                v = m_strings[readNum(p)];
+            } else {
+                len = readNum(p);
+                v = JSValue(jsOwnedString(exec, String(String::ByteStreamConstructor, *p, len)));
+                *p += len;
+                m_strings.append(v);
+            }
             break;
         default:
             ASSERT_NOT_REACHED();
@@ -581,7 +598,7 @@ void CodeBlockDatabase::writeConstants(BytesData& data, UnlinkedCodeBlock* codeB
     size_t num = codeBlock->numberOfConstantRegisters();
     writeNum(data, num);
     for (size_t i = 0; i < num; i++)
-        writeObject(data, codeBlock->getConstant(FirstConstantRegisterIndex + i));
+        writeObject(data, codeBlock->getConstant(FirstConstantRegisterIndex + i), false);
 }
 
 void CodeBlockDatabase::readConstants(BytesPointer* p, UnlinkedCodeBlock* codeBlock)
@@ -589,7 +606,7 @@ void CodeBlockDatabase::readConstants(BytesPointer* p, UnlinkedCodeBlock* codeBl
     ASSERT(codeBlock->numberOfConstantRegisters() == 0);
     size_t num = readNum(p);
     for (size_t i = 0; i < num; i++)
-        codeBlock->addConstant(readObject(p));
+        codeBlock->addConstant(readObject(p, false));
     ASSERT(codeBlock->numberOfConstantRegisters() == num);
 }
 
@@ -601,7 +618,7 @@ void CodeBlockDatabase::writeConstantBuffers(BytesData& data, UnlinkedCodeBlock*
         elems = codeBlock->getConstantBufferSize(i);
         writeNum(data, elems);
         for (size_t j = 0; j < elems; j++)
-            writeObject(data, codeBlock->constantBuffer(i).at(j));
+            writeObject(data, codeBlock->constantBuffer(i).at(j), true);
     }
 }
 
@@ -613,9 +630,9 @@ void CodeBlockDatabase::readConstantBuffers(BytesPointer* p, UnlinkedCodeBlock* 
         elems = readNum(p);
         size_t index = codeBlock->addConstantBuffer(elems);
         ASSERT(index == i);
-        Vector<JSValue> buffer = codeBlock->constantBuffer(index);
+        UnlinkedCodeBlock::ConstantBuffer& buffer = codeBlock->constantBuffer(index);
         for (size_t j = 0; j < elems; j++)
-            buffer.append(readObject(p));
+            buffer[j] = readObject(p, true);
     }
     ASSERT(codeBlock->numberOfConstantBuffers() == num);
 }
@@ -934,6 +951,8 @@ void CodeBlockDatabase::readBytecode(BytesPointer* p, UnlinkedCodeBlock* codeBlo
 {
     size_t insnCount = readNum(p);
     size_t byteSize = readNum(p);
+    /*bool reconstruct = m_savingType == WithoutRun && codeBlock->isConstructor();
+    ASSERT(!reconstruct || codeBlock->getID());*/
     ASSERT(NULL == codeBlock->instructionsPointer());
     Vector<unsigned char> data;
     data.append(*p, byteSize);
@@ -943,8 +962,6 @@ void CodeBlockDatabase::readBytecode(BytesPointer* p, UnlinkedCodeBlock* codeBlo
     JSGlobalObject* globalObject = m_scopeChainNode->globalObject.get();
     int thisIndex = codeBlock->thisRegister();
     ASSERT(m_savingType != NoType);
-    bool reconstruct = m_savingType == WithoutRun && codeBlock->m_isConstructor;
-    ASSERT(!reconstruct || codeBlock->getID());
     size_t num, base;
 
 #if !ASSERT_DISABLED
@@ -1167,7 +1184,7 @@ void CodeBlockDatabase::saveCodeBlock(UnlinkedCodeBlock* codeBlock)
 {
     int rc, origSize;
     unsigned blockID = codeBlock->getID();
-    dataLogF("save block=%d offset=%d constructor=%d\n", blockID, blockID/2, blockID%2);
+    //dataLogF("save block=%d offset=%d constructor=%d\n", blockID, blockID/2, blockID%2);
     ASSERT(m_blockIDs.size() == m_start.size());
     BytesData data;
 
@@ -1225,8 +1242,9 @@ void CodeBlockDatabase::saveCodeBlock(UnlinkedCodeBlock* codeBlock)
 
 void CodeBlockDatabase::loadCodeBlock(UnlinkedCodeBlock* codeBlock, unsigned blockID)
 {
-    dataLogF("load BlockID: %d\n", blockID);
-/*    ExecState* exec = m_scopeChainNode->globalObject->globalExec();
+    //dataLogF("load BlockID: %d\n", blockID);
+
+    /*ExecState* exec = m_scopeChainNode->globalObject->globalExec();
     codeBlock->setThisRegister(CallFrame::thisArgumentOffset());
     codeBlock->setVM(&exec->vm());*/
 
@@ -1278,7 +1296,7 @@ void CodeBlockDatabase::loadCodeBlock(UnlinkedCodeBlock* codeBlock, unsigned blo
 
     // Check total bytes
     ASSERT(origSize == -1 ? p == c_data.data() + c_data.size() : p == u_data.data() + u_data.size());
-    // It seems that vectors are deallocated in their destructors
+    // Vectors are deallocated in their destructors
 }
 
 } // namespace JSC

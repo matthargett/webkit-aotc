@@ -190,7 +190,7 @@ BytecodeGenerator::BytecodeGenerator(VM& vm, ProgramNode* programNode, UnlinkedP
     , m_codeType(GlobalCode)
     , m_nextConstantOffset(0)
     , m_globalConstantIndex(0)
-    , m_hasOpCreateActivation(false)
+//    , m_hasOpCreateActivation(false)
     , m_firstLazyFunction(0)
     , m_lastLazyFunction(0)
     , m_staticPropertyAnalyzer(&m_instructions)
@@ -238,7 +238,7 @@ BytecodeGenerator::BytecodeGenerator(VM& vm, FunctionBodyNode* functionBody, Unl
     , m_codeType(FunctionCode)
     , m_nextConstantOffset(0)
     , m_globalConstantIndex(0)
-    , m_hasOpCreateActivation(false)
+//    , m_hasOpCreateActivation(false)
     , m_firstLazyFunction(0)
     , m_lastLazyFunction(0)
     , m_staticPropertyAnalyzer(&m_instructions)
@@ -451,7 +451,7 @@ BytecodeGenerator::BytecodeGenerator(VM& vm, EvalNode* evalNode, UnlinkedEvalCod
     , m_codeType(EvalCode)
     , m_nextConstantOffset(0)
     , m_globalConstantIndex(0)
-    , m_hasOpCreateActivation(false)
+//    , m_hasOpCreateActivation(false)
     , m_firstLazyFunction(0)
     , m_lastLazyFunction(0)
     , m_staticPropertyAnalyzer(&m_instructions)
@@ -1674,7 +1674,7 @@ void BytecodeGenerator::createActivationIfNecessary()
 {
     if (!m_activationRegister)
         return;
-    m_hasOpCreateActivation = true;
+//    m_hasOpCreateActivation = true;
     emitOpcode(op_create_activation);
     instructions().append(m_activationRegister->index());
 }
