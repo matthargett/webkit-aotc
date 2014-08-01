@@ -508,6 +508,7 @@ public:
     void recordParse(CodeFeatures features, bool hasCapturedVariables, unsigned firstLine, unsigned lineCount, unsigned endColumn)
     {
         m_features = features;
+        m_usesEval = m_features & EvalFeature;
         m_hasCapturedVariables = hasCapturedVariables;
         m_firstLine = firstLine;
         m_lineCount = lineCount;

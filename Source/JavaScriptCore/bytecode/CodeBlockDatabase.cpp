@@ -478,6 +478,7 @@ void CodeBlockDatabase::readCodeBlockInternals(BytesPointer* p, UnlinkedCodeBloc
         ASSERT(function->isInStrictContext() == !!(features & StrictModeFeature));
         ASSERT(codeBlock->isStrictMode() == function->isInStrictContext());
         function->recordParse(features & AllFeatures, features & HasCapturedVariablesFeature);
+        codeBlock->recordParse (features & AllFeatures, features & HasCapturedVariablesFeature, 0, 0, 0);
         codeBlock->setActivationRegister(VirtualRegister(readNum(p)));
     } else {
         ASSERT(codeBlock->codeType() == GlobalCode);
@@ -688,6 +689,7 @@ void CodeBlockDatabase::readSymbolTable(BytesPointer* p, UnlinkedCodeBlock* code
     size_t elems, num = readNum(p);
 
     if (!global) {
+        codeBlock->symbolTable ()->setUsesNonStrictEval(codeBlock->usesEval() && !codeBlock->isStrictMode());
         codeBlock->symbolTable()->setCaptureStart(readNum(p));
         codeBlock->symbolTable()->setCaptureEnd(readNum(p));
     }
