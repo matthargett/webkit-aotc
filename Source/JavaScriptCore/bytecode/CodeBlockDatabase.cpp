@@ -51,6 +51,8 @@ COMPILE_ASSERT(ForceUsesArgumentsFeature == AllFeatures + 1, AdditionalFeaturesA
 
 static JSType getType(JSValue v) {
     ASSERT(v.isCell());
+    ASSERT(v.asCell());
+    ASSERT(v.asCell()->structure());
     return v.asCell()->structure()->typeInfo().type();
 }
 
@@ -529,6 +531,10 @@ void CodeBlockDatabase::writeObject(BytesData& data, JSValue v, bool fromCache)
         ExecState* exec = m_scope->globalObject()->globalExec();
         BytesData temp;
         size_t len;
+        if (v.asCell() == NULL) {
+            writeNum(data, LastJSCObjectType + 1);
+            return;
+        }
         JSType t = getType(v);
         writeNum(data, t);
         switch (t) {
@@ -544,6 +550,7 @@ void CodeBlockDatabase::writeObject(BytesData& data, JSValue v, bool fromCache)
                     }
                 }
                 ASSERT(found < m_strings.size());
+                //dataLogF("Cached %u\n", found);
                 writeNum(data, found);
             } else {
                 m_strings.append(asString(v));
@@ -570,14 +577,19 @@ JSValue CodeBlockDatabase::readObject(BytesPointer* p, bool fromCache)
     if (b) {
         ExecState* exec = m_scope->globalObject()->globalExec();
         size_t len;
-        JSType t = static_cast<JSType>(readNum(p));
+        unsigned number = readNum(p);
+        if (number == LastJSCObjectType + 1)
+            return JSValue();
+        JSType t = static_cast<JSType>(number);
         switch (t) {
         case GlobalObjectType:
             v = JSValue(m_scope->globalObject());
             break;
         case StringType:
             if (fromCache) {
-                v = m_strings[readNum(p)];
+                unsigned found = readNum(p);
+                //dataLogF("FromCache %u\n", found);
+                v = m_strings[found];
             } else {
                 len = readNum(p);
                 v = JSValue(jsOwnedString(exec, String(String::ByteStreamConstructor, *p, len)));
@@ -1197,6 +1209,7 @@ void CodeBlockDatabase::saveCodeBlock(UnlinkedCodeBlock* codeBlock)
     writeJumpTargets(data, codeBlock);
     writeConstants(data, codeBlock);
     writeConstantBuffers(data, codeBlock);
+    m_strings.clear();
     writeSymbolTable(data, codeBlock);
     writeIdentifiers(data, codeBlock);
     writeBytecode(data, codeBlock);
@@ -1288,6 +1301,7 @@ void CodeBlockDatabase::loadCodeBlock(UnlinkedCodeBlock* codeBlock, unsigned blo
     readFunctions(&p, codeBlock);
     readCodeBlockInternals(&p, codeBlock);
     readJumpTargets(&p, codeBlock);
+    m_strings.clear();
     readConstants(&p, codeBlock);
     readConstantBuffers(&p, codeBlock);
     readSymbolTable(&p, codeBlock);
