@@ -109,7 +109,7 @@ UnlinkedFunctionExecutable::UnlinkedFunctionExecutable(VM* vm, Structure* struct
 {
 }
 
-UnlinkedFunctionExecutable::UnlinkedFunctionExecutable(VM* vm, Structure* structure, const SourceCode& source, Identifier name, Identifier inferredName, bool strict, bool usesArguments, PassRefPtr<FunctionParameters> parameters, size_t shiftOffset)
+UnlinkedFunctionExecutable::UnlinkedFunctionExecutable(VM* vm, Structure* structure, const SourceCode& source, Identifier name, Identifier inferredName, bool strict, bool usesArguments, enum FunctionMode mode, PassRefPtr<FunctionParameters> parameters, size_t shiftOffset)
     : Base(*vm, structure)
 //    , m_numCapturedVariables(node->capturedVariableCount())
     , m_forceUsesArguments(usesArguments)
@@ -129,7 +129,7 @@ UnlinkedFunctionExecutable::UnlinkedFunctionExecutable(VM* vm, Structure* struct
     , m_sourceLength(-1)
     , m_sourceOffset(source.startOffset())
 //    , m_features(node->features())
-//    , m_functionMode(node->functionMode())
+    , m_functionMode(mode)
 {
 }
 

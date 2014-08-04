@@ -148,8 +148,6 @@ bool BytecodeGenerator::addVar(
     int index = virtualRegisterForLocal(m_calleeRegisters.size()).offset();
     SymbolTableEntry newEntry(index, constantMode == IsConstant ? ReadOnly : 0);
     SymbolTable::Map::AddResult result = symbolTable().add(locker, ident.impl(), newEntry);
-    m_codeBlock->m_symbols.append(ident.impl());
-    m_codeBlock->m_regForSymbols.append(newEntry.getBits());
 
     if (!result.isNewEntry) {
         r0 = &registerFor(result.iterator->value.getIndex());
@@ -209,9 +207,6 @@ BytecodeGenerator::BytecodeGenerator(VM& vm, ProgramNode* programNode, UnlinkedP
 
     const VarStack& varStack = programNode->varStack();
     const FunctionStack& functionStack = programNode->functionStack();
-
-    //FIXME: is codeBlock->symbolTable unused for programCodeBlock?
-    //m_codeBlock->setSymbolTable(m_symbolTable);
 
     for (size_t i = 0; i < functionStack.size(); ++i) {
         FunctionBodyNode* function = functionStack[i];
@@ -527,8 +522,6 @@ void BytecodeGenerator::addParameter(const Identifier& ident, int parameterIndex
     if (!m_functions.contains(rep)) {
         SymbolTableEntry newEntry = SymbolTableEntry(parameterIndex);
         symbolTable().set(rep, newEntry);
-        m_codeBlock->m_symbols.append(rep);
-        m_codeBlock->m_regForSymbols.append(newEntry.getBits());
         RegisterID& parameter = registerFor(parameterIndex);
         parameter.setIndex(parameterIndex);
     }

@@ -226,12 +226,14 @@ PassRefPtr<CodeBlock> ScriptExecutable::newCodeBlockFor(
     if (source().isBytecode()) {
         CodeBlockDatabase* codeDb = source().codeBlockDatabaseToLoad();
         unlinkedCodeBlock = codeDb->loadFunctionCodeBlock(*scope, executable, kind);
+        if (!unlinkedCodeBlock)
+            error = ParserError(ParserError::StackOverflow, ParserError::SyntaxErrorNone, JSToken());
     } else {
         unlinkedCodeBlock = executable->m_unlinkedExecutable->codeBlockFor(
             *vm, executable->m_source, kind, debuggerMode, profilerMode, error);
-        unlinkedCodeBlock->setSourceOffset(executable->source().startOffset());
+        if (unlinkedCodeBlock)
+            unlinkedCodeBlock->setSourceOffset(executable->source().startOffset());
     }
-
 
     recordParse(executable->m_unlinkedExecutable->features(), executable->m_unlinkedExecutable->hasCapturedVariables(), lineNo(), lastLine(), startColumn(), endColumn()); 
     if (!unlinkedCodeBlock) {
@@ -496,6 +498,7 @@ JSObject* ProgramExecutable::initializeGlobalProperties(VM& vm, CallFrame* callF
         CodeBlockDatabase* codeDb = source().codeBlockDatabaseToLoad();
         codeDb->open(false);
         unlinkedCodeBlock = codeDb->loadProgramCodeBlock(scope, this);
+        //FIXME: create exception?
     } else {
         unlinkedCodeBlock = globalObject->createProgramCodeBlock(callFrame, this, &exception);
     }
@@ -526,7 +529,7 @@ JSObject* ProgramExecutable::initializeGlobalProperties(VM& vm, CallFrame* callF
     if (Options::saveBytecode() || BytecodeGenerator::saveBytecode()) {
         CodeBlockDatabase* codeDb = source().codeBlockDatabaseToSave();
         codeDb->open(true);
-        codeDb->saveProgramCodeBlock(scope, unlinkedCodeBlock);
+        codeDb->saveProgramCodeBlock(scope, unlinkedCodeBlock, this);
 
         if (BytecodeGenerator::saveBytecode()) {
             for (size_t i = 0; i < functionDeclarations.size(); ++i) {

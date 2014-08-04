@@ -101,9 +101,9 @@ public:
         return instance;
     }
 
-    static UnlinkedFunctionExecutable* create(VM* vm, const SourceCode& source, Identifier name, Identifier inferredName, bool strict, bool forceUsesArguments, PassRefPtr<FunctionParameters> parameters, size_t shift)
+    static UnlinkedFunctionExecutable* create(VM* vm, const SourceCode& source, Identifier name, Identifier inferredName, bool strict, bool forceUsesArguments, FunctionMode mode, PassRefPtr<FunctionParameters> parameters, size_t shift)
     {
-        UnlinkedFunctionExecutable* instance = new (NotNull, allocateCell<UnlinkedFunctionExecutable>(vm->heap)) UnlinkedFunctionExecutable(vm, vm->unlinkedFunctionExecutableStructure.get(), source, name, inferredName, strict, forceUsesArguments, parameters, shift);
+        UnlinkedFunctionExecutable* instance = new (NotNull, allocateCell<UnlinkedFunctionExecutable>(vm->heap)) UnlinkedFunctionExecutable(vm, vm->unlinkedFunctionExecutableStructure.get(), source, name, inferredName, strict, forceUsesArguments, mode, parameters, shift);
         instance->finishCreation(*vm);
         return instance;
     }
@@ -176,7 +176,7 @@ public:
 
 private:
     UnlinkedFunctionExecutable(VM*, Structure*, const SourceCode&, FunctionBodyNode*, bool isFromGlobalCode, UnlinkedFunctionKind);
-    UnlinkedFunctionExecutable(VM*, Structure*, const SourceCode&, Identifier, Identifier, bool, bool, PassRefPtr<FunctionParameters>, size_t);
+    UnlinkedFunctionExecutable(VM*, Structure*, const SourceCode&, Identifier, Identifier, bool, bool, FunctionMode, PassRefPtr<FunctionParameters>, size_t);
     WriteBarrier<UnlinkedFunctionCodeBlock> m_codeBlockForCall;
     WriteBarrier<UnlinkedFunctionCodeBlock> m_codeBlockForConstruct;
 
@@ -385,11 +385,8 @@ public:
     UnlinkedInstructionStream* instructionsPointer();
 
     int m_numVars;
-    int m_numCapturedVars;
+    //int m_numCapturedVars;
     int m_numCalleeRegisters;
-
-    Vector<RefPtr<StringImpl> > m_symbols;
-    Vector<intptr_t> m_regForSymbols;
 
     // Jump Tables
 
@@ -505,10 +502,16 @@ public:
     void expressionRangeForBytecodeOffset(unsigned bytecodeOffset, int& divot,
         int& startOffset, int& endOffset, unsigned& line, unsigned& column);
 
-    void recordParse(CodeFeatures features, bool hasCapturedVariables, unsigned firstLine, unsigned lineCount, unsigned endColumn)
+    void recordParse(CodeFeatures features, bool hasCapturedVariables, unsigned firstLine, unsigned lineCount, unsigned endColumn, bool setEval = false)
     {
         m_features = features;
-        m_usesEval = m_features & EvalFeature;
+        if (setEval) {
+            ASSERT(endColumn == 0);
+            ASSERT(lineCount == 0);
+            ASSERT(firstLine == 0);
+            m_usesEval = m_features & EvalFeature;
+        } else
+            ASSERT(m_usesEval == (m_features & EvalFeature));
         m_hasCapturedVariables = hasCapturedVariables;
         m_firstLine = firstLine;
         m_lineCount = lineCount;

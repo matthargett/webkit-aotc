@@ -643,7 +643,7 @@ EncodedJSValue JSC_HOST_CALL functionRun(ExecState* exec)
         String bytecodeName = builder.toString();
         if (!databaseExist(bytecodeName))
             return JSValue::encode(exec->vm().throwException(exec, createError(exec, "Could not open bytecode file.")));
-	source = bytecodeSource(bytecodeName);
+        source = bytecodeSource(bytecodeName);
     } else {
         if (!fillBufferWithContentsOfFile(fileName, script))
             return JSValue::encode(exec->vm().throwException(exec, createError(exec, "Could not open file.")));
@@ -687,7 +687,7 @@ EncodedJSValue JSC_HOST_CALL functionLoad(ExecState* exec)
         String bytecodeName = builder.toString();
         if (!databaseExist(bytecodeName))
             return JSValue::encode(throwError(exec, createError(exec, "Could not open bytecode file.")));
-	source = bytecodeSource(bytecodeName);
+        source = bytecodeSource(bytecodeName);
     } else {
         if (!fillBufferWithContentsOfFile(fileName, script))
             return JSValue::encode(throwError(exec, createError(exec, "Could not open file.")));

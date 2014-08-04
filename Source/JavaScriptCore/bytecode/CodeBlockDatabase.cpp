@@ -162,15 +162,18 @@ int CodeBlockDatabase::findStart(int blockID, int* size, int* origSize)
             *size = m_start[i + 1] - m_start[i];
             break;
         }
-    ASSERT(res);
+    if (m_savingType != WithRun)
+        RELEASE_ASSERT(res);
     return res;
 }
 
-void CodeBlockDatabase::saveProgramCodeBlock(JSScope* scope, UnlinkedProgramCodeBlock* codeBlock)
+void CodeBlockDatabase::saveProgramCodeBlock(JSScope* scope, UnlinkedProgramCodeBlock* codeBlock, ProgramExecutable* executable)
 {
     m_scope = scope;
+    m_programExecutable = executable;
     ASSERT(m_data.size() == 0);
     saveCodeBlock(codeBlock);
+    m_programExecutable = NULL;
 }
 
 UnlinkedProgramCodeBlock* CodeBlockDatabase::loadProgramCodeBlock(JSScope* scope, ProgramExecutable* executable)
@@ -179,11 +182,12 @@ UnlinkedProgramCodeBlock* CodeBlockDatabase::loadProgramCodeBlock(JSScope* scope
     m_programExecutable = executable;
     extractSearchTable();
     UnlinkedProgramCodeBlock* codeBlock = UnlinkedProgramCodeBlock::create(&scope->globalObject()->vm(), executable->executableInfo());
-    codeBlock->setSymbolTable(scope->globalObject()->symbolTable());
-    //recordParse???
     unsigned blockID = codeBlock->getID();
     ASSERT(blockID == 0);
-    loadCodeBlock(codeBlock, blockID);
+    if (!loadCodeBlock(codeBlock, blockID)) {
+        m_programExecutable = NULL;
+        return NULL;
+    }
     m_programExecutable = NULL;
     return codeBlock;
 }
@@ -204,7 +208,8 @@ UnlinkedFunctionCodeBlock* CodeBlockDatabase::loadFunctionCodeBlock(JSScope* sco
     ASSERT(m_savingType != NoType);
     /*if (m_savingType == WithoutRun)
         blockID &= ~1; // Should load codeForCall and patch it into codeForConstruct*/
-    loadCodeBlock(codeBlock, blockID);
+    if (!loadCodeBlock(codeBlock, blockID))
+        return NULL;
     return codeBlock;
 }
 
@@ -233,10 +238,11 @@ void CodeBlockDatabase::writeFunction(BytesData& data, UnlinkedFunctionExecutabl
     bool forceUsesArguments = function->forceUsesArguments();
     CodeFeatures options = (strict ? StrictModeFeature : 0) | (forceUsesArguments ? ForceUsesArgumentsFeature : 0);
     writeNum(data, options);
+    // functionMode
+    writeNum(data, function->functionMode());
     // parameters
     num = function->parameters()->size();
     writeNum(data, num);
-
     for (size_t i = 0; i < num; ++i) {
         StringBuilder builder;
         function->parameters()->at(i)->toString(builder);
@@ -252,7 +258,6 @@ UnlinkedFunctionExecutable* CodeBlockDatabase::readFunction(BytesPointer* p, Unl
 {
     ExecState* exec = m_scope->globalObject()->globalExec();
     size_t num, len;
-//  const char* z = 0;
 
     // Extract data
     unsigned offset = readNum(p);
@@ -263,14 +268,14 @@ UnlinkedFunctionExecutable* CodeBlockDatabase::readFunction(BytesPointer* p, Unl
     // inferredName
     len = readNum(p);
     Identifier inferredName = Identifier(exec, len ? String(String::ByteStreamConstructor, *p, len) : emptyString());
-//    Identifier inferredName = len ? Identifier(exec, String(String::ByteStreamConstructor, *p, len)) : Identifier(exec, z);
     *p += len;
     // options
     CodeFeatures options = readNum(p);
     bool strict = options & StrictModeFeature;
     bool forceUsesArguments = options & ForceUsesArgumentsFeature;
-    SourceCode source(m_provider.get(), offset);
-    //parameters
+    // functionMode
+    enum FunctionMode mode = static_cast<enum FunctionMode>(readNum(p));
+    // parameters
     num = readNum(p);
     JSTextPosition start;
     JSTextPosition end;
@@ -286,39 +291,37 @@ UnlinkedFunctionExecutable* CodeBlockDatabase::readFunction(BytesPointer* p, Unl
         nodes.append(node.get());
     }
     RefPtr<FunctionParameters> params = FunctionParameters::create(nodes);
-    UnlinkedFunctionExecutable* function = UnlinkedFunctionExecutable::create(&exec->vm(), source, name, inferredName, strict, forceUsesArguments, params, codeBlock->sourceOffset());
+    // create UnlinkedFunctionExecutable
+    SourceCode source(m_provider.get(), offset);
+    UnlinkedFunctionExecutable* function = UnlinkedFunctionExecutable::create(&exec->vm(), source, name, inferredName, strict, forceUsesArguments, mode, params, codeBlock->sourceOffset());
     return function;
 }
 
 void CodeBlockDatabase::writeFunctions(BytesData& data, UnlinkedCodeBlock* codeBlock)
 {
     size_t num;
-    bool global = (codeBlock->getID() == 0);
-    ASSERT(codeBlock->codeType() == global ? GlobalCode : FunctionCode);
-    if (global) {
-        num = 0;
+    if (!codeBlock->getID()) {
         BytesData temp;
-        JSGlobalObject* globalObject = m_scope->globalObject();
-        const int excluded_n = 6;
+        UnlinkedProgramCodeBlock* programCodeBlock = static_cast<UnlinkedProgramCodeBlock*>(codeBlock);
         ASSERT(Options::saveBytecode() != BytecodeGenerator::saveBytecode());
         writeBool(data, Options::saveBytecode());
         writeBool(data, codeBlock->isStrictMode());
-        writeNum(data, globalObject->numberOfRegisters() - excluded_n);
-        for (size_t i = excluded_n; i < globalObject->numberOfRegisters(); ++i) {
-            JSValue v = globalObject->registerAt(i).get();
-            if (v.isUndefined())
-                continue;
-            if (!v.isCell() || getType(v) != JSFunctionType) {
-                dataLogF("Not implemented\n");
-                ASSERT_NOT_REACHED();
-                CRASH();
-            }
-            writeFunction(temp, jsCast<JSFunction*>(v)->jsExecutable()->unlinkedExecutable());
-            num++;
-        }
+        const UnlinkedProgramCodeBlock::FunctionDeclations& functionDeclarations = programCodeBlock->functionDeclarations();
+        num = functionDeclarations.size();
         writeNum(data, num);
-        data.append(temp.data(), temp.size());
-        temp.clear();
+        for (size_t i = 0; i < num; ++i)
+            writeFunction(data, functionDeclarations[i].second.get());
+        const UnlinkedProgramCodeBlock::VariableDeclations& variableDeclarations = programCodeBlock->variableDeclarations();
+        num = variableDeclarations.size();
+        writeNum(data, num);
+        for (size_t i = 0; i < num; ++i) {
+            writeBool(data, variableDeclarations[i].second & DeclarationStacks::IsConstant);
+            variableDeclarations[i].first.string().toBytes(temp);
+            size_t len = temp.size();
+            writeNum(data, len);
+            data.append(temp.data(), len);
+            temp.clear();
+        }
     } else {
         num = codeBlock->numberOfFunctionDecls();
         writeNum(data, num);
@@ -335,36 +338,47 @@ void CodeBlockDatabase::readFunctions(BytesPointer* p, UnlinkedCodeBlock* codeBl
 {
     size_t num;
     ASSERT(codeBlock->numberOfFunctionDecls() == 0);
-    bool global = (codeBlock->getID() == 0);
-    ASSERT(codeBlock->codeType() == global ? GlobalCode : FunctionCode);
-    if (global) {
-        JSGlobalObject* globalObject = m_scope->globalObject();
-        ExecState* exec = m_scope->globalObject()->globalExec();
-
-        ASSERT(m_savingType == NoType);
-        m_savingType = readBool(p) ? WithRun : WithoutRun;
-        codeBlock->setStrictMode(readBool(p));
-        size_t nGlobalVars = readNum(p);
+    if (!codeBlock->getID()) {
+        /*size_t nGlobalVars = readNum(p);
         if (nGlobalVars)
             globalObject->addRegisters(nGlobalVars);
-        num = readNum(p);
+        JSGlobalObject* globalObject = m_scope->globalObject();
         ASSERT(num <= nGlobalVars);
-        int index = globalObject->symbolTable()->size();
-        for (size_t i = 0; i < num; i++) {
-            UnlinkedFunctionExecutable* unlinkedFunction = readFunction(p, codeBlock);
-            (static_cast<UnlinkedProgramCodeBlock*>(codeBlock))->addFunctionDeclaration(exec->vm(), unlinkedFunction->name(), unlinkedFunction);
+        int index = globalObject->symbolTable()->size();*/
+            /* //inside following loop code
             SourceCode source(m_provider.get(), unlinkedFunction->sourceOffset());
             FunctionExecutable* function = FunctionExecutable::create(exec->vm(), source, unlinkedFunction, 0, 0, 0, 0);
             globalObject->removeDirect(exec->vm(), function->name());
             JSValue value = JSFunction::create(exec->vm(), function, m_scope);
             SymbolTableEntry entry = globalObject->symbolTable()->get(function->name().impl());
             if (!entry.isNull())
-	        globalObject->registerAt(entry.getIndex()).set(exec->vm(), globalObject, value);
+                globalObject->registerAt(entry.getIndex()).set(exec->vm(), globalObject, value);
             else {
                 globalObject->registerAt(index).set(exec->vm(), globalObject, value);
                 index++;
-            }
+            }   FIXME: maybe need some of these stuff for multi-load */
+        ExecState* exec = m_scope->globalObject()->globalExec();
+        UnlinkedProgramCodeBlock* programCodeBlock = static_cast<UnlinkedProgramCodeBlock*>(codeBlock);
+        ASSERT(m_savingType == NoType);
+        m_savingType = readBool(p) ? WithRun : WithoutRun;
+        codeBlock->setStrictMode(readBool(p));
+        ASSERT(programCodeBlock->functionDeclarations().size() == 0);
+        num = readNum(p);
+        for (size_t i = 0; i < num; i++) {
+            UnlinkedFunctionExecutable* unlinkedFunction = readFunction(p, codeBlock);
+            programCodeBlock->addFunctionDeclaration(exec->vm(), unlinkedFunction->name(), unlinkedFunction);
         }
+        ASSERT(programCodeBlock->functionDeclarations().size() == num);
+        ASSERT(programCodeBlock->variableDeclarations().size() == 0);
+        num = readNum(p);
+        for (size_t i = 0; i < num; i++) {
+            bool isConstant = readBool(p);
+            size_t len = readNum(p);
+            Identifier name = Identifier(exec, len ? String(String::ByteStreamConstructor, *p, len) : emptyString());
+            *p += len;
+            programCodeBlock->addVariableDeclaration(name, isConstant);
+        }
+        ASSERT(programCodeBlock->variableDeclarations().size() == num);
         ASSERT(codeBlock->numberOfFunctionDecls() == 0);
     } else {
         num = readNum(p);
@@ -446,19 +460,22 @@ Instruction CodeBlockDatabase::readInsn(BytesPointer* p)
 void CodeBlockDatabase::writeCodeBlockInternals(BytesData& data, UnlinkedCodeBlock* codeBlock)
 {
     if (codeBlock->getID()) { // Save UnlinkedFunctionExecutable features
-        ASSERT(codeBlock->codeType() == FunctionCode);
-        UnlinkedFunctionExecutable *func = (static_cast<UnlinkedFunctionCodeBlock*>(codeBlock))->ownerExecutable();
-        int features = func->features();
-        features |= func->hasCapturedVariables() ? HasCapturedVariablesFeature : 0;
+        UnlinkedFunctionExecutable* function = (static_cast<UnlinkedFunctionCodeBlock*>(codeBlock))->ownerExecutable();
+        int features = function->features();
+        features |= function->hasCapturedVariables() ? HasCapturedVariablesFeature : 0;
         writeNum(data, features);
         writeNum(data, codeBlock->activationRegister().offset());
-    } else
-        ASSERT(codeBlock->codeType() == GlobalCode);
+    } else { // Save ProgramExecutable features
+        ASSERT(m_programExecutable);
+        int features = m_programExecutable->features();
+        features |= m_programExecutable->hasCapturedVariables() ? HasCapturedVariablesFeature : 0;
+        writeNum(data, features);
+    }
 
     // Save UnlinkedCodeBlock info
     writeNum(data, codeBlock->m_numCalleeRegisters);
     writeNum(data, codeBlock->m_numVars);
-    writeNum(data, codeBlock->m_numCapturedVars);
+//    writeNum(data, codeBlock->m_numCapturedVars);
     writeNum(data, codeBlock->numParameters());
     //writeBool(data, codeBlock->m_lastReturnFixed);
     writeBool(data, codeBlock->needsFullScopeChain());
@@ -473,25 +490,25 @@ void CodeBlockDatabase::writeCodeBlockInternals(BytesData& data, UnlinkedCodeBlo
 
 void CodeBlockDatabase::readCodeBlockInternals(BytesPointer* p, UnlinkedCodeBlock* codeBlock)
 {
-    if (codeBlock->getID()) { // Load FunctionExectable features
-        ASSERT(codeBlock->codeType() == FunctionCode);
-        UnlinkedFunctionExecutable *function = (static_cast<UnlinkedFunctionCodeBlock*>(codeBlock))->ownerExecutable();
+    if (codeBlock->getID()) { // Load UnlinkedFunctionExectable features
+        UnlinkedFunctionExecutable* function = (static_cast<UnlinkedFunctionCodeBlock*>(codeBlock))->ownerExecutable();
         int features = readNum(p);
         ASSERT(function->isInStrictContext() == !!(features & StrictModeFeature));
         ASSERT(codeBlock->isStrictMode() == function->isInStrictContext());
         function->recordParse(features & AllFeatures, features & HasCapturedVariablesFeature);
-        codeBlock->recordParse (features & AllFeatures, features & HasCapturedVariablesFeature, 0, 0, 0);
+        codeBlock->recordParse(features & AllFeatures, features & HasCapturedVariablesFeature, 0, 0, 0, true);
         codeBlock->setActivationRegister(VirtualRegister(readNum(p)));
-    } else {
-        ASSERT(codeBlock->codeType() == GlobalCode);
+    } else { // Load ProgramExecutable features
         ASSERT(m_programExecutable);
-        m_programExecutable->recordParse(0, false, 0, 0, 0, 0);
+        int features = readNum(p);
+        m_programExecutable->recordParse(features & AllFeatures, features & HasCapturedVariablesFeature, 0, 0, 0, 0);
+        codeBlock->recordParse(features & AllFeatures, features & HasCapturedVariablesFeature, 0, 0, 0, true);
     }
 
     // Load UnlinkedCodeBlock info
     codeBlock->m_numCalleeRegisters = readNum(p);
     codeBlock->m_numVars = readNum(p);
-    codeBlock->m_numCapturedVars = readNum(p);
+//    codeBlock->m_numCapturedVars = readNum(p);
     codeBlock->setNumParameters(readNum(p));
     //codeBlock->m_lastReturnFixed = readBool(p);
     codeBlock->setNeedsFullScopeChain(readBool(p));
@@ -653,98 +670,77 @@ void CodeBlockDatabase::readConstantBuffers(BytesPointer* p, UnlinkedCodeBlock* 
 
 void CodeBlockDatabase::writeSymbolTable(BytesData& data, UnlinkedCodeBlock* codeBlock)
 {
-    BytesData temp;
-    bool global = (codeBlock->getID() == 0);
-    ASSERT(codeBlock->codeType() == global ? GlobalCode : FunctionCode);
-    size_t elems, num = codeBlock->m_symbols.size();
-    ASSERT(num == codeBlock->m_regForSymbols.size());
-    writeNum(data, num);
-    if (!global) {
-        ASSERT(codeBlock->symbolTable());
-        int captureStart = codeBlock->symbolTable()->captureStart();
-        int captureEnd = codeBlock->symbolTable()->captureEnd();
-        writeNum(data, captureStart);
-        writeNum(data, captureEnd);
-    }
-    else {
-      SymbolTable *globalSymbol = m_scope->globalObject()->symbolTable();
-      ConcurrentJITLocker locker(m_scope->globalObject()->symbolTable()->m_lock);
-      writeNum(data, globalSymbol->size(locker));
-      for (SymbolTable::Map::iterator iter = globalSymbol->begin(locker), end = globalSymbol->end(locker); iter != end; ++iter) {
-	  writeInt64(data, iter->value.getBits());
-	  iter->key.get()->toBytes(temp);
-	  elems = temp.size();
-	  writeNum(data, elems);
-	  data.append(temp.data(), elems);
-          temp.clear();
-      }
-    }
-    for (size_t i = 0; i < num; i++) {
-        writeInt64(data, codeBlock->m_regForSymbols[i]);
-        codeBlock->m_symbols[i]->toBytes(temp);
-        elems = temp.size();
-        writeNum(data, elems);
-        data.append(temp.data(), elems);
-        temp.clear();
-    }
+    if (codeBlock->getID()) {
+        BytesData temp;
+        size_t elems;
+        SymbolTable* symbolTable = codeBlock->symbolTable();
+        ASSERT(symbolTable);
+        UnlinkedFunctionExecutable* function = (static_cast<UnlinkedFunctionCodeBlock*>(codeBlock))->ownerExecutable();
+        ConcurrentJITLocker locker(symbolTable->m_lock);
+        writeNum(data, symbolTable->captureStart());
+        writeNum(data, symbolTable->captureEnd());
+
+        const SlowArgument* slowArguments = symbolTable->slowArguments();
+        writeBool(data, !!slowArguments);
+        if (slowArguments) {
+            unsigned parameterCount = symbolTable->parameterCount();
+            ASSERT_UNUSED(function, function->parameters()->size() == parameterCount);
+            for (unsigned i = 0; i < parameterCount; ++i) {
+                writeNum(data, slowArguments[i].status);
+                writeNum(data, slowArguments[i].index);
+            }
+        }
+        writeNum(data, symbolTable->size(locker));
+        for (SymbolTable::Map::iterator iter = symbolTable->begin(locker), end = symbolTable->end(locker); iter != end; ++iter) {
+             writeInt64(data, iter->value.getBits());
+             iter->key.get()->toBytes(temp);
+             elems = temp.size();
+             writeNum(data, elems);
+             data.append(temp.data(), elems);
+             temp.clear();
+        }
+    } else
+        ASSERT(!codeBlock->symbolTable());
 }
 
 void CodeBlockDatabase::readSymbolTable(BytesPointer* p, UnlinkedCodeBlock* codeBlock)
 {
-    ASSERT(codeBlock->m_regForSymbols.size() == 0);
-    bool global = (codeBlock->getID() == 0);
-    ASSERT(codeBlock->codeType() == global ? GlobalCode : FunctionCode);
-    bool empty = !(codeBlock->symbolTable()->size());
-    ASSERT(empty || codeBlock->codeType() == GlobalCode);
-    ExecState* exec = m_scope->globalObject()->globalExec();
+    if (codeBlock->getID()) {
+        ExecState* exec = m_scope->globalObject()->globalExec();
+        UnlinkedFunctionExecutable* function = (static_cast<UnlinkedFunctionCodeBlock*>(codeBlock))->ownerExecutable();
+        size_t elems, num;
+        SymbolTable* symbolTable = codeBlock->symbolTable();
+        ASSERT(symbolTable);
+        ASSERT(symbolTable->size() == 0);
+        ConcurrentJITLocker locker(symbolTable->m_lock);
+        symbolTable->setCaptureStart(readNum(p));
+        symbolTable->setCaptureEnd(readNum(p));
+        symbolTable->setUsesNonStrictEval(codeBlock->usesEval() && !codeBlock->isStrictMode());
+        symbolTable->setParameterCountIncludingThis(function->parameters()->size() + 1);
 
-    size_t elems, num = readNum(p);
-
-    if (!global) {
-        codeBlock->symbolTable ()->setUsesNonStrictEval(codeBlock->usesEval() && !codeBlock->isStrictMode());
-        codeBlock->symbolTable()->setCaptureStart(readNum(p));
-        codeBlock->symbolTable()->setCaptureEnd(readNum(p));
-    }
-    else {
-      size_t size = readNum(p);
-      for (size_t i = 0; i < size; i++) {
-	  SymbolTableEntry newEntry = SymbolTableEntry(SymbolTableEntry::Bits, readInt64(p));
-	  //SymbolTableEntry newEntry = SymbolTableEntry(SymbolTableEntry::Bits, readInt64(p), m_scope->globalObject()->symbolTable()->size());
-	  elems = readNum(p);
-	  Identifier ident(exec, String(String::ByteStreamConstructor, *p, elems));
-	  *p += elems;
-
-	  ConcurrentJITLocker locker(m_scope->globalObject()->symbolTable()->m_lock);
-	  SymbolTable::Map::AddResult result = m_scope->globalObject()->symbolTable()->add(locker, ident.impl(), newEntry);
-	  //if (!result.isNewEntry)
-	  //    result.iterator->value.prepareToWatch();
-      }
-   }
-
-    for (size_t i = 0; i < num; i++) {
-        codeBlock->m_regForSymbols.append(readInt64(p));
-        elems = readNum(p);
-
-        SymbolTableEntry newEntry = empty ? SymbolTableEntry(SymbolTableEntry::Bits, codeBlock->m_regForSymbols[i])
-        : SymbolTableEntry(SymbolTableEntry::Bits, codeBlock->m_regForSymbols[i], codeBlock->symbolTable()->size());
-        Identifier ident(exec, String(String::ByteStreamConstructor, *p, elems));
-        *p += elems;
-
-        SymbolTableEntry entry = m_scope->globalObject()->symbolTable()->get(ident.impl());
-
-        if (!empty) {
-            int index = !entry.isNull() ? entry.getIndex() : codeBlock->symbolTable()->size();
-            m_newRegIndex.set(codeBlock->m_regForSymbols[i] >> 4, index);
+        if (readBool(p)) {
+            unsigned parameterCount = symbolTable->parameterCount();
+            auto slowArguments = std::make_unique<SlowArgument[]>(parameterCount);
+            for (unsigned i = 0; i < parameterCount; ++i) {
+                ASSERT(slowArguments[i].status == SlowArgument::Normal);
+                slowArguments[i].status = static_cast<enum SlowArgument::Status>(readNum(p));
+                slowArguments[i].index = readNum(p);
+            }
+            symbolTable->setSlowArguments(std::move(slowArguments));
         }
 
-        {
-            ConcurrentJITLocker locker(codeBlock->symbolTable()->m_lock);
-            SymbolTable::Map::AddResult result = codeBlock->symbolTable()->add(locker, ident.impl(), newEntry);
 
-            if (!result.isNewEntry)
-                result.iterator->value.prepareToWatch();
+        num = readNum(p);
+        for (size_t i = 0; i < num; i++) {
+            SymbolTableEntry entry = SymbolTableEntry(SymbolTableEntry::Bits, readInt64(p));
+            elems = readNum(p);
+            Identifier ident(exec, String(String::ByteStreamConstructor, *p, elems));
+            *p += elems;
+            SymbolTable::Map::AddResult result = symbolTable->add(locker, ident.impl(), entry);
+            ASSERT_UNUSED(result, result.isNewEntry);
         }
-    }
+    } else
+        ASSERT(!codeBlock->symbolTable());
 }
 
 void CodeBlockDatabase::writeIdentifiers(BytesData& data, UnlinkedCodeBlock* codeBlock)
@@ -803,34 +799,6 @@ void CodeBlockDatabase::readImmediateSwitchTables(BytesPointer* p, UnlinkedCodeB
     ASSERT(codeBlock->numberOfSwitchJumpTables() == num);
 }
 
-/*void CodeBlockDatabase::writeCharacterSwitchTables(BytesData& data, UnlinkedCodeBlock* codeBlock)
-{
-    size_t elems, num = codeBlock->numberOfCharacterSwitchJumpTables();
-    writeNum(data, num);
-    for (size_t i = 0; i < num; i++) {
-        SimpleJumpTable& table = codeBlock->characterSwitchJumpTable(i);
-        writeNum(data, table.min);
-        elems = table.branchOffsets.size();
-        writeNum(data, elems);
-        for (size_t j = 0; j < elems; j++)
-            writeNum(data, table.branchOffsets[j]);
-    }
-}
-
-void CodeBlockDatabase::readCharacterSwitchTables(BytesPointer* p, UnlinkedCodeBlock* codeBlock)
-{
-    ASSERT(codeBlock->numberOfCharacterSwitchJumpTables() == 0);
-    size_t elems, num = readNum(p);
-    for (size_t i = 0; i < num; i++) {
-        codeBlock->addCharacterSwitchJumpTable();
-        codeBlock->characterSwitchJumpTable(i).min = readNum(p);
-        elems = readNum(p);
-        for (size_t j = 0; j < elems; j++)
-             codeBlock->characterSwitchJumpTable(i).branchOffsets.append(readNum(p));
-    }
-    ASSERT(codeBlock->numberOfCharacterSwitchJumpTables() == num);
-}*/
-
 void CodeBlockDatabase::writeStringSwitchTables(BytesData& data, UnlinkedCodeBlock* codeBlock)
 {
     BytesData temp;
@@ -876,14 +844,12 @@ void CodeBlockDatabase::readStringSwitchTables(BytesPointer* p, UnlinkedCodeBloc
 void CodeBlockDatabase::writeSwitches(BytesData& data, UnlinkedCodeBlock* codeBlock)
 {
     writeImmediateSwitchTables(data, codeBlock);
-    //writeCharacterSwitchTables(data, codeBlock);
     writeStringSwitchTables(data, codeBlock);
 }
 
 void CodeBlockDatabase::readSwitches(BytesPointer* p, UnlinkedCodeBlock* codeBlock)
 {
     readImmediateSwitchTables(p, codeBlock);
-    //readCharacterSwitchTables(p, codeBlock);
     readStringSwitchTables(p, codeBlock);
 }
 
@@ -1063,7 +1029,7 @@ void CodeBlockDatabase::readBytecode(BytesPointer* p, UnlinkedCodeBlock* codeBlo
                     codeBlock->addGlobalResolveInfo(base);
 #endif
                     codeBlock->addGlobalResolveInstruction(base);
-		}
+                }
                 break;
             }
             case op_call:
@@ -1153,8 +1119,8 @@ void CodeBlockDatabase::readExceptionHandlers(BytesPointer* p, UnlinkedCodeBlock
         uint32_t end = readNum(p);
         uint32_t target = readNum(p);
         uint32_t scopeDepth = readNum(p);
-	UnlinkedHandlerInfo info = { start, end, target, scopeDepth };
-	codeBlock->addExceptionHandler(info);
+        UnlinkedHandlerInfo info = { start, end, target, scopeDepth };
+        codeBlock->addExceptionHandler(info);
     }
     ASSERT(codeBlock->numberOfExceptionHandlers() == num);
 }
@@ -1199,6 +1165,7 @@ void CodeBlockDatabase::saveCodeBlock(UnlinkedCodeBlock* codeBlock)
 {
     int rc, origSize;
     unsigned blockID = codeBlock->getID();
+    ASSERT(codeBlock->codeType() == ((blockID == 0) ? GlobalCode : FunctionCode));
     //dataLogF("save block=%d offset=%d constructor=%d\n", blockID, blockID/2, blockID%2);
     ASSERT(m_blockIDs.size() == m_start.size());
     BytesData data;
@@ -1256,20 +1223,21 @@ void CodeBlockDatabase::saveCodeBlock(UnlinkedCodeBlock* codeBlock)
     m_origSize.append(origSize);
 }
 
-void CodeBlockDatabase::loadCodeBlock(UnlinkedCodeBlock* codeBlock, unsigned blockID)
+bool CodeBlockDatabase::loadCodeBlock(UnlinkedCodeBlock* codeBlock, unsigned blockID)
 {
     //dataLogF("load BlockID: %d\n", blockID);
-
-    /*ExecState* exec = m_scopeChainNode->globalObject->globalExec();
-    codeBlock->setThisRegister(CallFrame::thisArgumentOffset());
-    codeBlock->setVM(&exec->vm());*/
-
+    codeBlock->setThisRegister(RegisterID(CallFrame::thisArgumentOffset()).virtualRegister());
+    ASSERT(codeBlock->codeType() == ((blockID == 0) ? GlobalCode : FunctionCode));
     BytesData c_data;
     BytesData u_data;
     BytesPointer p = 0;
     int size = 0, origSize = 0, start;
     // Find info
     start = findStart(blockID, &size, &origSize);
+    if (start == 0) {
+        ASSERT(m_savingType == WithRun);
+        return false;
+    }
     ASSERT(size > 0);
     ASSERT(origSize != 0);
     readFile(m_file, blockID > 0, start, size, c_data);
@@ -1313,7 +1281,7 @@ void CodeBlockDatabase::loadCodeBlock(UnlinkedCodeBlock* codeBlock, unsigned blo
 
     // Check total bytes
     ASSERT(origSize == -1 ? p == c_data.data() + c_data.size() : p == u_data.data() + u_data.size());
-    // Vectors are deallocated in their destructors
+    return true;
 }
 
 } // namespace JSC

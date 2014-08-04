@@ -48,7 +48,7 @@ namespace JSC {
         void open(bool initDb);
         ~CodeBlockDatabase();
 
-        void saveProgramCodeBlock(JSScope*, UnlinkedProgramCodeBlock*);
+        void saveProgramCodeBlock(JSScope*, UnlinkedProgramCodeBlock*, ProgramExecutable*);
         UnlinkedProgramCodeBlock* loadProgramCodeBlock(JSScope*, ProgramExecutable*);
         void saveFunctionCodeBlock(JSScope*, UnlinkedCodeBlock*);
         UnlinkedFunctionCodeBlock* loadFunctionCodeBlock(JSScope*, FunctionExecutable*, CodeSpecializationKind);
@@ -73,7 +73,7 @@ namespace JSC {
         int findStart(int, int*, int*);
 
         void saveCodeBlock(UnlinkedCodeBlock*);
-        void loadCodeBlock(UnlinkedCodeBlock*, unsigned);
+        bool loadCodeBlock(UnlinkedCodeBlock*, unsigned);
 
         void writeCodeBlockInternals(BytesData&, UnlinkedCodeBlock*);
         void readCodeBlockInternals(BytesPointer*, UnlinkedCodeBlock*);
