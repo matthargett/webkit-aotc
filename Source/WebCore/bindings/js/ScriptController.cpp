@@ -126,12 +126,11 @@ Deprecated::ScriptValue ScriptController::evaluateInWorld(const ScriptSourceCode
     JSLockHolder lock(world.vm());
 
 #if 1
-    String sourceURL = ustringToString(sourceCode.jsSourceCode().provider()->url());
-    UString usourceURL = sourceCode.jsSourceCode().provider()->url();
+    String sourceURL = sourceCode.jsSourceCode().provider()->url();
     SourceCode jsSourceCode;
 
     fprintf(stderr, "Trying to replace with bytecode.\n");
-    UString path = makeUString(usourceURL.substringSharingImpl(7, usourceURL.length() - 7), ".bytecode");
+    String path = makeString(sourceURL.substringSharingImpl(7, sourceURL.length() - 7), ".bytecode");
     fprintf(stderr, "File: '%s'\n", path.utf8().data());
     FILE *fp;
     if (!(fp = fopen((path.utf8().data()), "r"))) {
@@ -141,7 +140,7 @@ Deprecated::ScriptValue ScriptController::evaluateInWorld(const ScriptSourceCode
         fprintf(stderr, "Opening bytecode.");
         fclose(fp);
         jsSourceCode = JSC::makeBytecodeSource(path);
-        //FIXME: connect provider!
+        jsSourceCode.codeBlockDatabaseToLoad()->setProvider(jsSourceCode.provider());
     }
 #else
     // Original (non-AOTC) code:

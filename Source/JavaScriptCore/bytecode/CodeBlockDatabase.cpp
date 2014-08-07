@@ -37,14 +37,6 @@
 
 namespace JSC {
 
-const CodeBlockDatabase::PatchInfo CodeBlockDatabase::c_patch_infos[] = {
-/*    { op_get_global_var, 2},
-    { op_get_global_var_watchable, 2},
-    { op_put_global_var, 1},
-    { op_put_global_var_check, 1}*/
-};
-const int CodeBlockDatabase::c_n_patch_info = sizeof(c_patch_infos)/sizeof(PatchInfo);
-
 const CodeFeatures ForceUsesArgumentsFeature = 1 << 8;
 const CodeFeatures HasCapturedVariablesFeature = 1 << 9;
 COMPILE_ASSERT(ForceUsesArgumentsFeature == AllFeatures + 1, AdditionalFeaturesAreCorrect);
@@ -374,7 +366,7 @@ void CodeBlockDatabase::readFunctions(BytesPointer* p, UnlinkedCodeBlock* codeBl
         for (size_t i = 0; i < num; i++) {
             bool isConstant = readBool(p);
             size_t len = readNum(p);
-            Identifier name = Identifier(exec, len ? String(String::ByteStreamConstructor, *p, len) : emptyString());
+            Identifier name = Identifier(exec, String(String::ByteStreamConstructor, *p, len));
             *p += len;
             programCodeBlock->addVariableDeclaration(name, isConstant);
         }
@@ -475,7 +467,6 @@ void CodeBlockDatabase::writeCodeBlockInternals(BytesData& data, UnlinkedCodeBlo
     // Save UnlinkedCodeBlock info
     writeNum(data, codeBlock->m_numCalleeRegisters);
     writeNum(data, codeBlock->m_numVars);
-//    writeNum(data, codeBlock->m_numCapturedVars);
     writeNum(data, codeBlock->numParameters());
     //writeBool(data, codeBlock->m_lastReturnFixed);
     writeBool(data, codeBlock->needsFullScopeChain());
@@ -508,7 +499,6 @@ void CodeBlockDatabase::readCodeBlockInternals(BytesPointer* p, UnlinkedCodeBloc
     // Load UnlinkedCodeBlock info
     codeBlock->m_numCalleeRegisters = readNum(p);
     codeBlock->m_numVars = readNum(p);
-//    codeBlock->m_numCapturedVars = readNum(p);
     codeBlock->setNumParameters(readNum(p));
     //codeBlock->m_lastReturnFixed = readBool(p);
     codeBlock->setNeedsFullScopeChain(readBool(p));
@@ -578,10 +568,12 @@ void CodeBlockDatabase::writeObject(BytesData& data, JSValue v, bool fromCache)
                 temp.clear();
             }
             break;
+        case FinalObjectType:
+            ASSERT(v == JSValue(exec->vm().iterationTerminator.get()));
+            break;
         default:
             dataLogF("Not implemented\n");
-            ASSERT_NOT_REACHED();
-            CRASH();
+            RELEASE_ASSERT_NOT_REACHED();
             break;
         }
     }
@@ -614,9 +606,11 @@ JSValue CodeBlockDatabase::readObject(BytesPointer* p, bool fromCache)
                 m_strings.append(v);
             }
             break;
+        case FinalObjectType:
+            v = JSValue(exec->vm().iterationTerminator.get());
+            break;
         default:
-            ASSERT_NOT_REACHED();
-            CRASH();
+            RELEASE_ASSERT_NOT_REACHED();
             break;
         }
     } else
@@ -746,12 +740,22 @@ void CodeBlockDatabase::readSymbolTable(BytesPointer* p, UnlinkedCodeBlock* code
 void CodeBlockDatabase::writeIdentifiers(BytesData& data, UnlinkedCodeBlock* codeBlock)
 {
     BytesData temp;
-    size_t elems, num = codeBlock->numberOfIdentifiers();
+    unsigned num = codeBlock->numberOfIdentifiers();
+    int elems;
     writeNum(data, num);
     for (size_t i = 0; i < num; i++) {
-        codeBlock->identifier(i).string().toBytes(temp);
-        elems = temp.size();
-        writeNum(data, elems);
+        if(codeBlock->identifier(i).length() == 0 && codeBlock->identifier(i).impl() != emptyString().impl()) {
+            Identifier pub = codeBlock->vm()->propertyNames->getPublicName(codeBlock->identifier(i));
+            pub.string().toBytes(temp);
+            elems = temp.size();
+            RELEASE_ASSERT(elems > 1);
+            ASSERT(elems == 9 || elems == 13); //FIXME: something else but "iterator" or "iteratorNext" ???
+            writeNum(data, -elems);
+        } else {
+            codeBlock->identifier(i).string().toBytes(temp);
+            elems = temp.size();
+            writeNum(data, elems);
+        }
         data.append(temp.data(), elems);
         temp.clear();
     }
@@ -761,12 +765,21 @@ void CodeBlockDatabase::readIdentifiers(BytesPointer* p, UnlinkedCodeBlock* code
 {
     ASSERT(codeBlock->numberOfIdentifiers() == 0);
     ExecState* exec = m_scope->globalObject()->globalExec();
-    size_t elems, num = readNum(p);
+    unsigned num = readNum(p);
+    int elems;
     for (size_t i = 0; i < num; i++) {
         elems = readNum(p);
-        Identifier ident(exec, String(String::ByteStreamConstructor, *p, elems));
-        *p += elems;
-        codeBlock->addIdentifier(ident);
+        if (elems < 0) {
+            Identifier pub(exec, String(String::ByteStreamConstructor, *p, -elems));
+            *p += (-elems);
+            const Identifier* ident = codeBlock->vm()->propertyNames->getPrivateName(pub);
+            ASSERT(ident);
+            codeBlock->addIdentifier(*ident);
+        } else {
+            Identifier ident(exec, String(String::ByteStreamConstructor, *p, elems));
+            *p += elems;
+            codeBlock->addIdentifier(ident);
+        }
     }
     ASSERT(codeBlock->numberOfIdentifiers() == num);
 }
@@ -913,14 +926,6 @@ void CodeBlockDatabase::writeBytecode(BytesData& data, UnlinkedCodeBlock* codeBl
             default:
                 break;
         }
-        for (size_t i = 0; i < c_n_patch_info; ++i) {
-            if (opcodeID == c_patch_infos[i].opcode) {
-                WriteBarrier<Unknown>* registerPointer = instructions[base + c_patch_infos[i].patchInst].u.registerPointer;
-                instructions[base + c_patch_infos[i].patchInst].u.jsCell.clear();
-                instructions[base + c_patch_infos[i].patchInst].u.operand = globalObject->findRegisterIndex(registerPointer);
-                break;
-            }
-        }
         for (size_t i = 1; i < length; ++i)
             writeInsn(data, instructions[base + i]);
         base += length;
@@ -962,15 +967,6 @@ void CodeBlockDatabase::readBytecode(BytesPointer* p, UnlinkedCodeBlock* codeBlo
         size_t length = opcodeLengths[opcodeID];
         size_t lastIndex = length - 1;
 
-        for (size_t i = 0; i < c_n_patch_info; ++i) {
-            if (opcodeID == c_patch_infos[i].opcode) {
-                int reg = instructions[base + c_patch_infos[i].patchInst].u.operand;
-                if (reg && m_newRegIndex.contains(reg))
-                    reg = m_newRegIndex.get(reg);
-                instructions[base + c_patch_infos[i].patchInst].u.registerPointer = &globalObject->registerAt(reg);
-                break;
-            }
-        }
         switch(opcodeID) {
             case op_put_global_var_check: {
                 int operand = instructions[base + 4].u.operand;

@@ -130,10 +130,6 @@ ParserError BytecodeGenerator::generate()
     if (m_codeBlock->symbolTable())
         m_codeBlock->setSymbolTable(m_codeBlock->symbolTable()->cloneCapturedNames(*m_codeBlock->vm()));
 
-    /*ASSERT(m_codeBlock->m_activation == CodeBlock::UninitializedActivation);
-    m_codeBlock->m_activation = (m_hasCreatedActivation || m_hasOpCreateActivation) ?
-        CodeBlock::CreatedActivation : CodeBlock::NoActivation;*/
-
     if (m_expressionTooDeep)
         return ParserError(ParserError::OutOfMemory);
     return ParserError(ParserError::ErrorNone);
@@ -188,7 +184,6 @@ BytecodeGenerator::BytecodeGenerator(VM& vm, ProgramNode* programNode, UnlinkedP
     , m_codeType(GlobalCode)
     , m_nextConstantOffset(0)
     , m_globalConstantIndex(0)
-//    , m_hasOpCreateActivation(false)
     , m_firstLazyFunction(0)
     , m_lastLazyFunction(0)
     , m_staticPropertyAnalyzer(&m_instructions)
@@ -233,7 +228,6 @@ BytecodeGenerator::BytecodeGenerator(VM& vm, FunctionBodyNode* functionBody, Unl
     , m_codeType(FunctionCode)
     , m_nextConstantOffset(0)
     , m_globalConstantIndex(0)
-//    , m_hasOpCreateActivation(false)
     , m_firstLazyFunction(0)
     , m_lastLazyFunction(0)
     , m_staticPropertyAnalyzer(&m_instructions)
@@ -260,6 +254,9 @@ BytecodeGenerator::BytecodeGenerator(VM& vm, FunctionBodyNode* functionBody, Unl
         continue;
     }
     m_symbolTable->setParameterCountIncludingThis(functionBody->parameters()->size() + 1);
+
+    int nextParameterIndex = CallFrame::thisArgumentOffset();
+    m_thisRegister.setIndex(nextParameterIndex++);
 
     emitOpcode(op_enter);
     if (m_codeBlock->needsFullScopeChain() || m_shouldEmitDebugHooks) {
@@ -394,8 +391,6 @@ BytecodeGenerator::BytecodeGenerator(VM& vm, FunctionBodyNode* functionBody, Unl
     m_parameters.grow(parameters.size() + 1); // reserve space for "this"
 
     // Add "this" as a parameter
-    int nextParameterIndex = CallFrame::thisArgumentOffset();
-    m_thisRegister.setIndex(nextParameterIndex++);
     m_codeBlock->addParameter();
     for (size_t i = 0; i < parameters.size(); ++i, ++nextParameterIndex) {
         int index = nextParameterIndex;
@@ -446,7 +441,6 @@ BytecodeGenerator::BytecodeGenerator(VM& vm, EvalNode* evalNode, UnlinkedEvalCod
     , m_codeType(EvalCode)
     , m_nextConstantOffset(0)
     , m_globalConstantIndex(0)
-//    , m_hasOpCreateActivation(false)
     , m_firstLazyFunction(0)
     , m_lastLazyFunction(0)
     , m_staticPropertyAnalyzer(&m_instructions)
@@ -520,8 +514,7 @@ void BytecodeGenerator::addParameter(const Identifier& ident, int parameterIndex
     // Parameters overwrite var declarations, but not function declarations.
     StringImpl* rep = ident.impl();
     if (!m_functions.contains(rep)) {
-        SymbolTableEntry newEntry = SymbolTableEntry(parameterIndex);
-        symbolTable().set(rep, newEntry);
+        symbolTable().set(rep, parameterIndex);
         RegisterID& parameter = registerFor(parameterIndex);
         parameter.setIndex(parameterIndex);
     }
@@ -1015,7 +1008,7 @@ unsigned BytecodeGenerator::addRegExp(RegExp* r)
 
 RegisterID* BytecodeGenerator::emitMove(RegisterID* dst, CaptureMode captureMode, RegisterID* src)
 {
-//    ASSERT(dst->index() != thisRegister()->index());
+    ASSERT(dst->index() != m_thisRegister.index());
     m_staticPropertyAnalyzer.mov(dst->index(), src->index());
 
     emitOpcode(captureMode == IsCaptured ? op_captured_mov : op_mov);
@@ -1614,27 +1607,11 @@ RegisterID* BytecodeGenerator::emitNewRegExp(RegisterID* dst, RegExp* regExp)
     return dst;
 }
 
-RegisterID* BytecodeGenerator::emitNewFunctionExpression(RegisterID* r0, FuncExprNode* node)
+RegisterID* BytecodeGenerator::emitNewFunctionExpression(RegisterID* r0, FuncExprNode* n)
 {
-    FunctionBodyNode* functionBody = node->body();
-    UnlinkedFunctionExecutable* function = makeFunction(functionBody);
-
-    int index;
-/*    index = node->getIndex();
-    if (index == FuncExprNode::NoIndex) {
-#ifndef NDEBUG
-        node->m_generator = this;
-#endif*/
-        index = m_codeBlock->addFunctionExpr(function);
-/*        node->setIndex(index);
-    }
-#ifndef NDEBUG
-    ASSERT(node->m_generator == this);
-#endif*/
-
-    /*if (m_dynamicScopeDepth)
-        function->setDynamicScope(true);*/
-
+    FunctionBodyNode* function = n->body();
+    unsigned index = m_codeBlock->addFunctionExpr(makeFunction(function));
+    
     createActivationIfNecessary();
     emitOpcode(op_new_func_exp);
     instructions().append(r0->index());
@@ -1667,7 +1644,6 @@ void BytecodeGenerator::createActivationIfNecessary()
 {
     if (!m_activationRegister)
         return;
-//    m_hasOpCreateActivation = true;
     emitOpcode(op_create_activation);
     instructions().append(m_activationRegister->index());
 }

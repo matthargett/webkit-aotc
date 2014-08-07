@@ -56,14 +56,6 @@ namespace JSC {
     private:
         typedef Vector<char> BytesData;
         typedef const char* BytesPointer;
-        typedef Vector<std::pair<int, unsigned> > RegisterTable;
-
-        struct PatchInfo {
-            OpcodeID opcode;
-            int patchInst;
-        };
-        static const PatchInfo c_patch_infos[];
-        static const int c_n_patch_info;
 
         CodeBlockDatabase(const String&);
         CodeBlockDatabase(const String&, PassRefPtr<SourceProvider>);
@@ -129,7 +121,6 @@ namespace JSC {
 
         enum SavingType { NoType, WithoutRun, WithRun } m_savingType;
 
-        HashMap<int, int> m_newRegIndex;
         Vector<JSValue> m_strings;
 
         Vector<int> m_blockIDs;

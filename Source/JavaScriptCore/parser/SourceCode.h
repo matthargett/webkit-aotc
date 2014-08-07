@@ -34,7 +34,6 @@
 #include <wtf/RefPtr.h>
 #include <wtf/text/StringBuilder.h>
 
-
 namespace JSC {
 
     class SourceCode {

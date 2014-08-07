@@ -68,10 +68,8 @@ static UnlinkedFunctionCodeBlock* generateFunctionCodeBlock(VM& vm, UnlinkedFunc
     OwnPtr<BytecodeGenerator> generator(adoptPtr(new BytecodeGenerator(vm, body.get(), result, debuggerMode, profilerMode)));
     error = generator->generate();
     body->destroyData();
-
     if (error.m_type != ParserError::ErrorNone)
         return 0;
-
     return result;
 }
 
@@ -240,24 +238,12 @@ void UnlinkedFunctionExecutable::saveCodeBlockFor(ExecState* exec, ScriptExecuta
     CodeBlockDatabase* codeDb = function->source().codeBlockDatabaseToSave();
     codeDb->saveFunctionCodeBlock(exec->scope(), codeBlock);
 
-    /*ASSERT(codeBlock->m_activation != CodeBlock::UninitializedActivation);
-    if (codeBlock->m_activation == CodeBlock::CreatedActivation) {
-        JSActivation* activation = JSActivation::create(exec->globalData(), exec, this);
-        exec->setScopeChain(activation);
-    }*/
-
-    for (size_t i = 0; i < codeBlock->numberOfFunctionDecls(); ++i) {
+    for (size_t i = 0; i < codeBlock->numberOfFunctionDecls(); ++i)
         codeBlock->functionDecl(i)->saveBytecode(exec, function, false);
-    }
 
-    for (size_t i = 0; i < codeBlock->numberOfFunctionExprs(); ++i) {
+    for (size_t i = 0; i < codeBlock->numberOfFunctionExprs(); ++i)
         codeBlock->functionExpr(i)->saveBytecode(exec, function, true);
-    }
-
-    /*if (codeBlock->m_activation == CodeBlock::CreatedActivation)
-        exec->setScope(exec->scope()->next());*/
 }
-
 
 void UnlinkedFunctionExecutable::saveBytecode(ExecState* exec, ScriptExecutable* owner, bool isExpr) {
     unsigned firstLine = owner->lineNo() + m_firstLineOffset;

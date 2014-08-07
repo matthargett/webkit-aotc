@@ -385,7 +385,6 @@ public:
     UnlinkedInstructionStream* instructionsPointer();
 
     int m_numVars;
-    //int m_numCapturedVars;
     int m_numCalleeRegisters;
 
     // Jump Tables
@@ -543,6 +542,7 @@ protected:
             return;
         m_symbolTable.set(vm, this, SymbolTable::create(vm));
     }
+
 private:
 
     void createRareDataIfNecessary()
@@ -601,6 +601,7 @@ private:
     unsigned m_objectAllocationProfileCount;
     unsigned m_valueProfileCount;
     unsigned m_llintCallLinkInfoCount;
+
 public:
     struct RareData {
         WTF_MAKE_FAST_ALLOCATED;

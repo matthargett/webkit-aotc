@@ -151,7 +151,7 @@ sub execute_tests {
     my (@test_list) = @_;
     my ($test, $line, @output, $path);
     my $shell_command = "";
-    my $file_param = " ";
+    my $file_param = " -f ";
     my ($last_suite, $last_test_dir);
     
 # Don't run any shell.js files as tests; they are only utility files

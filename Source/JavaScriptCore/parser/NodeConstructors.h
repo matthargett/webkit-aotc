@@ -767,11 +767,7 @@ inline ResolveNode::ResolveNode(const JSTokenLocation& location, const Identifie
 
     inline FuncExprNode::FuncExprNode(const JSTokenLocation& location, const Identifier& ident, FunctionBodyNode* body, const SourceCode& source, ParameterNode* parameter)
         : ExpressionNode(location)
-/*#ifndef NDEBUG
-        , m_generator(0)
-#endif*/
         , m_body(body)
-//        , m_index(NoIndex)
     {
         m_body->finishParsing(source, parameter, ident, FunctionExpression);
     }

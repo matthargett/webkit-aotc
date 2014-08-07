@@ -647,8 +647,6 @@ EncodedJSValue JSC_HOST_CALL functionRun(ExecState* exec)
     } else {
         if (!fillBufferWithContentsOfFile(fileName, script))
             return JSValue::encode(exec->vm().throwException(exec, createError(exec, "Could not open file.")));
-        //if (!fillBufferWithContentsOfFile(fileName, script))
-        //    return JSValue::encode(throwError(exec, createError(exec, "Could not open file.")));
         source = jscSource(script.data(), fileName);
     }
 
@@ -677,28 +675,27 @@ EncodedJSValue JSC_HOST_CALL functionRun(ExecState* exec)
 EncodedJSValue JSC_HOST_CALL functionLoad(ExecState* exec)
 {
     String fileName = exec->argument(0).toString(exec)->value(exec);
-//    SourceCode source;
+    SourceCode source;
     Vector<char> script;
     if (!fillBufferWithContentsOfFile(fileName, script))
         return JSValue::encode(exec->vm().throwException(exec, createError(exec, "Could not open file.")));
-/*    if (bytecodeNow) {
+    if (bytecodeNow) {
         StringBuilder builder;
         defaultBytecodeName(builder, fileName);
         String bytecodeName = builder.toString();
         if (!databaseExist(bytecodeName))
-            return JSValue::encode(throwError(exec, createError(exec, "Could not open bytecode file.")));
+            return JSValue::encode(exec->vm().throwException(exec, createError(exec, "Could not open bytecode file.")));
         source = bytecodeSource(bytecodeName);
     } else {
         if (!fillBufferWithContentsOfFile(fileName, script))
-            return JSValue::encode(throwError(exec, createError(exec, "Could not open file.")));
+            return JSValue::encode(exec->vm().throwException(exec, createError(exec, "Could not open file.")));
         source = jscSource(script.data(), fileName);
-    }*/
+    }
 
     JSGlobalObject* globalObject = exec->lexicalGlobalObject();
     
     JSValue evaluationException;
-    JSValue result = evaluate(globalObject->globalExec(), jscSource(script.data(), fileName), JSValue(), &evaluationException);
-//    JSValue result = evaluate(globalObject->globalExec(), globalObject->globalScopeChain(), source, JSValue(), &evaluationException);
+    JSValue result = evaluate(globalObject->globalExec(), source, JSValue(), &evaluationException);
     if (evaluationException)
         exec->vm().throwException(exec, evaluationException);
     return JSValue::encode(result);

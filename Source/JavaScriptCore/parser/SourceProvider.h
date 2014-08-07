@@ -131,16 +131,13 @@ namespace JSC {
             ASSERT_NOT_REACHED();
             return m_source;
         }
-        //virtual String getRange(int start, int end) const override { ASSERT_NOT_REACHED(); return String(); }
-        //const StringImpl* data() const { ASSERT_NOT_REACHED(); return 0; }
-        //int length() const { ASSERT_NOT_REACHED(); return 0; }
 
         virtual bool isDatabaseProvider() const override { return true; }
         virtual CodeBlockDatabase* codeBlockDatabaseToLoad() const override { return m_loadingDatabase.get(); }
     private:
         DatabaseSourceProvider(const String& databaseFileName, const String& url, const TextPosition& startPosition)
             : SourceProvider(url, startPosition)
-            , m_source("{ /* Bad Beef */ }")
+            , m_source("{ /* Bad Source */ }")
             , m_loadingDatabase(CodeBlockDatabase::create(databaseFileName))
         {
         }

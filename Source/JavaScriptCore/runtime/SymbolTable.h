@@ -173,16 +173,6 @@ struct SymbolTableEntry {
             ASSERT(!isFat());
     }
 
-    SymbolTableEntry(BitsTag, intptr_t bits, int index)
-        : m_bits(bits | SlimFlag)
-    {
-        pack(index, bits & ReadOnlyFlag, bits & DontEnumFlag);
-        if (!(bits & SlimFlag))
-            prepareToWatch();
-        else
-            ASSERT(!isFat());
-    }
-
     SymbolTableEntry(const SymbolTableEntry& other)
         : m_bits(SlimFlag)
     {

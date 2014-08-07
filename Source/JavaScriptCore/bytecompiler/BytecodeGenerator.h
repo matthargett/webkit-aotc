@@ -664,8 +664,6 @@ namespace JSC {
 
         int m_globalVarStorageOffset;
 
-//        bool m_hasOpCreateActivation;
-
         int m_firstLazyFunction;
         int m_lastLazyFunction;
         HashMap<unsigned int, FunctionBodyNode*, WTF::IntHash<unsigned int>, WTF::UnsignedWithZeroKeyHashTraits<unsigned int>> m_lazyFunctions;

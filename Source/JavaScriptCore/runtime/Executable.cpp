@@ -653,7 +653,6 @@ FunctionExecutable* FunctionExecutable::fromGlobalCode(const Identifier& name, E
     unsigned startOffsetExcludingOpenBrace = startOffset + 1;
     unsigned endOffsetExcludingCloseBrace = startOffset + sourceLength - 1;
     SourceCode bodySource(source.provider(), startOffsetExcludingOpenBrace, endOffsetExcludingCloseBrace, firstLine, startColumn);
-    //SourceCode bodySource(source, startOffsetExcludingOpenBrace, endOffsetExcludingCloseBrace, firstLine, startColumn);
 
     return FunctionExecutable::create(exec->vm(), bodySource, unlinkedExecutable, firstLine, firstLine + lineCount, startColumn, endColumnExcludingBraces, false);
 }

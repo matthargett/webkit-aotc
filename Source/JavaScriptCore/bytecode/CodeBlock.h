@@ -973,6 +973,7 @@ private:
 #if ENABLE(JIT)
     ClosureCallStubRoutine* findClosureCallForReturnPC(ReturnAddressPtr);
 #endif
+        
     void updateAllPredictionsAndCountLiveness(unsigned& numberOfLiveNonArgumentValueProfiles, unsigned& numberOfSamplesInProfiles);
 
     void setConstantRegisters(const Vector<WriteBarrier<Unknown>>& constants)
