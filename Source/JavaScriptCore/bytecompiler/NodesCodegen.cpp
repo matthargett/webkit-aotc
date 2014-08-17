@@ -2355,7 +2355,7 @@ void FunctionBodyNode::emitBytecode(BytecodeGenerator& generator, RegisterID*)
     if (!returnNode) {
         RegisterID* r0 = generator.isConstructor() ? generator.thisRegister() : generator.emitLoad(0, jsUndefined());
         ASSERT(startOffset() >= lineStartOffset());
-        //generator.m_codeBlock->m_lastReturnFixed = true;
+        generator.m_codeBlock->setLastReturnFixed();
         generator.emitDebugHook(WillLeaveCallFrame, lastLine(), startOffset(), lineStartOffset());
         generator.emitReturn(r0);
         return;

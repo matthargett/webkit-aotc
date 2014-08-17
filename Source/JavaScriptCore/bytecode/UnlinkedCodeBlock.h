@@ -356,6 +356,8 @@ public:
     bool isNumericCompareFunction() const { return m_isNumericCompareFunction; }
 
     bool isBuiltinFunction() const { return m_isBuiltinFunction; }
+    bool isLastReturnFixed() const { return m_lastReturnFixed; }
+    void setLastReturnFixed() { ASSERT(!m_lastReturnFixed); m_lastReturnFixed = true; }
     
     void shrinkToFit()
     {
@@ -386,6 +388,8 @@ public:
 
     int m_numVars;
     int m_numCalleeRegisters;
+    int m_thisPlace;
+    int m_thisPlaceRegister;
 
     // Jump Tables
 
@@ -570,6 +574,7 @@ private:
     bool m_isConstructor : 1;
     bool m_hasCapturedVariables : 1;
     bool m_isBuiltinFunction : 1;
+    bool m_lastReturnFixed : 1;
     unsigned m_firstLine;
     unsigned m_lineCount;
     unsigned m_endColumn;

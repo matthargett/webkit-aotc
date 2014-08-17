@@ -73,8 +73,6 @@ namespace JSC {
         void readJumpTargets(BytesPointer*, UnlinkedCodeBlock*);
         void writeConstants(BytesData&, UnlinkedCodeBlock*);
         void readConstants(BytesPointer*, UnlinkedCodeBlock*);
-        void writeConstantBuffers(BytesData&, UnlinkedCodeBlock*);
-        void readConstantBuffers(BytesPointer*, UnlinkedCodeBlock*);
         void writeSymbolTable(BytesData&, UnlinkedCodeBlock*);
         void readSymbolTable(BytesPointer*, UnlinkedCodeBlock*);
         void writeIdentifiers(BytesData&, UnlinkedCodeBlock*);
@@ -83,6 +81,7 @@ namespace JSC {
         void readBytecode(BytesPointer*, UnlinkedCodeBlock*);
         void writeExceptionHandlers( BytesData&, UnlinkedCodeBlock*);
         void readExceptionHandlers(BytesPointer*, UnlinkedCodeBlock*);
+        unsigned constructorShift(unsigned, UnlinkedCodeBlock*);
         void writeRegExps(BytesData&, UnlinkedCodeBlock*);
         void readRegExps(BytesPointer*, UnlinkedCodeBlock*);
 
@@ -108,8 +107,6 @@ namespace JSC {
         EncodedJSValue readEncodedJSValue(BytesPointer*);
         void writeObject(BytesData&, JSValue, bool);
         JSValue readObject(BytesPointer*, bool);
-        //void writeInsn(BytesData&, Instruction);
-        //Instruction readInsn(BytesPointer*);
 
         JSScope* m_scope;
         ProgramExecutable* m_programExecutable;
@@ -122,6 +119,7 @@ namespace JSC {
         enum SavingType { NoType, WithoutRun, WithRun } m_savingType;
 
         Vector<JSValue> m_strings;
+        int m_constructorShift;
 
         Vector<int> m_blockIDs;
         Vector<int> m_start;

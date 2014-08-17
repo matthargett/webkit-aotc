@@ -76,6 +76,7 @@ CodeBlockDatabase::CodeBlockDatabase(const String& file_name)
     , m_provider(0)
     , m_savingType(NoType)
     , m_strings()
+    , m_constructorShift(0)
 {
 }
 
@@ -198,8 +199,8 @@ UnlinkedFunctionCodeBlock* CodeBlockDatabase::loadFunctionCodeBlock(JSScope* sco
     unsigned blockID = codeBlock->getID();
     ASSERT(blockID > 0);
     ASSERT(m_savingType != NoType);
-    /*if (m_savingType == WithoutRun)
-        blockID &= ~1; // Should load codeForCall and patch it into codeForConstruct*/
+    if (m_savingType == WithoutRun)
+        blockID &= ~1; // Should load codeForCall and patch it into codeForConstruct
     if (!loadCodeBlock(codeBlock, blockID))
         return NULL;
     return codeBlock;
@@ -437,18 +438,6 @@ EncodedJSValue CodeBlockDatabase::readEncodedJSValue(BytesPointer* p)
     return ev;
 }
 
-/*void CodeBlockDatabase::writeInsn(BytesData& data, Instruction insn)
-{
-    data.append(static_cast<char*>(static_cast<void*>(&insn)), sizeof(Instruction) / sizeof(char));
-}
-
-Instruction CodeBlockDatabase::readInsn(BytesPointer* p)
-{
-    Instruction insn = *(static_cast<const Instruction*>(static_cast<const void*>(*p)));
-    *p += sizeof(Instruction) / sizeof(char);
-    return insn;
-}*/
-
 void CodeBlockDatabase::writeCodeBlockInternals(BytesData& data, UnlinkedCodeBlock* codeBlock)
 {
     if (codeBlock->getID()) { // Save UnlinkedFunctionExecutable features
@@ -467,8 +456,10 @@ void CodeBlockDatabase::writeCodeBlockInternals(BytesData& data, UnlinkedCodeBlo
     // Save UnlinkedCodeBlock info
     writeNum(data, codeBlock->m_numCalleeRegisters);
     writeNum(data, codeBlock->m_numVars);
+    writeNum(data, codeBlock->m_thisPlace);
+    writeNum(data, codeBlock->m_thisPlaceRegister);
     writeNum(data, codeBlock->numParameters());
-    //writeBool(data, codeBlock->m_lastReturnFixed);
+    writeBool(data, codeBlock->isLastReturnFixed());
     writeBool(data, codeBlock->needsFullScopeChain());
     writeNum(data, codeBlock->argumentsRegister().offset());
 
@@ -499,8 +490,10 @@ void CodeBlockDatabase::readCodeBlockInternals(BytesPointer* p, UnlinkedCodeBloc
     // Load UnlinkedCodeBlock info
     codeBlock->m_numCalleeRegisters = readNum(p);
     codeBlock->m_numVars = readNum(p);
+    codeBlock->m_thisPlace = readNum(p);
+    codeBlock->m_thisPlaceRegister = readNum(p);
     codeBlock->setNumParameters(readNum(p));
-    //codeBlock->m_lastReturnFixed = readBool(p);
+    if (readBool(p)) codeBlock->setLastReturnFixed();
     codeBlock->setNeedsFullScopeChain(readBool(p));
     codeBlock->setArgumentsRegister(VirtualRegister(readNum(p)));
 
@@ -524,7 +517,7 @@ void CodeBlockDatabase::readJumpTargets(BytesPointer* p, UnlinkedCodeBlock* code
     ASSERT(codeBlock->numberOfJumpTargets() == 0);
     size_t num = readNum(p);
     for (size_t i = 0; i < num; i++)
-        codeBlock->addJumpTarget(readNum(p));
+        codeBlock->addJumpTarget(constructorShift(readNum(p), codeBlock));
     ASSERT(codeBlock->numberOfJumpTargets() == num);
 }
 
@@ -620,24 +613,12 @@ JSValue CodeBlockDatabase::readObject(BytesPointer* p, bool fromCache)
 
 void CodeBlockDatabase::writeConstants(BytesData& data, UnlinkedCodeBlock* codeBlock)
 {
-    size_t num = codeBlock->numberOfConstantRegisters();
+    size_t elems, num = codeBlock->numberOfConstantRegisters();
     writeNum(data, num);
     for (size_t i = 0; i < num; i++)
         writeObject(data, codeBlock->getConstant(FirstConstantRegisterIndex + i), false);
-}
 
-void CodeBlockDatabase::readConstants(BytesPointer* p, UnlinkedCodeBlock* codeBlock)
-{
-    ASSERT(codeBlock->numberOfConstantRegisters() == 0);
-    size_t num = readNum(p);
-    for (size_t i = 0; i < num; i++)
-        codeBlock->addConstant(readObject(p, false));
-    ASSERT(codeBlock->numberOfConstantRegisters() == num);
-}
-
-void CodeBlockDatabase::writeConstantBuffers(BytesData& data, UnlinkedCodeBlock* codeBlock)
-{
-    size_t elems, num = codeBlock->numberOfConstantBuffers();
+    num = codeBlock->numberOfConstantBuffers();
     writeNum(data, num);
     for (size_t i = 0; i < num; i++) {
         elems = codeBlock->getConstantBufferSize(i);
@@ -645,12 +626,20 @@ void CodeBlockDatabase::writeConstantBuffers(BytesData& data, UnlinkedCodeBlock*
         for (size_t j = 0; j < elems; j++)
             writeObject(data, codeBlock->constantBuffer(i).at(j), true);
     }
+    m_strings.clear();
 }
 
-void CodeBlockDatabase::readConstantBuffers(BytesPointer* p, UnlinkedCodeBlock* codeBlock)
+void CodeBlockDatabase::readConstants(BytesPointer* p, UnlinkedCodeBlock* codeBlock)
 {
-    ASSERT(codeBlock->numberOfConstantBuffers() == 0);
+    m_strings.clear();
+    ASSERT(codeBlock->numberOfConstantRegisters() == 0);
     size_t elems, num = readNum(p);
+    for (size_t i = 0; i < num; i++)
+        codeBlock->addConstant(readObject(p, false));
+    ASSERT(codeBlock->numberOfConstantRegisters() == num);
+
+    ASSERT(codeBlock->numberOfConstantBuffers() == 0);
+    num = readNum(p);
     for (size_t i = 0; i < num; i++) {
         elems = readNum(p);
         size_t index = codeBlock->addConstantBuffer(elems);
@@ -871,226 +860,108 @@ void CodeBlockDatabase::writeBytecode(BytesData& data, UnlinkedCodeBlock* codeBl
     writeNum(data, codeBlock->instructions().count());
     writeNum(data, codeBlock->instructions().byteSize());
     data.append(codeBlock->instructionsPointer()->data(), codeBlock->instructionsPointer()->byteSize());
-/*    ExecState* exec = m_scopeChainNode->globalObject->globalExec();
-    JSGlobalObject* globalObject = m_scopeChainNode->globalObject.get();
-    size_t base = 0, num = codeBlock->instructionCount();
-    Vector<Instruction> insns;
-    insns.append(codeBlock->instructions().begin(), num);
-    Instruction* instructions = insns.data();
-    writeNum(data, num);
-    while (base < num) {
-        OpcodeID opcodeID = exec->interpreter()->getOpcodeID(instructions[base].u.opcode);
-        size_t length = opcodeLengths[opcodeID];
-        writeInsn(data, opcodeID);
-        switch(opcodeID) {
-            case op_put_global_var_check: {
-                instructions[base + 3].u.jsCell.clear();
-                break;
-            }
-            case op_get_global_var:
-            case op_get_global_var_watchable:
-            case op_resolve:
-            case op_resolve_skip:
-            case op_get_scoped_var:
-            case op_resolve_base:
-            case op_resolve_with_base:
-            case op_resolve_with_this:
-            case op_get_by_val:
-            case op_get_argument_by_val:
-            case op_get_by_id:
-            case op_get_by_id_self:
-            case op_get_by_id_proto:
-            case op_get_by_id_chain:
-            case op_get_by_id_getter_self:
-            case op_get_by_id_getter_proto:
-            case op_get_by_id_getter_chain:
-            case op_get_by_id_custom_self:
-            case op_get_by_id_custom_proto:
-            case op_get_by_id_custom_chain:
-            case op_get_by_id_generic:
-            case op_get_array_length:
-            case op_get_string_length:
-            case op_resolve_global_dynamic:
-            case op_resolve_global:
-            case op_convert_this:
-            case op_call_put_result: {
-                instructions[base + length - 1].u.jsCell.clear();
-                break;
-            }
-            case op_call:
-            case op_call_eval:
-            case op_construct: {
-                instructions[base + 4].u.jsCell.clear();
-                break;
-            }
-            default:
-                break;
-        }
-        for (size_t i = 1; i < length; ++i)
-            writeInsn(data, instructions[base + i]);
-        base += length;
-    }
-    insns.clear();*/
 }
 
 void CodeBlockDatabase::readBytecode(BytesPointer* p, UnlinkedCodeBlock* codeBlock)
 {
-    size_t insnCount = readNum(p);
-    size_t byteSize = readNum(p);
-    /*bool reconstruct = m_savingType == WithoutRun && codeBlock->isConstructor();
-    ASSERT(!reconstruct || codeBlock->getID());*/
+    unsigned instructionCount = readNum(p);
+    unsigned byteSize = readNum(p);
+    bool reconstruct = (m_savingType == WithoutRun) && codeBlock->isConstructor();
+    ASSERT(!reconstruct || codeBlock->getID());
     ASSERT(NULL == codeBlock->instructionsPointer());
     Vector<unsigned char> data;
     data.append(*p, byteSize);
     *p += byteSize;
-    codeBlock->setInstructions(std::make_unique<UnlinkedInstructionStream>(insnCount, data));
-/*    ExecState* exec = m_scopeChainNode->globalObject->globalExec();
-    JSGlobalObject* globalObject = m_scopeChainNode->globalObject.get();
-    int thisIndex = codeBlock->thisRegister();
-    ASSERT(m_savingType != NoType);
-    size_t num, base;
+    m_constructorShift = 0;
+    if (!reconstruct)
+        codeBlock->setInstructions(std::make_unique<UnlinkedInstructionStream>(instructionCount, data));
+    else {
+        ExecState* exec = m_scope->globalObject()->globalExec();
+        VM& vm = exec->vm();
+        unsigned thisIndex = codeBlock->thisRegister().offset();
+        UnlinkedInstructionStream buffer = UnlinkedInstructionStream(instructionCount, data);
+        UnlinkedInstructionStream::Reader reader(buffer);
+        Vector<UnlinkedInstruction, 0, UnsafeVectorOverflow> instructions(instructionCount+opcodeLengths[op_get_callee] + opcodeLengths[op_create_this]);
 
 #if !ASSERT_DISABLED
-    unsigned patchedMovs = 0, patchedConv = 0;
+        int numFixes = 0;
 #endif
-
-    Vector<Instruction> instructions;
-    num = readNum(p);
-    for (size_t i = 0; i < num; i++)
-        instructions.append(readInsn(p));
-
-    base = 0;
-    while (base < num) {*/
-        /* Repatch each Opcode at a time */
-/*        OpcodeID opcodeID = static_cast<OpcodeID>(instructions[base].u.operand);
-        instructions[base].u.opcode = exec->interpreter()->getOpcode(opcodeID);
-        size_t length = opcodeLengths[opcodeID];
-        size_t lastIndex = length - 1;
-
-        switch(opcodeID) {
-            case op_put_global_var_check: {
-                int operand = instructions[base + 4].u.operand;
-                instructions[base + 3].u.pointer =
-                    codeBlock->globalObject()->symbolTable().get(codeBlock->identifier(operand).impl()).addressOfIsWatched();
-                break;
-            }
-            case op_get_global_var:
-            case op_get_global_var_watchable:
-            case op_resolve:
-            case op_resolve_skip:
-            case op_get_scoped_var:
-            case op_resolve_base:
-            case op_resolve_with_base:
-            case op_resolve_with_this:
-            case op_get_by_val:
-            case op_get_argument_by_val:
-            case op_get_by_id:
-            case op_get_by_id_self:
-            case op_get_by_id_proto:
-            case op_get_by_id_chain:
-            case op_get_by_id_getter_self:
-            case op_get_by_id_getter_proto:
-            case op_get_by_id_getter_chain:
-            case op_get_by_id_custom_self:
-            case op_get_by_id_custom_proto:
-            case op_get_by_id_custom_chain:
-            case op_get_by_id_generic:
-            case op_get_array_length:
-            case op_get_string_length:
-            case op_call_put_result: {
-                instructions[base + lastIndex].u.profile = codeBlock->addValueProfile(base);
-                break;
-            }
-            case op_resolve_global_dynamic: {
-                instructions[base + lastIndex].u.profile = codeBlock->addValueProfile(base);
-#if ENABLE(JIT)
-                codeBlock->addGlobalResolveInfo(base);
-#endif
-                codeBlock->addGlobalResolveInstruction(base);
-                break;
-            }
-            case op_resolve_global: {
-                instructions[base + lastIndex].u.profile = codeBlock->addValueProfile(base);
-                int operand = instructions[base + 2].u.operand;
-                SymbolTableEntry entry = codeBlock->globalObject()->symbolTable().get(codeBlock->identifier(operand).impl());
-                if (!entry.isNull()) {
-                    if (entry.couldBeWatched()) {
-                        instructions[base + 3].u.operand = operand;
-                        instructions[base].u.opcode = exec->interpreter()->getOpcode(op_get_global_var_watchable);
-                    } else
-                        instructions[base].u.opcode = exec->interpreter()->getOpcode(op_get_global_var);
-                    instructions[base+2].u.registerPointer = &codeBlock->globalObject()->registerAt(entry.getIndex());
-                } else {
-#if ENABLE(JIT)
-                    codeBlock->addGlobalResolveInfo(base);
-#endif
-                    codeBlock->addGlobalResolveInstruction(base);
-                }
-                break;
-            }
-            case op_call:
-            case op_call_eval:
-            case op_construct: {
-#if ENABLE(LLINT)
-                instructions[base + 4].u.callLinkInfo = codeBlock->addLLIntCallLinkInfo();
-#else
-#error LLINT required for AOTC
-#endif
-                break;
-            }
-            case op_ret: {
-                ASSERT(instructions[base + 2].u.operand == 0);
-                if (reconstruct) {
-                    if (codeBlock->m_lastReturnFixed && base + length == num) {
+        int base = 0, num = instructionCount;
+        while (base < num) {
+            if (base == codeBlock->m_thisPlace) {
+                int temp = codeBlock->m_thisPlaceRegister;
+                instructions[base].u.opcode = op_get_callee;
+                instructions[base + 1].u.operand = temp;
+                instructions[base + 2].u.index = 0;
+                instructions[base + 3].u.opcode = op_create_this;
+                instructions[base + 4].u.index = thisIndex;
+                instructions[base + 5].u.operand = temp;
+                instructions[base + 6].u.index = 0;
+                ASSERT(m_constructorShift == 0);
+                m_constructorShift = 7;
+                num += 7;
+                base += 7;
 #if !ASSERT_DISABLED
-                        int index = instructions[base + 1].u.operand;
+                numFixes++;
+#endif
+            }
+
+            ASSERT(!reader.atEnd());
+            const UnlinkedInstruction* pc = reader.next();
+            OpcodeID opcodeID = pc[0].u.opcode;
+            int length = opcodeLengths[opcodeID];
+            for (int j = 0; j < length; j++)
+                instructions[base + j] = pc[j];
+
+            switch(opcodeID) {
+                case op_ret: {
+                    ASSERT(instructions[base + 2].u.index == 0);
+                    if (codeBlock->isLastReturnFixed() && base + length == num) {
+#if !ASSERT_DISABLED
+                        unsigned index = instructions[base + 1].u.index;
                         ASSERT(codeBlock->isConstantRegisterIndex(index));
                         ASSERT(codeBlock->constantRegister(index).get().isUndefined());
 #endif
-                        instructions[base + 1].u.operand = thisIndex;
-                    } else if (instructions[base + 1].u.operand != thisIndex) {
-                        instructions[base].u.opcode = exec->interpreter()->getOpcode(op_ret_object_or_this);
-                        instructions[base + 2].u.operand = thisIndex;
+                        instructions[base + 1].u.index = thisIndex;
+                    } else if (instructions[base + 1].u.index != thisIndex) {
+                        instructions[base].u.opcode = op_ret_object_or_this;
+                        instructions[base + 2].u.index = thisIndex;
                     }
+                    break;
                 }
-                break;
-            }
-            case op_convert_this: {
-                if (reconstruct) {
-                    instructions[base].u.opcode = exec->interpreter()->getOpcode(op_create_this);
-                    instructions[base + 2].u.operand = 0;
+                case op_to_this: {
+                    ASSERT(instructions[base + 1].u.index == thisIndex);
+                    int temp = codeBlock->m_thisPlaceRegister;
+                    instructions[base].u.opcode = op_get_callee;
+                    instructions[base + 1].u.operand = temp;
+                    ASSERT(instructions[base + 2].u.index == 0);
+                    instructions[base + 3].u.opcode = op_create_this;
+                    instructions[base + 4].u.index = thisIndex;
+                    instructions[base + 5].u.operand = temp;
+                    instructions[base + 6].u.index = 0;
+                    ASSERT(codeBlock->m_thisPlace == -1);
+                    codeBlock->m_thisPlace = base;
+                    ASSERT(m_constructorShift == 0);
+                    m_constructorShift = 4;
+                    num += 4;
+                    base += 4;
 #if !ASSERT_DISABLED
-                    ASSERT(instructions[base + 1].u.operand == thisIndex);
-                    patchedConv++;
+                    numFixes++;
 #endif
-                } else {
-                    instructions[base + lastIndex].u.profile = codeBlock->addValueProfile(base);
+                    break;
                 }
-                break;
-            }
-            case op_mov: {
-                if (reconstruct) {
-                    if (instructions[base + 1].u.operand == thisIndex
-                     && instructions[base + 2].u.operand == thisIndex) {
-                        instructions[base].u.opcode = exec->interpreter()->getOpcode(op_create_this);
-                        instructions[base + 2].u.operand = 0;
+                default:
+                    break;
+            } // switch
+            base += length;
+        } //while
 #if !ASSERT_DISABLED
-                        patchedMovs++;
+        ASSERT(reader.atEnd());
+        ASSERT(numFixes == 1);
 #endif
-                    }
-                }
-                break;
-            }
-            default:
-                break;
-        }
-        base += length;
+        instructions.shrink(num);
+        codeBlock->setInstructions(std::make_unique<UnlinkedInstructionStream>(instructions));
     }
-#if !ASSERT_DISABLED
-    if (reconstruct)
-        ASSERT(patchedMovs + patchedConv == 1);
-#endif
-    codeBlock->instructions() = RefCountedArray<Instruction>(instructions);*/
 }
 
 void CodeBlockDatabase::writeExceptionHandlers(BytesData& data, UnlinkedCodeBlock* codeBlock)
@@ -1106,14 +977,24 @@ void CodeBlockDatabase::writeExceptionHandlers(BytesData& data, UnlinkedCodeBloc
     }
 }
 
+unsigned CodeBlockDatabase::constructorShift(unsigned offset, UnlinkedCodeBlock* codeBlock)
+{
+    ASSERT(m_constructorShift == 0 || codeBlock->m_thisPlace >= 0);
+    if (static_cast<int>(offset) < codeBlock->m_thisPlace) {
+        return offset;
+    } else {
+        return offset + m_constructorShift;
+    }
+}
+
 void CodeBlockDatabase::readExceptionHandlers(BytesPointer* p, UnlinkedCodeBlock* codeBlock)
 {
     ASSERT(codeBlock->numberOfExceptionHandlers() == 0);
     size_t num = readNum(p);
     for (size_t i = 0; i < num; i++) {
-        uint32_t start = readNum(p);
-        uint32_t end = readNum(p);
-        uint32_t target = readNum(p);
+        uint32_t start = constructorShift(readNum(p), codeBlock);
+        uint32_t end = constructorShift(readNum(p), codeBlock);
+        uint32_t target = constructorShift(readNum(p), codeBlock);
         uint32_t scopeDepth = readNum(p);
         UnlinkedHandlerInfo info = { start, end, target, scopeDepth };
         codeBlock->addExceptionHandler(info);
@@ -1169,13 +1050,11 @@ void CodeBlockDatabase::saveCodeBlock(UnlinkedCodeBlock* codeBlock)
     // Create data
     writeFunctions(data, codeBlock);
     writeCodeBlockInternals(data, codeBlock);
-    writeJumpTargets(data, codeBlock);
     writeConstants(data, codeBlock);
-    writeConstantBuffers(data, codeBlock);
-    m_strings.clear();
     writeSymbolTable(data, codeBlock);
     writeIdentifiers(data, codeBlock);
     writeBytecode(data, codeBlock);
+    writeJumpTargets(data, codeBlock);
     writeSwitches(data, codeBlock);
     writeExceptionHandlers(data, codeBlock);
     writeRegExps(data, codeBlock);
@@ -1264,13 +1143,11 @@ bool CodeBlockDatabase::loadCodeBlock(UnlinkedCodeBlock* codeBlock, unsigned blo
     // Extract data
     readFunctions(&p, codeBlock);
     readCodeBlockInternals(&p, codeBlock);
-    readJumpTargets(&p, codeBlock);
-    m_strings.clear();
     readConstants(&p, codeBlock);
-    readConstantBuffers(&p, codeBlock);
     readSymbolTable(&p, codeBlock);
     readIdentifiers(&p, codeBlock);
     readBytecode(&p, codeBlock);
+    readJumpTargets(&p, codeBlock);
     readSwitches(&p, codeBlock);
     readExceptionHandlers(&p, codeBlock);
     readRegExps(&p, codeBlock);

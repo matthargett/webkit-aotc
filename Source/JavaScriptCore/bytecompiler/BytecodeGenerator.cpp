@@ -416,14 +416,23 @@ BytecodeGenerator::BytecodeGenerator(VM& vm, FunctionBodyNode* functionBody, Unl
     // We declare the callee's name last because it should lose to a var, function, and/or parameter declaration.
     addCallee(functionBody, calleeRegister);
 
+    ASSERT(codeBlock->m_thisPlace == -1);
     if (isConstructor()) {
         emitCreateThis(&m_thisRegister);
-    } else if (functionBody->usesThis() || codeBlock->usesEval()) {
-        m_codeBlock->addPropertyAccessInstruction(instructions().size());
-        emitOpcode(op_to_this);
-        instructions().append(kill(&m_thisRegister));
-        instructions().append(0);
-    } // here fix create_this<->to_this difference?
+    } else {
+        if (saveBytecode()) {
+            RefPtr<RegisterID> temp = newTemporary();
+            codeBlock->m_thisPlaceRegister = temp->index();
+        }
+        if (functionBody->usesThis() || codeBlock->usesEval()) {
+            m_codeBlock->addPropertyAccessInstruction(instructions().size());
+            emitOpcode(op_to_this);
+            instructions().append(kill(&m_thisRegister));
+            instructions().append(0);
+        } else {
+            codeBlock->m_thisPlace = instructions().size();
+        }
+    }
 }
 
 BytecodeGenerator::BytecodeGenerator(VM& vm, EvalNode* evalNode, UnlinkedEvalCodeBlock* codeBlock, DebuggerMode debuggerMode, ProfilerMode profilerMode)
@@ -1863,6 +1872,7 @@ RegisterID* BytecodeGenerator::emitReturn(RegisterID* src)
     }
     emitOpcode(op_ret);
     instructions().append(src->index());
+    instructions().append(0);
     return src;
 }
 

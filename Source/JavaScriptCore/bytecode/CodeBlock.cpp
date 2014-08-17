@@ -1220,6 +1220,7 @@ void CodeBlock::dumpBytecode(
         case op_ret: {
             int r0 = (++it)->u.operand;
             printLocationOpAndRegisterOperand(out, exec, location, it, "ret", r0);
+            ++it;
             break;
         }
         case op_ret_object_or_this: {

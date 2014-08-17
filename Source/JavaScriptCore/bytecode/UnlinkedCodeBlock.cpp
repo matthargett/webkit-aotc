@@ -262,7 +262,6 @@ void UnlinkedFunctionExecutable::saveBytecode(ExecState* exec, ScriptExecutable*
     }
 
     saveCodeBlockFor(exec, functionExecutable, CodeForCall);
-    saveCodeBlockFor(exec, functionExecutable, CodeForConstruct);
 
     if (isExpr && !name().isNull())
         exec->setScope(exec->scope()->next());
@@ -272,6 +271,8 @@ UnlinkedCodeBlock::UnlinkedCodeBlock(VM* vm, Structure* structure, CodeType code
     : Base(*vm, structure)
     , m_numVars(0)
     , m_numCalleeRegisters(0)
+    , m_thisPlace(-1)
+    , m_thisPlaceRegister(0)
     , m_numParameters(0)
     , m_vm(vm)
     , m_argumentsRegister(VirtualRegister())
@@ -283,6 +284,7 @@ UnlinkedCodeBlock::UnlinkedCodeBlock(VM* vm, Structure* structure, CodeType code
     , m_isConstructor(info.m_isConstructor)
     , m_hasCapturedVariables(false)
     , m_isBuiltinFunction(info.m_isBuiltinFunction)
+    , m_lastReturnFixed(false)
     , m_firstLine(0)
     , m_lineCount(0)
     , m_endColumn(UINT_MAX)
