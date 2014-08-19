@@ -461,7 +461,6 @@ public:
         m_propertyAccessInstructions.append(propertyAccessInstruction);
     }
 
-    size_t numberOfPropertyAccessInstructions() const { return m_propertyAccessInstructions.size(); }
     const Vector<unsigned>& propertyAccessInstructions() const { return m_propertyAccessInstructions; }
 
     typedef Vector<JSValue> ConstantBuffer;

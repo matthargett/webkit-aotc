@@ -980,6 +980,7 @@ void CodeBlockDatabase::writeExceptionHandlers(BytesData& data, UnlinkedCodeBloc
 unsigned CodeBlockDatabase::constructorShift(unsigned offset, UnlinkedCodeBlock* codeBlock)
 {
     ASSERT(m_constructorShift == 0 || codeBlock->m_thisPlace >= 0);
+    ASSERT(m_constructorShift == 0 || static_cast<int>(offset) != codeBlock->m_thisPlace);
     if (static_cast<int>(offset) < codeBlock->m_thisPlace) {
         return offset;
     } else {
@@ -1036,6 +1037,41 @@ void CodeBlockDatabase::readRegExps(BytesPointer* p, UnlinkedCodeBlock* codeBloc
         *p += elems;
     }
     ASSERT(codeBlock->numberOfRegExps() == num);
+}
+
+void CodeBlockDatabase::writePropertyAccessVector(BytesData& data, UnlinkedCodeBlock* codeBlock)
+{
+    const Vector<unsigned>& table = codeBlock->propertyAccessInstructions();
+    size_t num = table.size();
+    writeNum(data, num);
+    for (size_t i = 0; i < num; i++)
+        writeNum(data, table[i]);
+}
+
+void CodeBlockDatabase::readPropertyAccessVector(BytesPointer* p, UnlinkedCodeBlock* codeBlock)
+{
+    ASSERT(m_constructorShift == 0 || m_constructorShift == 4 || m_constructorShift == 7);
+    ASSERT(codeBlock->propertyAccessInstructions().size() == 0);
+    size_t num = readNum(p);
+    bool shifting = false;
+    for (size_t i = 0; i < num; i++) {
+        int cur = readNum(p);
+        if (m_constructorShift == 7) {
+            if (cur >= codeBlock->m_thisPlace) {
+                if (!shifting) {
+                    shifting = true;
+                    codeBlock->addPropertyAccessInstruction(codeBlock->m_thisPlace);
+                }
+                cur += m_constructorShift;
+            }
+        } else if (m_constructorShift == 4) {
+            if (cur > codeBlock->m_thisPlace) {
+                cur += m_constructorShift;
+            }
+        }
+        codeBlock->addPropertyAccessInstruction(cur);
+    }
+    ASSERT(codeBlock->propertyAccessInstructions().size() == num + ((m_constructorShift == 7) ? 1 : 0));
 }
 
 void CodeBlockDatabase::saveCodeBlock(UnlinkedCodeBlock* codeBlock)

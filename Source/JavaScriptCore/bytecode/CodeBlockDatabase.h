@@ -67,6 +67,7 @@ namespace JSC {
         void saveCodeBlock(UnlinkedCodeBlock*);
         bool loadCodeBlock(UnlinkedCodeBlock*, unsigned);
 
+        unsigned constructorShift(unsigned, UnlinkedCodeBlock*);
         void writeCodeBlockInternals(BytesData&, UnlinkedCodeBlock*);
         void readCodeBlockInternals(BytesPointer*, UnlinkedCodeBlock*);
         void writeJumpTargets(BytesData&, UnlinkedCodeBlock*);
@@ -81,9 +82,10 @@ namespace JSC {
         void readBytecode(BytesPointer*, UnlinkedCodeBlock*);
         void writeExceptionHandlers( BytesData&, UnlinkedCodeBlock*);
         void readExceptionHandlers(BytesPointer*, UnlinkedCodeBlock*);
-        unsigned constructorShift(unsigned, UnlinkedCodeBlock*);
         void writeRegExps(BytesData&, UnlinkedCodeBlock*);
         void readRegExps(BytesPointer*, UnlinkedCodeBlock*);
+        void writePropertyAccessVector(BytesData&, UnlinkedCodeBlock*);
+        void readPropertyAccessVector(BytesPointer*, UnlinkedCodeBlock*);
 
         void writeImmediateSwitchTables(BytesData&, UnlinkedCodeBlock*);
         void readImmediateSwitchTables(BytesPointer*, UnlinkedCodeBlock*);
