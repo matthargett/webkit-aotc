@@ -329,24 +329,6 @@ void CodeBlockDatabase::readFunctions(BytesPointer* p, UnlinkedCodeBlock* codeBl
     size_t num;
     ASSERT(codeBlock->numberOfFunctionDecls() == 0);
     if (!codeBlock->getID()) {
-        /*size_t nGlobalVars = readNum(p);
-        if (nGlobalVars)
-            globalObject->addRegisters(nGlobalVars);
-        JSGlobalObject* globalObject = m_scope->globalObject();
-        ASSERT(num <= nGlobalVars);
-        int index = globalObject->symbolTable()->size();*/
-            /* //inside following loop code
-            SourceCode source(m_provider.get(), unlinkedFunction->sourceOffset());
-            FunctionExecutable* function = FunctionExecutable::create(exec->vm(), source, unlinkedFunction, 0, 0, 0, 0);
-            globalObject->removeDirect(exec->vm(), function->name());
-            JSValue value = JSFunction::create(exec->vm(), function, m_scope);
-            SymbolTableEntry entry = globalObject->symbolTable()->get(function->name().impl());
-            if (!entry.isNull())
-                globalObject->registerAt(entry.getIndex()).set(exec->vm(), globalObject, value);
-            else {
-                globalObject->registerAt(index).set(exec->vm(), globalObject, value);
-                index++;
-            }   FIXME: maybe need some of these stuff for multi-load */
         ExecState* exec = m_scope->globalObject()->globalExec();
         UnlinkedProgramCodeBlock* programCodeBlock = static_cast<UnlinkedProgramCodeBlock*>(codeBlock);
         ASSERT(m_savingType == NoType);
