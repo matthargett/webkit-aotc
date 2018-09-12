@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014 Apple Inc. All rights reserved.
+ * Copyright (C) 2014-2017 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -56,9 +56,6 @@ void printInternal(PrintStream& out, JettisonReason reason)
     case JettisonDueToOSRExit:
         out.print("OSRExit");
         return;
-    case JettisonDueToPureGetByIdEffects:
-        out.print("PureGetByIdEffects");
-        return;
     case JettisonDueToProfiledWatchpoint:
         out.print("ProfiledWatchpoint");
         return;
@@ -67,6 +64,9 @@ void printInternal(PrintStream& out, JettisonReason reason)
         return;
     case JettisonDueToOldAge:
         out.print("JettisonDueToOldAge");
+        return;
+    case JettisonDueToVMTraps:
+        out.print("JettisonDueToVMTraps");
         return;
     }
     RELEASE_ASSERT_NOT_REACHED();

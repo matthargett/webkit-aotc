@@ -38,9 +38,9 @@ namespace WebCore {
 
 class OverconstrainedErrorEvent : public Event {
 public:
-    virtual ~OverconstrainedErrorEvent() { }
+    virtual ~OverconstrainedErrorEvent() = default;
 
-    static Ref<OverconstrainedErrorEvent> create(const AtomicString& type, bool canBubble, bool cancelable, OverconstrainedError* error)
+    static Ref<OverconstrainedErrorEvent> create(const AtomicString& type, CanBubble canBubble, IsCancelable cancelable, OverconstrainedError* error)
     {
         return adoptRef(*new OverconstrainedErrorEvent(type, canBubble, cancelable, error));
     }
@@ -55,10 +55,10 @@ public:
     }
 
     OverconstrainedError* error() const { return m_error.get(); }
-    virtual EventInterface eventInterface() const { return OverconstrainedErrorEventInterfaceType; }
+    EventInterface eventInterface() const override { return OverconstrainedErrorEventInterfaceType; }
 
 private:
-    explicit OverconstrainedErrorEvent(const AtomicString& type, bool canBubble, bool cancelable, OverconstrainedError* error)
+    explicit OverconstrainedErrorEvent(const AtomicString& type, CanBubble canBubble, IsCancelable cancelable, OverconstrainedError* error)
         : Event(type, canBubble, cancelable)
         , m_error(error)
     {

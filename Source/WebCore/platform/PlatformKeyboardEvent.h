@@ -45,11 +45,6 @@ typedef struct _GdkEventKey GdkEventKey;
 #include "CompositionResults.h"
 #endif
 
-#if PLATFORM(EFL)
-typedef struct _Evas_Event_Key_Down Evas_Event_Key_Down;
-typedef struct _Evas_Event_Key_Up Evas_Event_Key_Up;
-#endif
-
 namespace WebCore {
 
     class PlatformKeyboardEvent : public PlatformEvent {
@@ -77,7 +72,7 @@ namespace WebCore {
 #if ENABLE(KEYBOARD_CODE_ATTRIBUTE)
         const String& code,
 #endif
-        const String& keyIdentifier, int windowsVirtualKeyCode, bool isAutoRepeat, bool isKeypad, bool isSystemKey, OptionSet<Modifier> modifiers, double timestamp)
+        const String& keyIdentifier, int windowsVirtualKeyCode, bool isAutoRepeat, bool isKeypad, bool isSystemKey, OptionSet<Modifier> modifiers, WallTime timestamp)
             : PlatformEvent(type, modifiers, timestamp)
             , m_text(text)
             , m_unmodifiedText(unmodifiedText)
@@ -147,7 +142,7 @@ namespace WebCore {
 #if !PLATFORM(IOS)
         NSEvent* macEvent() const { return m_macEvent.get(); }
 #else
-        WebEvent *event() const { return m_Event.get(); }
+        ::WebEvent *event() const { return m_Event.get(); }
 #endif
 #endif
 
@@ -161,14 +156,20 @@ namespace WebCore {
         const CompositionResults& compositionResults() const { return m_compositionResults; }
 
         // Used by WebKit2
+        static String keyValueForGdkKeyCode(unsigned);
+        static String keyCodeForHardwareKeyCode(unsigned);
         static String keyIdentifierForGdkKeyCode(unsigned);
         static int windowsKeyCodeForGdkKeyCode(unsigned);
         static String singleCharacterString(unsigned);
+        static bool modifiersContainCapsLock(unsigned);
 #endif
 
-#if PLATFORM(EFL)
-        explicit PlatformKeyboardEvent(const Evas_Event_Key_Down*);
-        explicit PlatformKeyboardEvent(const Evas_Event_Key_Up*);
+#if PLATFORM(WPE)
+        static String keyValueForWPEKeyCode(unsigned);
+        static String keyCodeForHardwareKeyCode(unsigned);
+        static String keyIdentifierForWPEKeyCode(unsigned);
+        static int windowsKeyCodeForWPEKeyCode(unsigned);
+        static String singleCharacterString(unsigned);
 #endif
 
     protected:
@@ -198,7 +199,7 @@ namespace WebCore {
 #if !PLATFORM(IOS)
         RetainPtr<NSEvent> m_macEvent;
 #else
-        RetainPtr<WebEvent> m_Event;
+        RetainPtr<::WebEvent> m_Event;
 #endif
 #endif
 #if PLATFORM(GTK)

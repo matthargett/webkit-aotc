@@ -25,9 +25,11 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef SQLStatementCallback_h
-#define SQLStatementCallback_h
 
+#pragma once
+
+#include "ActiveDOMCallback.h"
+#include "CallbackResult.h"
 #include <wtf/ThreadSafeRefCounted.h>
 
 namespace WebCore {
@@ -35,12 +37,11 @@ namespace WebCore {
 class SQLTransaction;
 class SQLResultSet;
 
-class SQLStatementCallback : public ThreadSafeRefCounted<SQLStatementCallback> {
+class SQLStatementCallback : public ThreadSafeRefCounted<SQLStatementCallback>, public ActiveDOMCallback {
 public:
-    virtual ~SQLStatementCallback() { }
-    virtual bool handleEvent(SQLTransaction*, SQLResultSet*) = 0;
+    using ActiveDOMCallback::ActiveDOMCallback;
+
+    virtual CallbackResult<void> handleEvent(SQLTransaction&, SQLResultSet&) = 0;
 };
 
-}
-
-#endif // SQLStatementErrorCallback_h
+} // namespace WebCore

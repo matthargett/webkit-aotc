@@ -22,8 +22,7 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef MediaStreamTrackEvent_h
-#define MediaStreamTrackEvent_h
+#pragma once
 
 #if ENABLE(MEDIA_STREAM)
 
@@ -38,7 +37,7 @@ class MediaStreamTrackEvent : public Event {
 public:
     virtual ~MediaStreamTrackEvent();
 
-    static Ref<MediaStreamTrackEvent> create(const AtomicString& type, bool canBubble, bool cancelable, RefPtr<MediaStreamTrack>&&);
+    static Ref<MediaStreamTrackEvent> create(const AtomicString& type, CanBubble, IsCancelable, RefPtr<MediaStreamTrack>&&);
 
     struct Init : EventInit {
         RefPtr<MediaStreamTrack> track;
@@ -51,7 +50,7 @@ public:
     EventInterface eventInterface() const override;
 
 private:
-    MediaStreamTrackEvent(const AtomicString& type, bool canBubble, bool cancelable, RefPtr<MediaStreamTrack>&&);
+    MediaStreamTrackEvent(const AtomicString& type, CanBubble, IsCancelable, RefPtr<MediaStreamTrack>&&);
     MediaStreamTrackEvent(const AtomicString& type, const Init&, IsTrusted);
 
     RefPtr<MediaStreamTrack> m_track;
@@ -60,5 +59,3 @@ private:
 } // namespace WebCore
 
 #endif // ENABLE(MEDIA_STREAM)
-
-#endif // MediaStreamTrackEvent_h

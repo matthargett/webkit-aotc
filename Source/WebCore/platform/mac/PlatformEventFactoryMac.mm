@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011, 2013 Apple Inc. All rights reserved.
+ * Copyright (C) 2011-2017 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -26,17 +26,21 @@
 #include "config.h"
 #include "PlatformEventFactoryMac.h"
 
+#if PLATFORM(MAC)
+
 #import "KeyEventCocoa.h"
 #import "Logging.h"
-#import "NSMenuSPI.h"
 #import "PlatformScreen.h"
 #import "Scrollbar.h"
-#import "WebCoreSystemInterface.h"
 #import "WindowsKeyboardCodes.h"
+#import <HIToolbox/CarbonEvents.h>
 #import <HIToolbox/Events.h>
 #import <mach/mach_time.h>
+#import <pal/spi/mac/HIToolboxSPI.h>
+#import <pal/spi/mac/NSEventSPI.h>
+#import <pal/spi/mac/NSMenuSPI.h>
 #import <wtf/ASCIICType.h>
-#import <wtf/mac/AppKitCompatibilityDeclarations.h>
+#import <wtf/WallTime.h>
 
 namespace WebCore {
 
@@ -52,27 +56,24 @@ static NSPoint globalPointForEvent(NSEvent *event)
 {
     switch ([event type]) {
 #if defined(__LP64__) && __MAC_OS_X_VERSION_MAX_ALLOWED >= 101003
-        case NSEventTypePressure:
+    case NSEventTypePressure:
 #endif
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
-        case NSLeftMouseDown:
-        case NSLeftMouseDragged:
-        case NSLeftMouseUp:
-        case NSMouseEntered:
-        case NSMouseExited:
-        case NSMouseMoved:
-        case NSOtherMouseDown:
-        case NSOtherMouseDragged:
-        case NSOtherMouseUp:
-        case NSRightMouseDown:
-        case NSRightMouseDragged:
-        case NSRightMouseUp:
-        case NSScrollWheel:
-#pragma clang diagnostic pop
-            return globalPoint([event locationInWindow], [event window]);
-        default:
-            return { 0, 0 };
+    case NSEventTypeLeftMouseDown:
+    case NSEventTypeLeftMouseDragged:
+    case NSEventTypeLeftMouseUp:
+    case NSEventTypeMouseEntered:
+    case NSEventTypeMouseExited:
+    case NSEventTypeMouseMoved:
+    case NSEventTypeOtherMouseDown:
+    case NSEventTypeOtherMouseDragged:
+    case NSEventTypeOtherMouseUp:
+    case NSEventTypeRightMouseDown:
+    case NSEventTypeRightMouseDragged:
+    case NSEventTypeRightMouseUp:
+    case NSEventTypeScrollWheel:
+        return globalPoint([event locationInWindow], [event window]);
+    default:
+        return { 0, 0 };
     }
 }
 
@@ -80,33 +81,30 @@ static IntPoint pointForEvent(NSEvent *event, NSView *windowView)
 {
     switch ([event type]) {
 #if defined(__LP64__) && __MAC_OS_X_VERSION_MAX_ALLOWED >= 101003
-        case NSEventTypePressure:
+    case NSEventTypePressure:
 #endif
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
-        case NSLeftMouseDown:
-        case NSLeftMouseDragged:
-        case NSLeftMouseUp:
-        case NSMouseEntered:
-        case NSMouseExited:
-        case NSMouseMoved:
-        case NSOtherMouseDown:
-        case NSOtherMouseDragged:
-        case NSOtherMouseUp:
-        case NSRightMouseDown:
-        case NSRightMouseDragged:
-        case NSRightMouseUp:
-        case NSScrollWheel: {
-            // Note: This will have its origin at the bottom left of the window unless windowView is flipped.
-            // In those cases, the Y coordinate gets flipped by Widget::convertFromContainingWindow.
-            NSPoint location = [event locationInWindow];
-            if (windowView)
-                location = [windowView convertPoint:location fromView:nil];
-            return IntPoint(location);
-        }
-#pragma clang diagnostic pop
-        default:
-            return IntPoint();
+    case NSEventTypeLeftMouseDown:
+    case NSEventTypeLeftMouseDragged:
+    case NSEventTypeLeftMouseUp:
+    case NSEventTypeMouseEntered:
+    case NSEventTypeMouseExited:
+    case NSEventTypeMouseMoved:
+    case NSEventTypeOtherMouseDown:
+    case NSEventTypeOtherMouseDragged:
+    case NSEventTypeOtherMouseUp:
+    case NSEventTypeRightMouseDown:
+    case NSEventTypeRightMouseDragged:
+    case NSEventTypeRightMouseUp:
+    case NSEventTypeScrollWheel: {
+        // Note: This will have its origin at the bottom left of the window unless windowView is flipped.
+        // In those cases, the Y coordinate gets flipped by Widget::convertFromContainingWindow.
+        NSPoint location = [event locationInWindow];
+        if (windowView)
+            location = [windowView convertPoint:location fromView:nil];
+        return IntPoint(location);
+    }
+    default:
+        return IntPoint();
     }
 }
 
@@ -114,72 +112,68 @@ static MouseButton mouseButtonForEvent(NSEvent *event)
 {
     switch ([event type]) {
 #if defined(__LP64__) && __MAC_OS_X_VERSION_MAX_ALLOWED >= 101003
-        case NSEventTypePressure:
+    case NSEventTypePressure:
 #endif
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
-        case NSLeftMouseDown:
-        case NSLeftMouseUp:
-        case NSLeftMouseDragged:
-            return LeftButton;
-        case NSRightMouseDown:
-        case NSRightMouseUp:
-        case NSRightMouseDragged:
-            return RightButton;
-        case NSOtherMouseDown:
-        case NSOtherMouseUp:
-        case NSOtherMouseDragged:
-            return MiddleButton;
-#pragma clang diagnostic pop
-        default:
-            return NoButton;
+    case NSEventTypeLeftMouseDown:
+    case NSEventTypeLeftMouseUp:
+    case NSEventTypeLeftMouseDragged:
+        return LeftButton;
+    case NSEventTypeRightMouseDown:
+    case NSEventTypeRightMouseUp:
+    case NSEventTypeRightMouseDragged:
+        return RightButton;
+    case NSEventTypeOtherMouseDown:
+    case NSEventTypeOtherMouseUp:
+    case NSEventTypeOtherMouseDragged:
+        return MiddleButton;
+    default:
+        return NoButton;
     }
+}
+
+static unsigned short currentlyPressedMouseButtons()
+{
+    return static_cast<unsigned short>([NSEvent pressedMouseButtons]);
 }
 
 static PlatformEvent::Type mouseEventTypeForEvent(NSEvent* event)
 {
     switch ([event type]) {
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
-        case NSLeftMouseDragged:
-        case NSMouseEntered:
-        case NSMouseExited:
-        case NSMouseMoved:
-        case NSOtherMouseDragged:
-        case NSRightMouseDragged:
-            return PlatformEvent::MouseMoved;
-        case NSLeftMouseDown:
-        case NSRightMouseDown:
-        case NSOtherMouseDown:
-            return PlatformEvent::MousePressed;
-        case NSLeftMouseUp:
-        case NSRightMouseUp:
-        case NSOtherMouseUp:
-            return PlatformEvent::MouseReleased;
-#pragma clang diagnostic pop
-        default:
-            return PlatformEvent::MouseMoved;
+    case NSEventTypeLeftMouseDragged:
+    case NSEventTypeMouseEntered:
+    case NSEventTypeMouseExited:
+    case NSEventTypeMouseMoved:
+    case NSEventTypeOtherMouseDragged:
+    case NSEventTypeRightMouseDragged:
+        return PlatformEvent::MouseMoved;
+    case NSEventTypeLeftMouseDown:
+    case NSEventTypeRightMouseDown:
+    case NSEventTypeOtherMouseDown:
+        return PlatformEvent::MousePressed;
+    case NSEventTypeLeftMouseUp:
+    case NSEventTypeRightMouseUp:
+    case NSEventTypeOtherMouseUp:
+        return PlatformEvent::MouseReleased;
+    default:
+        return PlatformEvent::MouseMoved;
     }
 }
 
 static int clickCountForEvent(NSEvent *event)
 {
     switch ([event type]) {
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
-        case NSLeftMouseDown:
-        case NSLeftMouseUp:
-        case NSLeftMouseDragged:
-        case NSRightMouseDown:
-        case NSRightMouseUp:
-        case NSRightMouseDragged:
-        case NSOtherMouseDown:
-        case NSOtherMouseUp:
-        case NSOtherMouseDragged:
-#pragma clang diagnostic pop
-            return [event clickCount];
-        default:
-            return 0;
+    case NSEventTypeLeftMouseDown:
+    case NSEventTypeLeftMouseUp:
+    case NSEventTypeLeftMouseDragged:
+    case NSEventTypeRightMouseDown:
+    case NSEventTypeRightMouseUp:
+    case NSEventTypeRightMouseDragged:
+    case NSEventTypeOtherMouseDown:
+    case NSEventTypeOtherMouseUp:
+    case NSEventTypeOtherMouseDragged:
+        return [event clickCount];
+    default:
+        return 0;
     }
 }
 
@@ -243,25 +237,25 @@ String keyForKeyEvent(NSEvent *event)
     switch ([event keyCode]) {
     case kVK_RightCommand:
     case kVK_Command:
-        return ASCIILiteral("Meta");
+        return "Meta"_s;
     case kVK_Shift:
     case kVK_RightShift:
-        return ASCIILiteral("Shift");
+        return "Shift"_s;
     case kVK_CapsLock:
-        return ASCIILiteral("CapsLock");
+        return "CapsLock"_s;
     case kVK_Option: // Left Alt.
     case kVK_RightOption: // Right Alt.
-        return ASCIILiteral("Alt");
+        return "Alt"_s;
     case kVK_Control:
     case kVK_RightControl:
-        return ASCIILiteral("Control");
+        return "Control"_s;
     }
 
     // If the event is an NSEventTypeFlagsChanged events and we have not returned yet then this means we could not
     // identify the modifier key. We return now and report the key as "Unidentified".
     // Note that [event characters] below raises an exception if called on an NSEventTypeFlagsChanged event.
     if ([event type] == NSEventTypeFlagsChanged)
-        return ASCIILiteral("Unidentified");
+        return "Unidentified"_s;
 
     // If more than one key is being pressed and the key combination includes one or more modifier keys
     // that result in the key no longer producing a printable character (e.g., Control + a), then the
@@ -274,7 +268,7 @@ String keyForKeyEvent(NSEvent *event)
     // characters / charactersIgnoringModifiers return an empty string for dead keys.
     // https://developer.apple.com/reference/appkit/nsevent/1534183-characters
     if (!length)
-        return ASCIILiteral("Dead");
+        return "Dead"_s;
     // High unicode codepoints are coded with a character sequence in Mac OS X.
     if (length > 1)
         return s;
@@ -286,153 +280,153 @@ String codeForKeyEvent(NSEvent *event)
 {
     switch ([event keyCode]) {
     // Keys in the alphanumeric section.
-    case kVK_ANSI_Grave: return ASCIILiteral("Backquote");
-    case kVK_ANSI_Backslash: return ASCIILiteral("Backslash");
-    case kVK_Delete: return ASCIILiteral("Backspace");
-    case kVK_ANSI_LeftBracket: return ASCIILiteral("BracketLeft");
-    case kVK_ANSI_RightBracket: return ASCIILiteral("BracketRight");
-    case kVK_ANSI_Comma: return ASCIILiteral("Comma");
-    case kVK_ANSI_0: return ASCIILiteral("Digit0");
-    case kVK_ANSI_1: return ASCIILiteral("Digit1");
-    case kVK_ANSI_2: return ASCIILiteral("Digit2");
-    case kVK_ANSI_3: return ASCIILiteral("Digit3");
-    case kVK_ANSI_4: return ASCIILiteral("Digit4");
-    case kVK_ANSI_5: return ASCIILiteral("Digit5");
-    case kVK_ANSI_6: return ASCIILiteral("Digit6");
-    case kVK_ANSI_7: return ASCIILiteral("Digit7");
-    case kVK_ANSI_8: return ASCIILiteral("Digit8");
-    case kVK_ANSI_9: return ASCIILiteral("Digit9");
-    case kVK_ANSI_Equal: return ASCIILiteral("Equal");
-    case kVK_ISO_Section: return ASCIILiteral("IntlBackslash");
-    case kVK_JIS_Underscore: return ASCIILiteral("IntlRo");
-    case kVK_JIS_Yen: return ASCIILiteral("IntlYen");
-    case kVK_ANSI_A: return ASCIILiteral("KeyA");
-    case kVK_ANSI_B: return ASCIILiteral("KeyB");
-    case kVK_ANSI_C: return ASCIILiteral("KeyC");
-    case kVK_ANSI_D: return ASCIILiteral("KeyD");
-    case kVK_ANSI_E: return ASCIILiteral("KeyE");
-    case kVK_ANSI_F: return ASCIILiteral("KeyF");
-    case kVK_ANSI_G: return ASCIILiteral("KeyG");
-    case kVK_ANSI_H: return ASCIILiteral("KeyH");
-    case kVK_ANSI_I: return ASCIILiteral("KeyI");
-    case kVK_ANSI_J: return ASCIILiteral("KeyJ");
-    case kVK_ANSI_K: return ASCIILiteral("KeyK");
-    case kVK_ANSI_L: return ASCIILiteral("KeyL");
-    case kVK_ANSI_M: return ASCIILiteral("KeyM");
-    case kVK_ANSI_N: return ASCIILiteral("KeyN");
-    case kVK_ANSI_O: return ASCIILiteral("KeyO");
-    case kVK_ANSI_P: return ASCIILiteral("KeyP");
-    case kVK_ANSI_Q: return ASCIILiteral("KeyQ");
-    case kVK_ANSI_R: return ASCIILiteral("KeyR");
-    case kVK_ANSI_S: return ASCIILiteral("KeyS");
-    case kVK_ANSI_T: return ASCIILiteral("KeyT");
-    case kVK_ANSI_U: return ASCIILiteral("KeyU");
-    case kVK_ANSI_V: return ASCIILiteral("KeyV");
-    case kVK_ANSI_W: return ASCIILiteral("KeyW");
-    case kVK_ANSI_X: return ASCIILiteral("KeyX");
-    case kVK_ANSI_Y: return ASCIILiteral("KeyY");
-    case kVK_ANSI_Z: return ASCIILiteral("KeyZ");
-    case kVK_ANSI_Minus: return ASCIILiteral("Minus");
-    case kVK_ANSI_Period: return ASCIILiteral("Period");
-    case kVK_ANSI_Quote: return ASCIILiteral("Quote");
-    case kVK_ANSI_Semicolon: return ASCIILiteral("Semicolon");
-    case kVK_ANSI_Slash: return ASCIILiteral("Slash");
+    case kVK_ANSI_Grave: return "Backquote"_s;
+    case kVK_ANSI_Backslash: return "Backslash"_s;
+    case kVK_Delete: return "Backspace"_s;
+    case kVK_ANSI_LeftBracket: return "BracketLeft"_s;
+    case kVK_ANSI_RightBracket: return "BracketRight"_s;
+    case kVK_ANSI_Comma: return "Comma"_s;
+    case kVK_ANSI_0: return "Digit0"_s;
+    case kVK_ANSI_1: return "Digit1"_s;
+    case kVK_ANSI_2: return "Digit2"_s;
+    case kVK_ANSI_3: return "Digit3"_s;
+    case kVK_ANSI_4: return "Digit4"_s;
+    case kVK_ANSI_5: return "Digit5"_s;
+    case kVK_ANSI_6: return "Digit6"_s;
+    case kVK_ANSI_7: return "Digit7"_s;
+    case kVK_ANSI_8: return "Digit8"_s;
+    case kVK_ANSI_9: return "Digit9"_s;
+    case kVK_ANSI_Equal: return "Equal"_s;
+    case kVK_ISO_Section: return "IntlBackslash"_s;
+    case kVK_JIS_Underscore: return "IntlRo"_s;
+    case kVK_JIS_Yen: return "IntlYen"_s;
+    case kVK_ANSI_A: return "KeyA"_s;
+    case kVK_ANSI_B: return "KeyB"_s;
+    case kVK_ANSI_C: return "KeyC"_s;
+    case kVK_ANSI_D: return "KeyD"_s;
+    case kVK_ANSI_E: return "KeyE"_s;
+    case kVK_ANSI_F: return "KeyF"_s;
+    case kVK_ANSI_G: return "KeyG"_s;
+    case kVK_ANSI_H: return "KeyH"_s;
+    case kVK_ANSI_I: return "KeyI"_s;
+    case kVK_ANSI_J: return "KeyJ"_s;
+    case kVK_ANSI_K: return "KeyK"_s;
+    case kVK_ANSI_L: return "KeyL"_s;
+    case kVK_ANSI_M: return "KeyM"_s;
+    case kVK_ANSI_N: return "KeyN"_s;
+    case kVK_ANSI_O: return "KeyO"_s;
+    case kVK_ANSI_P: return "KeyP"_s;
+    case kVK_ANSI_Q: return "KeyQ"_s;
+    case kVK_ANSI_R: return "KeyR"_s;
+    case kVK_ANSI_S: return "KeyS"_s;
+    case kVK_ANSI_T: return "KeyT"_s;
+    case kVK_ANSI_U: return "KeyU"_s;
+    case kVK_ANSI_V: return "KeyV"_s;
+    case kVK_ANSI_W: return "KeyW"_s;
+    case kVK_ANSI_X: return "KeyX"_s;
+    case kVK_ANSI_Y: return "KeyY"_s;
+    case kVK_ANSI_Z: return "KeyZ"_s;
+    case kVK_ANSI_Minus: return "Minus"_s;
+    case kVK_ANSI_Period: return "Period"_s;
+    case kVK_ANSI_Quote: return "Quote"_s;
+    case kVK_ANSI_Semicolon: return "Semicolon"_s;
+    case kVK_ANSI_Slash: return "Slash"_s;
 
     // Functional keys in alphanumeric section.
-    case kVK_Option: return ASCIILiteral("AltLeft");
-    case kVK_RightOption: return ASCIILiteral("AltRight");
-    case kVK_CapsLock: return ASCIILiteral("CapsLock");
+    case kVK_Option: return "AltLeft"_s;
+    case kVK_RightOption: return "AltRight"_s;
+    case kVK_CapsLock: return "CapsLock"_s;
     // ContextMenu.
-    case kVK_Control: return ASCIILiteral("ControlLeft");
-    case kVK_RightControl: return ASCIILiteral("ControlRight");
-    case kVK_Return: return ASCIILiteral("Enter"); //  Labeled Return on Apple keyboards.
-    case kVK_Command: return ASCIILiteral("MetaLeft");
-    case kVK_RightCommand: return ASCIILiteral("MetaRight");
-    case kVK_Shift: return ASCIILiteral("ShiftLeft");
-    case kVK_RightShift: return ASCIILiteral("ShiftRight");
-    case kVK_Space: return ASCIILiteral("Space");
-    case kVK_Tab: return ASCIILiteral("Tab");
+    case kVK_Control: return "ControlLeft"_s;
+    case kVK_RightControl: return "ControlRight"_s;
+    case kVK_Return: return "Enter"_s; //  Labeled Return on Apple keyboards.
+    case kVK_Command: return "MetaLeft"_s;
+    case kVK_RightCommand: return "MetaRight"_s;
+    case kVK_Shift: return "ShiftLeft"_s;
+    case kVK_RightShift: return "ShiftRight"_s;
+    case kVK_Space: return "Space"_s;
+    case kVK_Tab: return "Tab"_s;
 
     // Functional keys found on Japanese and Korean keyboards.
     // Convert.
-    case kVK_JIS_Kana: return ASCIILiteral("KanaMode");
+    case kVK_JIS_Kana: return "KanaMode"_s;
     // Lang1.
-    case kVK_JIS_Eisu: return ASCIILiteral("Lang2"); // Japanese (Mac keyboard): eisu.
+    case kVK_JIS_Eisu: return "Lang2"_s; // Japanese (Mac keyboard): eisu.
     // Lang3.
     // Lang4.
     // Lang5.
     // NonConvert.
 
     // Keys in the ControlPad section.
-    case kVK_ForwardDelete: return ASCIILiteral("Delete");
-    case kVK_End: return ASCIILiteral("End");
-    case kVK_Help: return ASCIILiteral("Help");
-    case kVK_Home: return ASCIILiteral("Home");
+    case kVK_ForwardDelete: return "Delete"_s;
+    case kVK_End: return "End"_s;
+    case kVK_Help: return "Help"_s;
+    case kVK_Home: return "Home"_s;
     // Insert: Not present on Apple keyboards.
-    case kVK_PageDown: return ASCIILiteral("PageDown");
-    case kVK_PageUp: return ASCIILiteral("PageUp");
+    case kVK_PageDown: return "PageDown"_s;
+    case kVK_PageUp: return "PageUp"_s;
 
     // Keys in the ArrowPad section.
-    case kVK_DownArrow: return ASCIILiteral("ArrowDown");
-    case kVK_LeftArrow: return ASCIILiteral("ArrowLeft");
-    case kVK_RightArrow: return ASCIILiteral("ArrowRight");
-    case kVK_UpArrow: return ASCIILiteral("ArrowUp");
+    case kVK_DownArrow: return "ArrowDown"_s;
+    case kVK_LeftArrow: return "ArrowLeft"_s;
+    case kVK_RightArrow: return "ArrowRight"_s;
+    case kVK_UpArrow: return "ArrowUp"_s;
 
     // Keys in the Numpad section.
-    case kVK_ANSI_KeypadClear: return ASCIILiteral("NumLock"); // The specification says to use "NumLock" on Mac for the numpad Clear key.
-    case kVK_ANSI_Keypad0: return ASCIILiteral("Numpad0");
-    case kVK_ANSI_Keypad1: return ASCIILiteral("Numpad1");
-    case kVK_ANSI_Keypad2: return ASCIILiteral("Numpad2");
-    case kVK_ANSI_Keypad3: return ASCIILiteral("Numpad3");
-    case kVK_ANSI_Keypad4: return ASCIILiteral("Numpad4");
-    case kVK_ANSI_Keypad5: return ASCIILiteral("Numpad5");
-    case kVK_ANSI_Keypad6: return ASCIILiteral("Numpad6");
-    case kVK_ANSI_Keypad7: return ASCIILiteral("Numpad7");
-    case kVK_ANSI_Keypad8: return ASCIILiteral("Numpad8");
-    case kVK_ANSI_Keypad9: return ASCIILiteral("Numpad9");
-    case kVK_ANSI_KeypadPlus: return ASCIILiteral("NumpadAdd");
+    case kVK_ANSI_KeypadClear: return "NumLock"_s; // The specification says to use "NumLock" on Mac for the numpad Clear key.
+    case kVK_ANSI_Keypad0: return "Numpad0"_s;
+    case kVK_ANSI_Keypad1: return "Numpad1"_s;
+    case kVK_ANSI_Keypad2: return "Numpad2"_s;
+    case kVK_ANSI_Keypad3: return "Numpad3"_s;
+    case kVK_ANSI_Keypad4: return "Numpad4"_s;
+    case kVK_ANSI_Keypad5: return "Numpad5"_s;
+    case kVK_ANSI_Keypad6: return "Numpad6"_s;
+    case kVK_ANSI_Keypad7: return "Numpad7"_s;
+    case kVK_ANSI_Keypad8: return "Numpad8"_s;
+    case kVK_ANSI_Keypad9: return "Numpad9"_s;
+    case kVK_ANSI_KeypadPlus: return "NumpadAdd"_s;
     // NumpadBackspace.
     // NumpadClear: The specification says that the numpad Clear key should always be encoded as "NumLock" on Mac.
     // NumpadClearEntry.
-    case kVK_JIS_KeypadComma: return ASCIILiteral("NumpadComma");
-    case kVK_ANSI_KeypadDecimal: return ASCIILiteral("NumpadDecimal");
-    case kVK_ANSI_KeypadDivide: return ASCIILiteral("NumpadDivide");
-    case kVK_ANSI_KeypadEnter: return ASCIILiteral("NumpadEnter");
-    case kVK_ANSI_KeypadEquals: return ASCIILiteral("NumpadEqual");
+    case kVK_JIS_KeypadComma: return "NumpadComma"_s;
+    case kVK_ANSI_KeypadDecimal: return "NumpadDecimal"_s;
+    case kVK_ANSI_KeypadDivide: return "NumpadDivide"_s;
+    case kVK_ANSI_KeypadEnter: return "NumpadEnter"_s;
+    case kVK_ANSI_KeypadEquals: return "NumpadEqual"_s;
     // NumpadHash.
     // NumpadMemoryAdd.
     // NumpadMemoryClear.
     // NumpadMemoryRecall.
     // NumpadMemoryStore.
     // NumpadMemorySubtract.
-    case kVK_ANSI_KeypadMultiply: return ASCIILiteral("NumpadMultiply");
+    case kVK_ANSI_KeypadMultiply: return "NumpadMultiply"_s;
     // NumpadParenLeft.
     // NumpadParenRight.
     // NumpadStar: The specification says to use "NumpadMultiply" for the * key on numeric keypads.
-    case kVK_ANSI_KeypadMinus: return ASCIILiteral("NumpadSubtract");
+    case kVK_ANSI_KeypadMinus: return "NumpadSubtract"_s;
 
     // Keys in the Function section.
-    case kVK_Escape: return ASCIILiteral("Escape");
-    case kVK_F1: return ASCIILiteral("F1");
-    case kVK_F2: return ASCIILiteral("F2");
-    case kVK_F3: return ASCIILiteral("F3");
-    case kVK_F4: return ASCIILiteral("F4");
-    case kVK_F5: return ASCIILiteral("F5");
-    case kVK_F6: return ASCIILiteral("F6");
-    case kVK_F7: return ASCIILiteral("F7");
-    case kVK_F8: return ASCIILiteral("F8");
-    case kVK_F9: return ASCIILiteral("F9");
-    case kVK_F10: return ASCIILiteral("F10");
-    case kVK_F11: return ASCIILiteral("F11");
-    case kVK_F12: return ASCIILiteral("F12");
-    case kVK_F13: return ASCIILiteral("F13");
-    case kVK_F14: return ASCIILiteral("F14");
-    case kVK_F15: return ASCIILiteral("F15");
-    case kVK_F16: return ASCIILiteral("F16");
-    case kVK_F17: return ASCIILiteral("F17");
-    case kVK_F18: return ASCIILiteral("F18");
-    case kVK_F19: return ASCIILiteral("F19");
-    case kVK_F20: return ASCIILiteral("F20");
+    case kVK_Escape: return "Escape"_s;
+    case kVK_F1: return "F1"_s;
+    case kVK_F2: return "F2"_s;
+    case kVK_F3: return "F3"_s;
+    case kVK_F4: return "F4"_s;
+    case kVK_F5: return "F5"_s;
+    case kVK_F6: return "F6"_s;
+    case kVK_F7: return "F7"_s;
+    case kVK_F8: return "F8"_s;
+    case kVK_F9: return "F9"_s;
+    case kVK_F10: return "F10"_s;
+    case kVK_F11: return "F11"_s;
+    case kVK_F12: return "F12"_s;
+    case kVK_F13: return "F13"_s;
+    case kVK_F14: return "F14"_s;
+    case kVK_F15: return "F15"_s;
+    case kVK_F16: return "F16"_s;
+    case kVK_F17: return "F17"_s;
+    case kVK_F18: return "F18"_s;
+    case kVK_F19: return "F19"_s;
+    case kVK_F20: return "F20"_s;
     // Fn: This is typically a hardware key that does not generate a separate code.
     // FnLock.
     // PrintScreen.
@@ -458,9 +452,9 @@ String codeForKeyEvent(NSEvent *event)
     // MediaTrackPrevious.
     // Power.
     // Sleep.
-    case kVK_VolumeDown: return ASCIILiteral("AudioVolumeDown");
-    case kVK_Mute: return ASCIILiteral("AudioVolumeMute");
-    case kVK_VolumeUp: return ASCIILiteral("AudioVolumeUp");
+    case kVK_VolumeDown: return "AudioVolumeDown"_s;
+    case kVK_Mute: return "AudioVolumeMute"_s;
+    case kVK_VolumeUp: return "AudioVolumeUp"_s;
     // WakeUp.
 
     // Legacy modifier keys.
@@ -489,7 +483,7 @@ String codeForKeyEvent(NSEvent *event)
     // Katakana.
 
     default:
-        return ASCIILiteral("Unidentified");
+        return "Unidentified"_s;
     }
 }
 
@@ -497,28 +491,28 @@ String keyIdentifierForKeyEvent(NSEvent* event)
 {
     if ([event type] == NSEventTypeFlagsChanged) {
         switch ([event keyCode]) {
-            case 54: // Right Command
-            case 55: // Left Command
-                return String("Meta");
-                
-            case 57: // Capslock
-                return String("CapsLock");
-                
-            case 56: // Left Shift
-            case 60: // Right Shift
-                return String("Shift");
-                
-            case 58: // Left Alt
-            case 61: // Right Alt
-                return String("Alt");
-                
-            case 59: // Left Ctrl
-            case 62: // Right Ctrl
-                return String("Control");
-                
-            default:
-                ASSERT_NOT_REACHED();
-                return emptyString();
+        case 54: // Right Command
+        case 55: // Left Command
+            return String("Meta");
+
+        case 57: // Capslock
+            return String("CapsLock");
+
+        case 56: // Left Shift
+        case 60: // Right Shift
+            return String("Shift");
+
+        case 58: // Left Alt
+        case 61: // Right Alt
+            return String("Alt");
+
+        case 59: // Left Ctrl
+        case 62: // Right Ctrl
+            return String("Control");
+
+        default:
+            ASSERT_NOT_REACHED();
+            return emptyString();
         }
     }
     
@@ -534,44 +528,38 @@ static bool isKeypadEvent(NSEvent* event)
 {
     // Check that this is the type of event that has a keyCode.
     switch ([event type]) {
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
-        case NSKeyDown:
-        case NSKeyUp:
-        case NSFlagsChanged:
-            break;
-#pragma clang diagnostic pop
-        default:
-            return false;
+    case NSEventTypeKeyDown:
+    case NSEventTypeKeyUp:
+    case NSEventTypeFlagsChanged:
+        break;
+    default:
+        return false;
     }
 
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
-    if ([event modifierFlags] & NSNumericPadKeyMask)
-#pragma clang diagnostic pop
+    if ([event modifierFlags] & NSEventModifierFlagNumericPad)
         return true;
 
     switch ([event keyCode]) {
-        case 71: // Clear
-        case 81: // =
-        case 75: // /
-        case 67: // *
-        case 78: // -
-        case 69: // +
-        case 76: // Enter
-        case 65: // .
-        case 82: // 0
-        case 83: // 1
-        case 84: // 2
-        case 85: // 3
-        case 86: // 4
-        case 87: // 5
-        case 88: // 6
-        case 89: // 7
-        case 91: // 8
-        case 92: // 9
-            return true;
-     }
+    case 71: // Clear
+    case 81: // =
+    case 75: // /
+    case 67: // *
+    case 78: // -
+    case 69: // +
+    case 76: // Enter
+    case 65: // .
+    case 82: // 0
+    case 83: // 1
+    case 84: // 2
+    case 85: // 3
+    case 86: // 4
+    case 87: // 5
+    case 88: // 6
+    case 89: // 7
+    case 91: // 8
+    case 92: // 9
+        return true;
+    }
      
      return false;
 }
@@ -585,10 +573,7 @@ int windowsKeyCodeForKeyEvent(NSEvent* event)
     // 2. Keys for which there is no known Mac virtual key codes, like PrintScreen.
     // 3. Certain punctuation keys. On Windows, these are also remapped depending on current keyboard layout,
     //    but see comment in windowsKeyCodeForCharCode().
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
-    if (!isKeypadEvent(event) && ([event type] == NSKeyDown || [event type] == NSKeyUp)) {
-#pragma clang diagnostic pop
+    if (!isKeypadEvent(event) && ([event type] == NSEventTypeKeyDown || [event type] == NSEventTypeKeyUp)) {
         // Cmd switches Roman letters for Dvorak-QWERTY layout, so try modified characters first.
         NSString* s = [event characters];
         code = [s length] > 0 ? windowsKeyCodeForCharCode([s characterAtIndex:0]) : 0;
@@ -639,78 +624,99 @@ static CFTimeInterval cachedStartupTimeIntervalSince1970()
     return systemStartupTime;
 }
 
-double eventTimeStampSince1970(NSEvent* event)
+WallTime eventTimeStampSince1970(NSEvent* event)
 {
-    return static_cast<double>(cachedStartupTimeIntervalSince1970() + [event timestamp]);
+    return WallTime::fromRawSeconds(static_cast<double>(cachedStartupTimeIntervalSince1970() + [event timestamp]));
 }
 
 static inline bool isKeyUpEvent(NSEvent *event)
 {
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
-    if ([event type] != NSFlagsChanged)
-        return [event type] == NSKeyUp;
+    if ([event type] != NSEventTypeFlagsChanged)
+        return [event type] == NSEventTypeKeyUp;
     // FIXME: This logic fails if the user presses both Shift keys at once, for example:
     // we treat releasing one of them as keyDown.
     switch ([event keyCode]) {
-        case 54: // Right Command
-        case 55: // Left Command
-            return ([event modifierFlags] & NSCommandKeyMask) == 0;
-            
-        case 57: // Capslock
-            return ([event modifierFlags] & NSAlphaShiftKeyMask) == 0;
-            
-        case 56: // Left Shift
-        case 60: // Right Shift
-            return ([event modifierFlags] & NSShiftKeyMask) == 0;
-            
-        case 58: // Left Alt
-        case 61: // Right Alt
-            return ([event modifierFlags] & NSAlternateKeyMask) == 0;
-            
-        case 59: // Left Ctrl
-        case 62: // Right Ctrl
-            return ([event modifierFlags] & NSControlKeyMask) == 0;
-            
-        case 63: // Function
-            return ([event modifierFlags] & NSFunctionKeyMask) == 0;
-#pragma clang diagnostic pop
+    case 54: // Right Command
+    case 55: // Left Command
+        return !([event modifierFlags] & NSEventModifierFlagCommand);
+
+    case 57: // Capslock
+        return !([event modifierFlags] & NSEventModifierFlagCapsLock);
+
+    case 56: // Left Shift
+    case 60: // Right Shift
+        return !([event modifierFlags] & NSEventModifierFlagShift);
+
+    case 58: // Left Alt
+    case 61: // Right Alt
+        return !([event modifierFlags] & NSEventModifierFlagOption);
+
+    case 59: // Left Ctrl
+    case 62: // Right Ctrl
+        return !([event modifierFlags] & NSEventModifierFlagControl);
+
+    case 63: // Function
+        return !([event modifierFlags] & NSEventModifierFlagFunction);
     }
     return false;
 }
 
-static inline OptionSet<PlatformEvent::Modifier> modifiersForEvent(NSEvent *event)
+OptionSet<PlatformEvent::Modifier> modifiersForEvent(NSEvent *event)
 {
     OptionSet<PlatformEvent::Modifier> modifiers;
 
     if (event.modifierFlags & NSEventModifierFlagShift)
-        modifiers |= PlatformEvent::Modifier::ShiftKey;
+        modifiers.add(PlatformEvent::Modifier::ShiftKey);
     if (event.modifierFlags & NSEventModifierFlagControl)
-        modifiers |= PlatformEvent::Modifier::CtrlKey;
+        modifiers.add(PlatformEvent::Modifier::CtrlKey);
     if (event.modifierFlags & NSEventModifierFlagOption)
-        modifiers |= PlatformEvent::Modifier::AltKey;
+        modifiers.add(PlatformEvent::Modifier::AltKey);
     if (event.modifierFlags & NSEventModifierFlagCommand)
-        modifiers |= PlatformEvent::Modifier::MetaKey;
+        modifiers.add(PlatformEvent::Modifier::MetaKey);
     if (event.modifierFlags & NSEventModifierFlagCapsLock)
-        modifiers |= PlatformEvent::Modifier::CapsLockKey;
+        modifiers.add(PlatformEvent::Modifier::CapsLockKey);
 
     return modifiers;
 }
 
 static int typeForEvent(NSEvent *event)
 {
-    if ([NSMenu respondsToSelector:@selector(menuTypeForEvent:)])
-        return static_cast<int>([NSMenu menuTypeForEvent:event]);
-
-    if (mouseButtonForEvent(event) == RightButton)
-        return static_cast<int>(NSMenuTypeContextMenu);
-
-    if (mouseButtonForEvent(event) == LeftButton && modifiersForEvent(event).contains(PlatformEvent::Modifier::CtrlKey))
-        return static_cast<int>(NSMenuTypeContextMenu);
-
-    return static_cast<int>(NSMenuTypeNone);
+    return static_cast<int>([NSMenu menuTypeForEvent:event]);
 }
+
+void getWheelEventDeltas(NSEvent *event, float& deltaX, float& deltaY, BOOL& continuous)
+{
+    ASSERT(event);
+    if (event.hasPreciseScrollingDeltas) {
+        deltaX = event.scrollingDeltaX;
+        deltaY = event.scrollingDeltaY;
+        continuous = YES;
+    } else {
+        deltaX = event.deltaX;
+        deltaY = event.deltaY;
+        continuous = NO;
+    }
+}
+
+UInt8 keyCharForEvent(NSEvent *event)
+{
+    EventRef eventRef = (EventRef)[event _eventRef];
+    if (!eventRef)
+        return 0;
+
+    ByteCount keyCharCount = 0;
+    if (GetEventParameter(eventRef, kEventParamKeyMacCharCodes, typeChar, 0, 0, &keyCharCount, 0) != noErr)
+        return 0;
+    if (keyCharCount != 1)
+        return 0;
+
+    UInt8 keyChar = 0;
+    if (GetEventParameter(eventRef, kEventParamKeyMacCharCodes, typeChar, 0, sizeof(keyChar), &keyCharCount, &keyChar) != noErr)
+        return 0;
     
+    return keyChar;
+}
+
 class PlatformMouseEventBuilder : public PlatformMouseEvent {
 public:
     PlatformMouseEventBuilder(NSEvent *event, NSEvent *correspondingPressureEvent, NSView *windowView)
@@ -741,7 +747,11 @@ public:
         m_position = pointForEvent(event, windowView);
         m_globalPosition = IntPoint(globalPointForEvent(event));
         m_button = mouseButtonForEvent(event);
+        m_buttons = currentlyPressedMouseButtons();
         m_clickCount = clickCountForEvent(event);
+#if ENABLE(POINTER_LOCK)
+        m_movementDelta = IntPoint(event.deltaX, event.deltaY);
+#endif
 
         m_force = 0;
 #if defined(__LP64__) && __MAC_OS_X_VERSION_MAX_ALLOWED >= 101003
@@ -778,7 +788,7 @@ public:
         m_granularity = ScrollByPixelWheelEvent;
 
         BOOL continuous;
-        wkGetWheelEventDeltas(event, &m_deltaX, &m_deltaY, &continuous);
+        getWheelEventDeltas(event, m_deltaX, m_deltaY, continuous);
         if (continuous) {
             m_wheelTicksX = m_deltaX / static_cast<float>(Scrollbar::pixelsPerLineStep());
             m_wheelTicksY = m_deltaY / static_cast<float>(Scrollbar::pixelsPerLineStep());
@@ -818,10 +828,7 @@ public:
         m_key = keyForKeyEvent(event);
         m_code = codeForKeyEvent(event);
         m_windowsVirtualKeyCode = windowsKeyCodeForKeyEvent(event);
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
-        m_autoRepeat = [event type] != NSFlagsChanged && [event isARepeat];
-#pragma clang diagnostic pop
+        m_autoRepeat = [event type] != NSEventTypeFlagsChanged && [event isARepeat];
         m_isKeypad = isKeypadEvent(event);
         m_isSystemKey = false; // SystemKey is always false on the Mac.
 
@@ -854,3 +861,5 @@ PlatformKeyboardEvent PlatformEventFactory::createPlatformKeyboardEvent(NSEvent 
 }
 
 } // namespace WebCore
+
+#endif // PLATFORM(MAC)

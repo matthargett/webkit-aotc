@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2010 Google Inc. All rights reserved.
+ * Copyright (C) 2017 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -29,15 +30,16 @@
  *
  */
 
-#ifndef PingLoader_h
-#define PingLoader_h
+#pragma once
 
-#include <wtf/RefPtr.h>
+#include <wtf/Forward.h>
+#include <wtf/Ref.h>
 
 namespace WebCore {
 
 class FormData;
 class Frame;
+class HTTPHeaderMap;
 class URL;
 class ResourceRequest;
 
@@ -50,13 +52,11 @@ class PingLoader {
 public:
     static void loadImage(Frame&, const URL&);
     static void sendPing(Frame&, const URL& pingURL, const URL& destinationURL);
-    static void sendViolationReport(Frame&, const URL& reportURL, RefPtr<FormData>&& report, ViolationReportType);
+    WEBCORE_EXPORT static void sendViolationReport(Frame&, const URL& reportURL, Ref<FormData>&& report, ViolationReportType);
 
 private:
     enum class ShouldFollowRedirects { No, Yes };
-    static void startPingLoad(Frame&, ResourceRequest&, ShouldFollowRedirects);
+    static void startPingLoad(Frame&, ResourceRequest&, HTTPHeaderMap&& originalRequestHeaders, ShouldFollowRedirects);
 };
 
-}
-
-#endif
+} // namespace WebCore

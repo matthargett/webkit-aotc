@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2013 Google Inc. All rights reserved.
- * Copyright (C) 2013-2014 Apple Inc. All rights reserved.
+ * Copyright (C) 2013-2017 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -49,6 +49,7 @@ class AudioTrackList;
 class BufferSource;
 class MediaSource;
 class PlatformTimeRanges;
+class SourceBufferPrivate;
 class TextTrackList;
 class TimeRanges;
 class VideoTrackList;
@@ -64,9 +65,9 @@ public:
     ExceptionOr<void> setTimestampOffset(double);
 
 #if ENABLE(VIDEO_TRACK)
-    VideoTrackList* videoTracks();
-    AudioTrackList* audioTracks();
-    TextTrackList* textTracks();
+    VideoTrackList& videoTracks();
+    AudioTrackList& audioTracks();
+    TextTrackList& textTracks();
 #endif
 
     double appendWindowStart() const;
@@ -78,6 +79,7 @@ public:
     ExceptionOr<void> abort();
     ExceptionOr<void> remove(double start, double end);
     ExceptionOr<void> remove(const MediaTime&, const MediaTime&);
+    ExceptionOr<void> changeType(const String&);
 
     const TimeRanges& bufferedInternal() const { ASSERT(m_buffered); return *m_buffered; }
 
@@ -114,35 +116,39 @@ public:
 
     bool hasPendingActivity() const final;
 
+    void trySignalAllSamplesEnqueued();
+
 private:
     SourceBuffer(Ref<SourceBufferPrivate>&&, MediaSource*);
 
     void refEventTarget() final { ref(); }
     void derefEventTarget() final { deref(); }
 
+    void suspend(ReasonForSuspension) final;
+    void resume() final;
     void stop() final;
     const char* activeDOMObjectName() const final;
     bool canSuspendForDocumentSuspension() const final;
 
-    void sourceBufferPrivateDidReceiveInitializationSegment(SourceBufferPrivate*, const InitializationSegment&) final;
-    void sourceBufferPrivateDidReceiveSample(SourceBufferPrivate*, MediaSample&) final;
-    bool sourceBufferPrivateHasAudio(const SourceBufferPrivate*) const final;
-    bool sourceBufferPrivateHasVideo(const SourceBufferPrivate*) const final;
-    void sourceBufferPrivateDidBecomeReadyForMoreSamples(SourceBufferPrivate*, AtomicString trackID) final;
-    MediaTime sourceBufferPrivateFastSeekTimeForMediaTime(SourceBufferPrivate*, const MediaTime&, const MediaTime& negativeThreshold, const MediaTime& positiveThreshold) final;
-    void sourceBufferPrivateAppendComplete(SourceBufferPrivate*, AppendResult) final;
-    void sourceBufferPrivateDidReceiveRenderingError(SourceBufferPrivate*, int errorCode) final;
+    void sourceBufferPrivateDidReceiveInitializationSegment(const InitializationSegment&) final;
+    void sourceBufferPrivateDidReceiveSample(MediaSample&) final;
+    bool sourceBufferPrivateHasAudio() const final;
+    bool sourceBufferPrivateHasVideo() const final;
+    void sourceBufferPrivateReenqueSamples(const AtomicString& trackID) final;
+    void sourceBufferPrivateDidBecomeReadyForMoreSamples(const AtomicString& trackID) final;
+    MediaTime sourceBufferPrivateFastSeekTimeForMediaTime(const MediaTime&, const MediaTime& negativeThreshold, const MediaTime& positiveThreshold) final;
+    void sourceBufferPrivateAppendComplete(AppendResult) final;
+    void sourceBufferPrivateDidReceiveRenderingError(int errorCode) final;
 
-    void audioTrackEnabledChanged(AudioTrack*) final;
+    void audioTrackEnabledChanged(AudioTrack&) final;
+    void videoTrackSelectedChanged(VideoTrack&) final;
 
-    void videoTrackSelectedChanged(VideoTrack*) final;
-
-    void textTrackKindChanged(TextTrack*) final;
-    void textTrackModeChanged(TextTrack*) final;
-    void textTrackAddCues(TextTrack*, const TextTrackCueList*) final;
-    void textTrackRemoveCues(TextTrack*, const TextTrackCueList*) final;
-    void textTrackAddCue(TextTrack*, TextTrackCue&) final;
-    void textTrackRemoveCue(TextTrack*, TextTrackCue&) final;
+    void textTrackKindChanged(TextTrack&) final;
+    void textTrackModeChanged(TextTrack&) final;
+    void textTrackAddCues(TextTrack&, const TextTrackCueList&) final;
+    void textTrackRemoveCues(TextTrack&, const TextTrackCueList&) final;
+    void textTrackAddCue(TextTrack&, TextTrackCue&) final;
+    void textTrackRemoveCue(TextTrack&, TextTrackCue&) final;
 
     EventTargetInterface eventTargetInterface() const final { return SourceBufferEventTargetInterfaceType; }
 
@@ -157,8 +163,8 @@ private:
 
     bool validateInitializationSegment(const InitializationSegment&);
 
-    void reenqueueMediaForTime(TrackBuffer&, AtomicString trackID, const MediaTime&);
-    void provideMediaData(TrackBuffer&, AtomicString trackID);
+    void reenqueueMediaForTime(TrackBuffer&, const AtomicString& trackID, const MediaTime&);
+    void provideMediaData(TrackBuffer&, const AtomicString& trackID);
     void didDropSample();
     void evictCodedFrames(size_t newDataSize);
     size_t maximumBufferSize() const;
@@ -178,6 +184,8 @@ private:
     bool hasAudio() const;
 
     void rangeRemoval(const MediaTime&, const MediaTime&);
+
+    void trySignalAllSamplesInTrackEnqueued(const AtomicString&);
 
     friend class Internals;
     WEBCORE_EXPORT Vector<String> bufferedSamplesForTrackID(const AtomicString&);
@@ -213,7 +221,7 @@ private:
     enum AppendStateType { WaitingForSegment, ParsingInitSegment, ParsingMediaSegment };
     AppendStateType m_appendState;
 
-    double m_timeOfBufferingMonitor;
+    MonotonicTime m_timeOfBufferingMonitor;
     double m_bufferedSinceLastMonitor { 0 };
     double m_averageBufferRate { 0 };
 
@@ -228,6 +236,7 @@ private:
     bool m_active { false };
     bool m_bufferFull { false };
     bool m_shouldGenerateTimestamps { false };
+    bool m_pendingInitializationSegmentForChangeType { false };
 };
 
 } // namespace WebCore

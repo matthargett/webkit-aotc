@@ -28,10 +28,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef WebSocketFrame_h
-#define WebSocketFrame_h
-
-#if ENABLE(WEB_SOCKETS)
+#pragma once
 
 #include <wtf/text/WTFString.h>
 
@@ -75,7 +72,3 @@ struct WebSocketFrame {
 };
 
 } // namespace WebCore
-
-#endif // ENABLE(WEB_SOCKETS)
-
-#endif // WebSocketFrame_h

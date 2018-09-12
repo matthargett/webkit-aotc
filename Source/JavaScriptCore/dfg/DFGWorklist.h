@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013, 2014, 2016 Apple Inc. All rights reserved.
+ * Copyright (C) 2013-2017 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -25,8 +25,6 @@
 
 #pragma once
 
-#if ENABLE(DFG_JIT)
-
 #include "DFGPlan.h"
 #include "DFGThreadData.h"
 #include <wtf/AutomaticThread.h>
@@ -34,13 +32,14 @@
 #include <wtf/Deque.h>
 #include <wtf/HashMap.h>
 #include <wtf/Lock.h>
-#include <wtf/Noncopyable.h>
 
 namespace JSC {
 
 class SlotVisitor;
 
 namespace DFG {
+
+#if ENABLE(DFG_JIT)
 
 class Worklist : public RefCounted<Worklist> {
 public:
@@ -50,14 +49,15 @@ public:
     
     static Ref<Worklist> create(CString worklistName, unsigned numberOfThreads, int relativePriority = 0);
     
-    void enqueue(PassRefPtr<Plan>);
+    void enqueue(Ref<Plan>&&);
     
     // This is equivalent to:
     // worklist->waitUntilAllPlansForVMAreReady(vm);
     // worklist->completeAllReadyPlansForVM(vm);
     void completeAllPlansForVM(VM&);
 
-    void rememberCodeBlocks(VM&);
+    template<typename Func>
+    void iterateCodeBlocksForGC(VM&, const Func&);
 
     void waitUntilAllPlansForVMAreReady(VM&);
     State completeAllReadyPlansForVM(VM&, CompilationKey = CompilationKey());
@@ -79,10 +79,12 @@ public:
     void removeNonCompilingPlansForVM(VM&);
     
     void dump(PrintStream&) const;
+    unsigned setNumberOfThreads(unsigned, int);
     
 private:
     Worklist(CString worklistName);
     void finishCreation(unsigned numberOfThreads, int);
+    void createNewThread(const AbstractLocker&, int);
     
     class ThreadBody;
     friend class ThreadBody;
@@ -92,7 +94,7 @@ private:
     
     void removeAllReadyPlansForVM(VM&, Vector<RefPtr<Plan>, 8>&);
 
-    void dump(const LockHolder&, PrintStream&) const;
+    void dump(const AbstractLocker&, PrintStream&) const;
     
     CString m_threadName;
     
@@ -113,59 +115,39 @@ private:
     Lock m_suspensionLock;
     
     Box<Lock> m_lock;
-    RefPtr<AutomaticThreadCondition> m_planEnqueued;
+    Ref<AutomaticThreadCondition> m_planEnqueued;
     Condition m_planCompiled;
     
     Vector<std::unique_ptr<ThreadData>> m_threads;
     unsigned m_numberOfActiveThreads;
 };
 
+JS_EXPORT_PRIVATE unsigned setNumberOfDFGCompilerThreads(unsigned);
+JS_EXPORT_PRIVATE unsigned setNumberOfFTLCompilerThreads(unsigned);
+
 // For DFGMode compilations.
-Worklist& ensureGlobalDFGWorklist();
-Worklist* existingGlobalDFGWorklistOrNull();
+JS_EXPORT_PRIVATE Worklist& ensureGlobalDFGWorklist();
+JS_EXPORT_PRIVATE Worklist* existingGlobalDFGWorklistOrNull();
 
 // For FTLMode and FTLForOSREntryMode compilations.
-Worklist& ensureGlobalFTLWorklist();
-Worklist* existingGlobalFTLWorklistOrNull();
+JS_EXPORT_PRIVATE Worklist& ensureGlobalFTLWorklist();
+JS_EXPORT_PRIVATE Worklist* existingGlobalFTLWorklistOrNull();
 
 Worklist& ensureGlobalWorklistFor(CompilationMode);
 
 // Simplify doing things for all worklists.
-inline unsigned numberOfWorklists() { return 2; }
-inline Worklist& ensureWorklistForIndex(unsigned index)
-{
-    switch (index) {
-    case 0:
-        return ensureGlobalDFGWorklist();
-    case 1:
-        return ensureGlobalFTLWorklist();
-    default:
-        RELEASE_ASSERT_NOT_REACHED();
-        return ensureGlobalDFGWorklist();
-    }
-}
-inline Worklist* existingWorklistForIndexOrNull(unsigned index)
-{
-    switch (index) {
-    case 0:
-        return existingGlobalDFGWorklistOrNull();
-    case 1:
-        return existingGlobalFTLWorklistOrNull();
-    default:
-        RELEASE_ASSERT_NOT_REACHED();
-        return 0;
-    }
-}
-inline Worklist& existingWorklistForIndex(unsigned index)
-{
-    Worklist* result = existingWorklistForIndexOrNull(index);
-    RELEASE_ASSERT(result);
-    return *result;
-}
+unsigned numberOfWorklists();
+Worklist& ensureWorklistForIndex(unsigned index);
+Worklist* existingWorklistForIndexOrNull(unsigned index);
+Worklist& existingWorklistForIndex(unsigned index);
+
+#endif // ENABLE(DFG_JIT)
 
 void completeAllPlansForVM(VM&);
-void rememberCodeBlocks(VM&);
+void markCodeBlocks(VM&, SlotVisitor&);
+
+template<typename Func>
+void iterateCodeBlocksForGC(VM&, const Func&);
 
 } } // namespace JSC::DFG
 
-#endif // ENABLE(DFG_JIT)

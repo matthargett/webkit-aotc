@@ -23,8 +23,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef StorageEvent_h
-#define StorageEvent_h
+#pragma once
 
 #include "Event.h"
 #include <wtf/text/WTFString.h>
@@ -60,7 +59,7 @@ public:
     // Needed once we support init<blank>EventNS
     // void initStorageEventNS(in DOMString namespaceURI, in DOMString typeArg, in boolean canBubbleArg, in boolean cancelableArg, in DOMString keyArg, in DOMString oldValueArg, in DOMString newValueArg, in DOMString urlArg, Storage storageAreaArg);
 
-    virtual EventInterface eventInterface() const;
+    EventInterface eventInterface() const override;
 
 private:
     StorageEvent();
@@ -75,5 +74,3 @@ private:
 };
 
 } // namespace WebCore
-
-#endif // StorageEvent_h

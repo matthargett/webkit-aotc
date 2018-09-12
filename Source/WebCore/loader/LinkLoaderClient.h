@@ -28,14 +28,14 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
-#ifndef LinkLoaderClient_h
-#define LinkLoaderClient_h
+
+#pragma once
 
 namespace WebCore {
 
 class LinkLoaderClient {
 public:
-    virtual ~LinkLoaderClient() { }
+    virtual ~LinkLoaderClient() = default;
 
     virtual bool shouldLoadLink() = 0;
 
@@ -44,6 +44,4 @@ public:
     // There is no notification for cancellation.
 };
 
-}
-
-#endif
+} // namespace WebCore

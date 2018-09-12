@@ -28,10 +28,12 @@
 
 #import "CrashReporterInfo.h"
 #import "PlatformWebView.h"
+#import "StringFunctions.h"
 #import "TestInvocation.h"
 #import "TestRunnerWKWebView.h"
 #import <Foundation/Foundation.h>
 #import <WebKit/WKContextConfigurationRef.h>
+#import <WebKit/WKCookieManager.h>
 #import <WebKit/WKPreferencesRefPrivate.h>
 #import <WebKit/WKProcessPoolPrivate.h>
 #import <WebKit/WKStringCF.h>
@@ -40,7 +42,10 @@
 #import <WebKit/WKWebViewConfiguration.h>
 #import <WebKit/WKWebViewConfigurationPrivate.h>
 #import <WebKit/WKWebViewPrivate.h>
-#import <WebKit/_WKProcessPoolConfiguration.h>
+#import <WebKit/WKWebsiteDataRecordPrivate.h>
+#import <WebKit/WKWebsiteDataStorePrivate.h>
+#import <WebKit/WKWebsiteDataStoreRef.h>
+#import <WebKit/_WKApplicationManifest.h>
 #import <WebKit/_WKUserContentExtensionStore.h>
 #import <WebKit/_WKUserContentExtensionStorePrivate.h>
 #import <wtf/MainThread.h>
@@ -55,11 +60,29 @@ void initializeWebViewConfiguration(const char* libraryPath, WKStringRef injecte
     [globalWebViewConfiguration release];
     globalWebViewConfiguration = [[WKWebViewConfiguration alloc] init];
 
-    globalWebViewConfiguration.processPool = WTF::adoptNS([[WKProcessPool alloc] _initWithConfiguration:(_WKProcessPoolConfiguration *)contextConfiguration]).get();
-    globalWebViewConfiguration.websiteDataStore = (WKWebsiteDataStore *)WKContextGetWebsiteDataStore(context);
+    globalWebViewConfiguration.processPool = (__bridge WKProcessPool *)context;
+    globalWebViewConfiguration.websiteDataStore = (__bridge WKWebsiteDataStore *)WKContextGetWebsiteDataStore(context);
     globalWebViewConfiguration._allowUniversalAccessFromFileURLs = YES;
+    globalWebViewConfiguration._applePayEnabled = YES;
 
-#if TARGET_OS_IPHONE
+#if (PLATFORM(MAC) && __MAC_OS_X_VERSION_MIN_REQUIRED >= 101300) || PLATFORM(IOS)
+    WKCookieManagerSetStorageAccessAPIEnabled(WKContextGetCookieManager(context), true);
+#endif
+
+    WKWebsiteDataStore* poolWebsiteDataStore = (__bridge WKWebsiteDataStore *)WKContextGetWebsiteDataStore((__bridge WKContextRef)globalWebViewConfiguration.processPool);
+    [poolWebsiteDataStore _setCacheStoragePerOriginQuota: 400 * 1024];
+    if (libraryPath) {
+        String cacheStorageDirectory = String(libraryPath) + '/' + "CacheStorage";
+        [poolWebsiteDataStore _setCacheStorageDirectory: cacheStorageDirectory];
+
+        String serviceWorkerRegistrationDirectory = String(libraryPath) + '/' + "ServiceWorkers";
+        [poolWebsiteDataStore _setServiceWorkerRegistrationDirectory: serviceWorkerRegistrationDirectory];
+    }
+
+    [globalWebViewConfiguration.websiteDataStore _setResourceLoadStatisticsEnabled:YES];
+    [globalWebViewConfiguration.websiteDataStore _resourceLoadStatisticsSetShouldSubmitTelemetry:NO];
+
+#if PLATFORM(IOS)
     globalWebViewConfiguration.allowsInlineMediaPlayback = YES;
     globalWebViewConfiguration._inlineMediaPlaybackRequiresPlaysInlineAttribute = NO;
     globalWebViewConfiguration._invisibleAutoplayNotPermitted = NO;
@@ -68,31 +91,85 @@ void initializeWebViewConfiguration(const char* libraryPath, WKStringRef injecte
 #endif
     globalWebViewConfiguration.mediaTypesRequiringUserActionForPlayback = WKAudiovisualMediaTypeNone;
 #endif
+
+#if USE(SYSTEM_PREVIEW)
+    globalWebViewConfiguration._systemPreviewEnabled = YES;
+#endif
+}
+
+void TestController::cocoaPlatformInitialize()
+{
+    const char* dumpRenderTreeTemp = libraryPathForTesting();
+    if (!dumpRenderTreeTemp)
+        return;
+
+    String resourceLoadStatisticsFolder = String(dumpRenderTreeTemp) + '/' + "ResourceLoadStatistics";
+    [[NSFileManager defaultManager] createDirectoryAtPath:resourceLoadStatisticsFolder withIntermediateDirectories:YES attributes:nil error: nil];
+    String fullBrowsingSessionResourceLog = resourceLoadStatisticsFolder + '/' + "full_browsing_session_resourceLog.plist";
+    NSDictionary *resourceLogPlist = [[NSDictionary alloc] initWithObjectsAndKeys: [NSNumber numberWithInt:1], @"version", nil];
+    if (![resourceLogPlist writeToFile:fullBrowsingSessionResourceLog atomically:YES])
+        WTFCrash();
+    [resourceLogPlist release];
+}
+
+WKContextRef TestController::platformContext()
+{
+#if WK_API_ENABLED
+    return (__bridge WKContextRef)globalWebViewConfiguration.processPool;
+#else
+    return nullptr;
+#endif
 }
 
 WKPreferencesRef TestController::platformPreferences()
 {
 #if WK_API_ENABLED
-    return (WKPreferencesRef)globalWebViewConfiguration.preferences;
+    return (__bridge WKPreferencesRef)globalWebViewConfiguration.preferences;
 #else
     return nullptr;
 #endif
+}
+
+void TestController::platformAddTestOptions(TestOptions& options) const
+{
+    if ([[NSUserDefaults standardUserDefaults] boolForKey:@"EnableProcessSwapOnNavigation"])
+        options.enableProcessSwapOnNavigation = true;
+    if ([[NSUserDefaults standardUserDefaults] boolForKey:@"EnableProcessSwapOnWindowOpen"])
+        options.enableProcessSwapOnWindowOpen = true;
 }
 
 void TestController::platformCreateWebView(WKPageConfigurationRef, const TestOptions& options)
 {
 #if WK_API_ENABLED
     RetainPtr<WKWebViewConfiguration> copiedConfiguration = adoptNS([globalWebViewConfiguration copy]);
-#if TARGET_OS_IPHONE
+
+#if PLATFORM(IOS)
     if (options.useDataDetection)
         [copiedConfiguration setDataDetectorTypes:WKDataDetectorTypeAll];
     if (options.ignoresViewportScaleLimits)
         [copiedConfiguration setIgnoresViewportScaleLimits:YES];
     if (options.useCharacterSelectionGranularity)
         [copiedConfiguration setSelectionGranularity:WKSelectionGranularityCharacter];
+    if (options.useCharacterSelectionGranularity)
+        [copiedConfiguration setSelectionGranularity:WKSelectionGranularityCharacter];
 #endif
 
+    if (options.enableAttachmentElement)
+        [copiedConfiguration _setAttachmentElementEnabled: YES];
+
+    if (options.enableColorFilter)
+        [copiedConfiguration _setColorFilterEnabled: YES];
+
+    if (options.applicationManifest.length()) {
+        auto manifestPath = [NSString stringWithUTF8String:options.applicationManifest.c_str()];
+        NSString *text = [NSString stringWithContentsOfFile:manifestPath usedEncoding:nullptr error:nullptr];
+        [copiedConfiguration _setApplicationManifest:[_WKApplicationManifest applicationManifestFromJSON:text manifestURL:nil documentURL:nil]];
+    }
+
     m_mainWebView = std::make_unique<PlatformWebView>(copiedConfiguration.get(), options);
+
+    if (options.punchOutWhiteBackgroundsInDarkMode)
+        m_mainWebView->setDrawsBackground(false);
 #else
     m_mainWebView = std::make_unique<PlatformWebView>(globalWebViewConfiguration, options);
 #endif
@@ -113,15 +190,15 @@ WKContextRef TestController::platformAdjustContext(WKContextRef context, WKConte
 {
 #if WK_API_ENABLED
     initializeWebViewConfiguration(libraryPathForTesting(), injectedBundlePath(), context, contextConfiguration);
-    return (WKContextRef)globalWebViewConfiguration.processPool;
+    return (__bridge WKContextRef)globalWebViewConfiguration.processPool;
 #else
     return nullptr;
 #endif
 }
 
-void TestController::platformRunUntil(bool& done, double timeout)
+void TestController::platformRunUntil(bool& done, WTF::Seconds timeout)
 {
-    NSDate *endDate = (timeout > 0) ? [NSDate dateWithTimeIntervalSinceNow:timeout] : [NSDate distantFuture];
+    NSDate *endDate = (timeout > 0_s) ? [NSDate dateWithTimeIntervalSinceNow:timeout.seconds()] : [NSDate distantFuture];
 
     while (!done && [endDate compare:[NSDate date]] == NSOrderedDescending)
         [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode beforeDate:endDate];
@@ -134,7 +211,7 @@ void TestController::cocoaResetStateToConsistentValues()
     [[_WKUserContentExtensionStore defaultStore] removeContentExtensionForIdentifier:@"TestContentExtensions" completionHandler:^(NSError *error) {
         doneRemoving = true;
     }];
-    platformRunUntil(doneRemoving, 0);
+    platformRunUntil(doneRemoving, noTimeout);
     [[_WKUserContentExtensionStore defaultStore] _removeAllContentExtensions];
 
     if (PlatformWebView* webView = mainWebView())
@@ -176,6 +253,42 @@ unsigned TestController::imageCountInGeneralPasteboard() const
         return 0;
     
     return imagesArray.count;
+}
+
+void TestController::removeAllSessionCredentials()
+{
+#if WK_API_ENABLED
+    auto types = adoptNS([[NSSet alloc] initWithObjects:_WKWebsiteDataTypeCredentials, nil]);
+    [globalWebViewConfiguration.websiteDataStore removeDataOfTypes:types.get() modifiedSince:[NSDate distantPast] completionHandler:^() {
+        m_currentInvocation->didRemoveAllSessionCredentials();
+    }];
+#endif
+}
+
+void TestController::getAllStorageAccessEntries()
+{
+#if WK_API_ENABLED
+    auto* parentView = mainWebView();
+    if (!parentView)
+        return;
+
+    [globalWebViewConfiguration.websiteDataStore _getAllStorageAccessEntriesFor:parentView->platformView() completionHandler:^(NSArray<NSString *> *nsDomains) {
+        Vector<String> domains;
+        domains.reserveInitialCapacity(nsDomains.count);
+        for (NSString *domain : nsDomains)
+            domains.uncheckedAppend(domain);
+        m_currentInvocation->didReceiveAllStorageAccessEntries(domains);
+    }];
+#endif
+}
+
+void TestController::injectUserScript(WKStringRef script)
+{
+#if WK_API_ENABLED
+    auto userScript = adoptNS([[WKUserScript alloc] initWithSource: toWTFString(script) injectionTime:WKUserScriptInjectionTimeAtDocumentStart forMainFrameOnly:NO]);
+
+    [[globalWebViewConfiguration userContentController] addUserScript: userScript.get()];
+#endif
 }
 
 } // namespace WTR

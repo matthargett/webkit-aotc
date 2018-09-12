@@ -120,7 +120,7 @@ void serializeIdentifier(const String& identifier, StringBuilder& appendTo, bool
 
 void serializeString(const String& string, StringBuilder& appendTo)
 {
-    appendTo.append('\"');
+    appendTo.append('"');
 
     unsigned index = 0;
     while (index < string.length()) {
@@ -135,7 +135,7 @@ void serializeString(const String& string, StringBuilder& appendTo)
             appendTo.append(c);
     }
 
-    appendTo.append('\"');
+    appendTo.append('"');
 }
 
 String serializeString(const String& string)
@@ -145,11 +145,21 @@ String serializeString(const String& string)
     return builder.toString();
 }
 
-String serializeURI(const String& string)
+String serializeURL(const String& string)
 {
     return "url(" + serializeString(string) + ")";
 }
 
+String serializeAsStringOrCustomIdent(const String& string)
+{
+    if (isCSSTokenizerIdentifier(string)) {
+        StringBuilder builder;
+        serializeIdentifier(string, builder);
+        return builder.toString();
+    }
+    return serializeString(string);
+}
+    
 String serializeFontFamily(const String& string)
 {
     return isCSSTokenizerIdentifier(string) ? string : serializeString(string);

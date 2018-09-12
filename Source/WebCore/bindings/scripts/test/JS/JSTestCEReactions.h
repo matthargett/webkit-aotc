@@ -36,9 +36,9 @@ public:
         return ptr;
     }
 
-    static JSC::JSObject* createPrototype(JSC::VM&, JSC::JSGlobalObject*);
-    static JSC::JSObject* prototype(JSC::VM&, JSC::JSGlobalObject*);
-    static TestCEReactions* toWrapped(JSC::JSValue);
+    static JSC::JSObject* createPrototype(JSC::VM&, JSDOMGlobalObject&);
+    static JSC::JSObject* prototype(JSC::VM&, JSDOMGlobalObject&);
+    static TestCEReactions* toWrapped(JSC::VM&, JSC::JSValue);
     static void destroy(JSC::JSCell*);
 
     DECLARE_INFO;
@@ -49,20 +49,16 @@ public:
     }
 
     static JSC::JSValue getConstructor(JSC::VM&, const JSC::JSGlobalObject*);
+    static void heapSnapshot(JSCell*, JSC::HeapSnapshotBuilder&);
 protected:
     JSTestCEReactions(JSC::Structure*, JSDOMGlobalObject&, Ref<TestCEReactions>&&);
 
-    void finishCreation(JSC::VM& vm)
-    {
-        Base::finishCreation(vm);
-        ASSERT(inherits(info()));
-    }
-
+    void finishCreation(JSC::VM&);
 };
 
 class JSTestCEReactionsOwner : public JSC::WeakHandleOwner {
 public:
-    virtual bool isReachableFromOpaqueRoots(JSC::Handle<JSC::Unknown>, void* context, JSC::SlotVisitor&);
+    virtual bool isReachableFromOpaqueRoots(JSC::Handle<JSC::Unknown>, void* context, JSC::SlotVisitor&, const char**);
     virtual void finalize(JSC::Handle<JSC::Unknown>, void* context);
 };
 

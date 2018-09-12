@@ -27,15 +27,16 @@
 #include "VisibleSelection.h"
 
 #include "Document.h"
+#include "Editing.h"
 #include "Element.h"
 #include "HTMLInputElement.h"
 #include "TextIterator.h"
 #include "VisibleUnits.h"
-#include "htmlediting.h"
 #include <stdio.h>
 #include <wtf/Assertions.h>
 #include <wtf/text/CString.h>
 #include <wtf/text/StringBuilder.h>
+#include <wtf/text/TextStream.h>
 #include <wtf/unicode/CharacterNames.h>
 
 namespace WebCore {
@@ -199,30 +200,26 @@ bool VisibleSelection::expandUsingGranularity(TextGranularity granularity)
     return true;
 }
 
-static RefPtr<Range> makeSearchRange(const Position& pos)
+static RefPtr<Range> makeSearchRange(const Position& position)
 {
-    Node* n = pos.deprecatedNode();
-    if (!n)
+    auto* node = position.deprecatedNode();
+    if (!node)
         return nullptr;
-    Node* de = n->document().documentElement();
-    if (!de)
-        return nullptr;
-    Element* boundary = deprecatedEnclosingBlockFlowElement(n);
+    auto* boundary = deprecatedEnclosingBlockFlowElement(node);
     if (!boundary)
         return nullptr;
 
-    RefPtr<Range> searchRange(Range::create(n->document()));
-    ExceptionCode ec = 0;
+    auto searchRange = Range::create(node->document());
 
-    Position start(pos.parentAnchoredEquivalent());
-    searchRange->selectNodeContents(*boundary, ec);
-    searchRange->setStart(*start.containerNode(), start.offsetInContainerNode(), ec);
-
-    ASSERT(!ec);
-    if (ec)
+    auto result = searchRange->selectNodeContents(*boundary);
+    if (result.hasException())
+        return nullptr;
+    Position start { position.parentAnchoredEquivalent() };
+    result = searchRange->setStart(*start.containerNode(), start.offsetInContainerNode());
+    if (result.hasException())
         return nullptr;
 
-    return searchRange;
+    return WTFMove(searchRange);
 }
 
 bool VisibleSelection::isAll(EditingBoundaryCrossingRule rule) const
@@ -289,7 +286,7 @@ void VisibleSelection::setStartAndEndFromBaseAndExtentRespectingGranularity(Text
             // General case: Select the word the caret is positioned inside of, or at the start of (RightWordIfOnBoundary).
             // Edge case: If the caret is after the last word in a soft-wrapped line or the last word in
             // the document, select that last word (LeftWordIfOnBoundary).
-            // Edge case: If the caret is after the last word in a paragraph, select from the the end of the
+            // Edge case: If the caret is after the last word in a paragraph, select from the end of the
             // last word to the line break (also RightWordIfOnBoundary);
             VisiblePosition start = VisiblePosition(m_start, m_affinity);
             VisiblePosition originalEnd(m_end, m_affinity);
@@ -471,13 +468,13 @@ void VisibleSelection::setWithoutValidation(const Position& base, const Position
     m_selectionType = base == extent ? CaretSelection : RangeSelection;
 }
 
-static Position adjustPositionForEnd(const Position& currentPosition, Node* startContainerNode)
+Position VisibleSelection::adjustPositionForEnd(const Position& currentPosition, Node* startContainerNode)
 {
     TreeScope& treeScope = startContainerNode->treeScope();
 
     ASSERT(&currentPosition.containerNode()->treeScope() != &treeScope);
 
-    if (Node* ancestor = treeScope.ancestorInThisScope(currentPosition.containerNode())) {
+    if (Node* ancestor = treeScope.ancestorNodeInThisScope(currentPosition.containerNode())) {
         if (ancestor->contains(startContainerNode))
             return positionAfterNode(ancestor);
         return positionBeforeNode(ancestor);
@@ -489,13 +486,13 @@ static Position adjustPositionForEnd(const Position& currentPosition, Node* star
     return Position();
 }
 
-static Position adjustPositionForStart(const Position& currentPosition, Node* endContainerNode)
+Position VisibleSelection::adjustPositionForStart(const Position& currentPosition, Node* endContainerNode)
 {
     TreeScope& treeScope = endContainerNode->treeScope();
 
     ASSERT(&currentPosition.containerNode()->treeScope() != &treeScope);
     
-    if (Node* ancestor = treeScope.ancestorInThisScope(currentPosition.containerNode())) {
+    if (Node* ancestor = treeScope.ancestorNodeInThisScope(currentPosition.containerNode())) {
         if (ancestor->contains(endContainerNode))
             return positionBeforeNode(ancestor);
         return positionAfterNode(ancestor);
@@ -722,6 +719,19 @@ void VisibleSelection::showTreeForThis() const
         fputs("end: ", stderr);
         end().showAnchorTypeAndOffset();
     }
+}
+    
+TextStream& operator<<(TextStream& stream, const VisibleSelection& v)
+{
+    TextStream::GroupScope scope(stream);
+    stream << "VisibleSelection " << &v;
+    
+    stream.dumpProperty("base", v.base());
+    stream.dumpProperty("extent", v.extent());
+    stream.dumpProperty("start", v.start());
+    stream.dumpProperty("end", v.end());
+    
+    return stream;
 }
 
 #endif

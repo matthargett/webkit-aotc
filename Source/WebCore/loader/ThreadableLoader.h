@@ -28,8 +28,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef ThreadableLoader_h
-#define ThreadableLoader_h
+#pragma once
 
 #include "ResourceLoaderOptions.h"
 #include <wtf/Noncopyable.h>
@@ -42,14 +41,7 @@ namespace WebCore {
     class ResourceRequest;
     class ResourceResponse;
     class ScriptExecutionContext;
-    class SecurityOrigin;
     class ThreadableLoaderClient;
-
-    enum PreflightPolicy {
-        ConsiderPreflight,
-        ForcePreflight,
-        PreventPreflight
-    };
 
     enum class ContentSecurityPolicyEnforcement {
         DoNotEnforce,
@@ -58,20 +50,22 @@ namespace WebCore {
         EnforceScriptSrcDirective,
     };
 
-    enum class OpaqueResponseBodyPolicy {
-        Receive,
-        DoNotReceive
+    enum class ResponseFilteringPolicy {
+        Enable,
+        Disable,
     };
 
     struct ThreadableLoaderOptions : ResourceLoaderOptions {
         ThreadableLoaderOptions();
-        ThreadableLoaderOptions(const ResourceLoaderOptions&, PreflightPolicy, ContentSecurityPolicyEnforcement, String&& initiator, OpaqueResponseBodyPolicy);
+        explicit ThreadableLoaderOptions(FetchOptions&&);
+        ThreadableLoaderOptions(const ResourceLoaderOptions&, ContentSecurityPolicyEnforcement, String&& initiator, ResponseFilteringPolicy);
         ~ThreadableLoaderOptions();
 
-        PreflightPolicy preflightPolicy { ConsiderPreflight };
+        ThreadableLoaderOptions isolatedCopy() const;
+
         ContentSecurityPolicyEnforcement contentSecurityPolicyEnforcement { ContentSecurityPolicyEnforcement::EnforceConnectSrcDirective };
         String initiator; // This cannot be an AtomicString, as isolatedCopy() wouldn't create an object that's safe for passing to another thread.
-        OpaqueResponseBodyPolicy opaqueResponse { OpaqueResponseBodyPolicy::Receive };
+        ResponseFilteringPolicy filteringPolicy { ResponseFilteringPolicy::Disable };
     };
 
     // Useful for doing loader operations from any thread (not threadsafe,
@@ -86,13 +80,13 @@ namespace WebCore {
         void ref() { refThreadableLoader(); }
         void deref() { derefThreadableLoader(); }
 
+        static void logError(ScriptExecutionContext&, const ResourceError&, const String&);
+
     protected:
-        ThreadableLoader() { }
-        virtual ~ThreadableLoader() { }
+        ThreadableLoader() = default;
+        virtual ~ThreadableLoader() = default;
         virtual void refThreadableLoader() = 0;
         virtual void derefThreadableLoader() = 0;
     };
 
 } // namespace WebCore
-
-#endif // ThreadableLoader_h

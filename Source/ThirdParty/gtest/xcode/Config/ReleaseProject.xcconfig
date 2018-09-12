@@ -5,7 +5,7 @@
 //  and examples. It is set in the "Based On:" dropdown in the "Project" info
 //  dialog.
 //  This file is based on the Xcode Configuration files in:
-//  http://code.google.com/p/google-toolbox-for-mac/
+//  https://github.com/google/google-toolbox-for-mac
 // 
 
 #include "General.xcconfig"
@@ -31,12 +31,8 @@ OTHER_CFLAGS = $(OTHER_CFLAGS) -DNDEBUG=1 -Wno-unused-variable
 // When we strip we want to strip all symbols in release, but save externals.
 STRIP_STYLE = all
 
-// Used by HEADER_SEARCH_PATHS in General.xcconfig
-WEBCORE_PRIVATE_HEADERS_DIR = $(BUILT_PRODUCTS_DIR)/WebCore.framework/PrivateHeaders;
-
 ONLY_ACTIVE_ARCH = YES
 
-SDKROOT[sdk=iphone*] = $(SDKROOT);
-SDKROOT = $(SDKROOT_$(PLATFORM_NAME)_$(USE_INTERNAL_SDK));
-SDKROOT_macosx_ = macosx;
-SDKROOT_macosx_YES = macosx.internal;
+SDKROOT = $(SDKROOT_$(USE_INTERNAL_SDK));
+SDKROOT_ = macosx;
+SDKROOT_YES = macosx.internal;

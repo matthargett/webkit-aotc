@@ -23,15 +23,15 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-WebInspector.TargetManager = class TargetManager extends WebInspector.Object
+WI.TargetManager = class TargetManager extends WI.Object
 {
     constructor()
     {
         super();
 
-        console.assert(WebInspector.mainTarget);
+        console.assert(WI.mainTarget);
 
-        this._targets = new Set([WebInspector.mainTarget]);
+        this._targets = new Set([WI.mainTarget]);
     }
 
     // Public
@@ -41,22 +41,38 @@ WebInspector.TargetManager = class TargetManager extends WebInspector.Object
         return this._targets;
     }
 
+    targetForIdentifier(targetId)
+    {
+        if (!targetId)
+            return null;
+
+        if (targetId === WI.mainTarget.identifier)
+            return WI.mainTarget;
+
+        for (let target of this._targets) {
+            if (target.identifier === targetId)
+                return target;
+        }
+
+        return null;
+    }
+
     addTarget(target)
     {
         this._targets.add(target);
 
-        this.dispatchEventToListeners(WebInspector.TargetManager.Event.TargetAdded, {target});
+        this.dispatchEventToListeners(WI.TargetManager.Event.TargetAdded, {target});
     }
 
     removeTarget(target)
     {
         this._targets.delete(target);
 
-        this.dispatchEventToListeners(WebInspector.TargetManager.Event.TargetRemoved, {target});
+        this.dispatchEventToListeners(WI.TargetManager.Event.TargetRemoved, {target});
     }
 };
 
-WebInspector.TargetManager.Event = {
+WI.TargetManager.Event = {
     TargetAdded: Symbol("target-manager-target-added"),
     TargetRemoved: Symbol("target-manager-target-removed"),
 };

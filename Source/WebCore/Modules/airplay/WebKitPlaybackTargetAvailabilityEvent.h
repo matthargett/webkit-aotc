@@ -23,8 +23,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef WebKitPlaybackTargetAvailabilityEvent_h
-#define WebKitPlaybackTargetAvailabilityEvent_h
+#pragma once
 
 #if ENABLE(WIRELESS_PLAYBACK_TARGET)
 
@@ -34,7 +33,6 @@ namespace WebCore {
 
 class WebKitPlaybackTargetAvailabilityEvent : public Event {
 public:
-    ~WebKitPlaybackTargetAvailabilityEvent() { }
 
     static Ref<WebKitPlaybackTargetAvailabilityEvent> create(const AtomicString& eventType, bool available)
     {
@@ -64,5 +62,3 @@ private:
 } // namespace WebCore
 
 #endif // ENABLE(WIRELESS_PLAYBACK_TARGET)
-
-#endif // WebKitPlaybackTargetAvailabilityEvent_h

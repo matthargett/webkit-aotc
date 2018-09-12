@@ -23,16 +23,16 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "config.h"
-#include "RenderThemeCocoa.h"
+#import "config.h"
+#import "RenderThemeCocoa.h"
+
+#import "GraphicsContextCG.h"
+#import "RenderText.h"
 
 #if ENABLE(APPLE_PAY)
 
-#include "PassKitSPI.h"
-#include "RenderElement.h"
-#include "RenderStyle.h"
-#include "SoftLinking.h"
-#include "TranslateTransformOperation.h"
+#import <pal/spi/cocoa/PassKitSPI.h>
+#import <wtf/SoftLinking.h>
 
 #if PLATFORM(MAC)
 SOFT_LINK_PRIVATE_FRAMEWORK(PassKit);
@@ -42,7 +42,43 @@ SOFT_LINK_FRAMEWORK(PassKit);
 
 SOFT_LINK_MAY_FAIL(PassKit, PKDrawApplePayButton, void, (CGContextRef context, CGRect drawRect, CGFloat scale, PKPaymentButtonType type, PKPaymentButtonStyle style, NSString *languageCode), (context, drawRect, scale, type, style, languageCode));
 
+#endif // ENABLE(APPLE_PAY)
+
+#if ENABLE(VIDEO)
+#import "LocalizedStrings.h"
+#import <wtf/BlockObjCExceptions.h>
+#endif
+
 namespace WebCore {
+
+void RenderThemeCocoa::drawLineForDocumentMarker(const RenderText& renderer, GraphicsContext& context, const FloatPoint& origin, float width, DocumentMarkerLineStyle style)
+{
+    if (context.paintingDisabled())
+        return;
+
+    auto circleColor = colorForMarkerLineStyle(style, renderer.page().useSystemAppearance() && renderer.page().useDarkAppearance());
+
+    // Center the underline and ensure we only draw entire dots.
+    FloatPoint offsetPoint = origin;
+    float widthMod = fmodf(width, cMisspellingLinePatternWidth);
+    if (cMisspellingLinePatternWidth - widthMod > cMisspellingLinePatternGapWidth) {
+        float gapIncludeWidth = 0;
+        if (width > cMisspellingLinePatternWidth)
+            gapIncludeWidth = cMisspellingLinePatternGapWidth;
+        offsetPoint.move(floor((widthMod + gapIncludeWidth) / 2), 0);
+        width -= widthMod;
+    }
+
+    CGContextRef platformContext = context.platformContext();
+    CGContextStateSaver stateSaver { platformContext };
+    CGContextSetFillColorWithColor(platformContext, circleColor);
+    for (int x = 0; x < width; x += cMisspellingLinePatternWidth)
+        CGContextAddEllipseInRect(platformContext, CGRectMake(offsetPoint.x() + x, offsetPoint.y(), cMisspellingLineThickness, cMisspellingLineThickness));
+    CGContextSetCompositeOperation(platformContext, kCGCompositeSover);
+    CGContextFillPath(platformContext);
+}
+
+#if ENABLE(APPLE_PAY)
 
 static const auto applePayButtonMinimumWidth = 140;
 static const auto applePayButtonPlainMinimumWidth = 100;
@@ -78,6 +114,18 @@ static PKPaymentButtonType toPKPaymentButtonType(ApplePayButtonType type)
         return PKPaymentButtonTypeBuy;
     case ApplePayButtonType::SetUp:
         return PKPaymentButtonTypeSetUp;
+    case ApplePayButtonType::InStore:
+        return PKPaymentButtonTypeInStore;
+    case ApplePayButtonType::Donate:
+        return PKPaymentButtonTypeDonate;
+#if ENABLE(APPLE_PAY_SESSION_V4)
+    case ApplePayButtonType::CheckOut:
+        return PKPaymentButtonTypeCheckout;
+    case ApplePayButtonType::Book:
+        return PKPaymentButtonTypeBook;
+    case ApplePayButtonType::Subscribe:
+        return PKPaymentButtonTypeSubscribe;
+#endif
     }
 }
 
@@ -96,6 +144,31 @@ bool RenderThemeCocoa::paintApplePayButton(const RenderObject& renderer, const P
     return false;
 }
 
+#endif // ENABLE(APPLE_PAY)
+
+#if ENABLE(VIDEO)
+
+String RenderThemeCocoa::mediaControlsFormattedStringForDuration(const double durationInSeconds)
+{
+#if ENABLE(MEDIA_CONTROLS_SCRIPT)
+    if (!std::isfinite(durationInSeconds))
+        return WEB_UI_STRING("indefinite time", "accessibility help text for an indefinite media controller time value");
+
+    BEGIN_BLOCK_OBJC_EXCEPTIONS;
+    if (!m_durationFormatter) {
+        m_durationFormatter = adoptNS([NSDateComponentsFormatter new]);
+        m_durationFormatter.get().unitsStyle = NSDateComponentsFormatterUnitsStyleFull;
+        m_durationFormatter.get().allowedUnits = NSCalendarUnitHour | NSCalendarUnitMinute | NSCalendarUnitSecond;
+        m_durationFormatter.get().formattingContext = NSFormattingContextStandalone;
+        m_durationFormatter.get().maximumUnitCount = 2;
+    }
+    return [m_durationFormatter.get() stringFromTimeInterval:durationInSeconds];
+    END_BLOCK_OBJC_EXCEPTIONS;
+#else
+    return emptyString();
+#endif
 }
 
-#endif
+#endif // ENABLE(VIDEO)
+
+}

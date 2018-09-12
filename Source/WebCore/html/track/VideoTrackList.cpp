@@ -29,19 +29,16 @@
 
 #include "VideoTrackList.h"
 
-#include "EventNames.h"
 #include "VideoTrack.h"
 
-using namespace WebCore;
+namespace WebCore {
 
 VideoTrackList::VideoTrackList(HTMLMediaElement* element, ScriptExecutionContext* context)
     : TrackListBase(element, context)
 {
 }
 
-VideoTrackList::~VideoTrackList()
-{
-}
+VideoTrackList::~VideoTrackList() = default;
 
 void VideoTrackList::append(Ref<VideoTrack>&& track)
 {
@@ -97,4 +94,10 @@ EventTargetInterface VideoTrackList::eventTargetInterface() const
     return VideoTrackListEventTargetInterfaceType;
 }
 
+const char* VideoTrackList::activeDOMObjectName() const
+{
+    return "VideoTrackList";
+}
+
+} // namespace WebCore
 #endif

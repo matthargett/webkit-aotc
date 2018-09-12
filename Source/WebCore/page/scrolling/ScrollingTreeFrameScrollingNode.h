@@ -39,7 +39,7 @@ class ScrollingTreeFrameScrollingNode : public ScrollingTreeScrollingNode {
 public:
     virtual ~ScrollingTreeFrameScrollingNode();
 
-    void updateBeforeChildren(const ScrollingStateNode&) override;
+    void commitStateBeforeChildren(const ScrollingStateNode&) override;
     
     // FIXME: We should implement this when we support ScrollingTreeScrollingNodes as children.
     void updateLayersAfterAncestorChange(const ScrollingTreeNode& /*changedNode*/, const FloatRect& /*fixedPositionRect*/, const FloatSize& /*cumulativeDelta*/) override { }
@@ -56,9 +56,12 @@ public:
     bool fixedElementsLayoutRelativeToFrame() const { return m_fixedElementsLayoutRelativeToFrame; }
 
     FloatSize viewToContentsOffset(const FloatPoint& scrollPosition) const;
+    FloatRect layoutViewportForScrollPosition(const FloatPoint& visibleContentOrigin, float scale) const;
+
+    FloatRect fixedPositionRect() { return FloatRect(lastCommittedScrollPosition(), scrollableAreaSize()); };
 
 protected:
-    ScrollingTreeFrameScrollingNode(ScrollingTree&, ScrollingNodeID);
+    ScrollingTreeFrameScrollingNode(ScrollingTree&, ScrollingNodeType, ScrollingNodeID);
 
     void scrollBy(const FloatSize&);
     void scrollByWithoutContentEdgeConstraints(const FloatSize&);
@@ -67,10 +70,22 @@ protected:
     int headerHeight() const { return m_headerHeight; }
     int footerHeight() const { return m_footerHeight; }
     float topContentInset() const { return m_topContentInset; }
-    
+
+    FloatRect layoutViewport() const { return m_layoutViewport; };
+    void setLayoutViewport(const FloatRect& r) { m_layoutViewport = r; };
+
+    FloatPoint minLayoutViewportOrigin() const { return m_minLayoutViewportOrigin; }
+    FloatPoint maxLayoutViewportOrigin() const { return m_maxLayoutViewportOrigin; }
+
     ScrollBehaviorForFixedElements scrollBehaviorForFixedElements() const { return m_behaviorForFixed; }
-    
+
 private:
+    void dumpProperties(WTF::TextStream&, ScrollingStateTreeAsTextBehavior) const override;
+
+    FloatRect m_layoutViewport;
+    FloatPoint m_minLayoutViewportOrigin;
+    FloatPoint m_maxLayoutViewportOrigin;
+    
     float m_frameScaleFactor { 1 };
     float m_topContentInset { 0 };
 

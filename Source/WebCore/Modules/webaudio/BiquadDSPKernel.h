@@ -22,8 +22,7 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef BiquadDSPKernel_h
-#define BiquadDSPKernel_h
+#pragma once
 
 #include "AudioDSPKernel.h"
 #include "Biquad.h"
@@ -35,7 +34,7 @@ class BiquadProcessor;
 
 // BiquadDSPKernel is an AudioDSPKernel and is responsible for filtering one channel of a BiquadProcessor using a Biquad object.
 
-class BiquadDSPKernel : public AudioDSPKernel {
+class BiquadDSPKernel final : public AudioDSPKernel {
 public:  
     explicit BiquadDSPKernel(BiquadProcessor* processor)
     : AudioDSPKernel(processor)
@@ -71,5 +70,3 @@ protected:
 };
 
 } // namespace WebCore
-
-#endif // BiquadDSPKernel_h

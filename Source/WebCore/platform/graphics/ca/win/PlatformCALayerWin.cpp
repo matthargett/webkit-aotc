@@ -37,24 +37,22 @@
 #include "PlatformCALayerWinInternal.h"
 #include "TextRun.h"
 #include "TileController.h"
-#include "WebCoreHeaderDetection.h"
 #include "WebTiledBackingLayerWin.h"
 #include <QuartzCore/CoreAnimationCF.h>
 #include <WebKitSystemInterface/WebKitSystemInterface.h>
-#include <wtf/CurrentTime.h>
 #include <wtf/text/CString.h>
 #include <wtf/text/StringBuilder.h>
 
 using namespace WebCore;
 
-PassRefPtr<PlatformCALayer> PlatformCALayerWin::create(LayerType layerType, PlatformCALayerClient* owner)
+Ref<PlatformCALayer> PlatformCALayerWin::create(LayerType layerType, PlatformCALayerClient* owner)
 {
-    return adoptRef(new PlatformCALayerWin(layerType, nullptr, owner));
+    return adoptRef(*new PlatformCALayerWin(layerType, nullptr, owner));
 }
 
-PassRefPtr<PlatformCALayer> PlatformCALayerWin::create(PlatformLayer* platformLayer, PlatformCALayerClient* owner)
+Ref<PlatformCALayer> PlatformCALayerWin::create(PlatformLayer* platformLayer, PlatformCALayerClient* owner)
 {
-    return adoptRef(new PlatformCALayerWin(LayerTypeCustom, platformLayer, owner));
+    return adoptRef(*new PlatformCALayerWin(LayerTypeCustom, platformLayer, owner));
 }
 
 static CFStringRef toCACFLayerType(PlatformCALayer::LayerType type)
@@ -109,7 +107,7 @@ PlatformCALayer::RepaintRectList PlatformCALayer::collectRectsToPaint(CGContextR
     return dirtyRects;
 }
 
-void PlatformCALayer::drawLayerContents(CGContextRef context, WebCore::PlatformCALayer* platformCALayer, RepaintRectList&)
+void PlatformCALayer::drawLayerContents(CGContextRef context, WebCore::PlatformCALayer* platformCALayer, RepaintRectList&, GraphicsLayerPaintBehavior)
 {
     intern(platformCALayer)->displayCallback(platformCALayer->platformLayer(), context);
 }
@@ -134,7 +132,6 @@ static void layoutSublayersProc(CACFLayerRef caLayer)
 
 PlatformCALayerWin::PlatformCALayerWin(LayerType layerType, PlatformLayer* layer, PlatformCALayerClient* owner)
     : PlatformCALayer(layer ? LayerTypeCustom : layerType, owner)
-    , m_customAppearance(GraphicsLayer::NoCustomAppearance)
 {
     if (layer) {
         m_layer = layer;
@@ -181,11 +178,11 @@ PlatformCALayerWin::~PlatformCALayerWin()
     delete layerIntern;
 }
 
-PassRefPtr<PlatformCALayer> PlatformCALayerWin::clone(PlatformCALayerClient* owner) const
+Ref<PlatformCALayer> PlatformCALayerWin::clone(PlatformCALayerClient* owner) const
 {
     PlatformCALayer::LayerType type = (layerType() == PlatformCALayer::LayerTypeTransformLayer) ?
         PlatformCALayer::LayerTypeTransformLayer : PlatformCALayer::LayerTypeLayer;
-    RefPtr<PlatformCALayer> newLayer = PlatformCALayerWin::create(type, owner);
+    auto newLayer = PlatformCALayerWin::create(type, owner);
 
     newLayer->setPosition(position());
     newLayer->setBounds(bounds());
@@ -209,7 +206,7 @@ PlatformCALayer* PlatformCALayerWin::rootLayer() const
     return host ? host->rootLayer() : nullptr;
 }
 
-void PlatformCALayerWin::animationStarted(const String& animationKey, CFTimeInterval beginTime)
+void PlatformCALayerWin::animationStarted(const String& animationKey, MonotonicTime beginTime)
 {
     // Update start time for any animation not yet started
     CFTimeInterval cacfBeginTime = currentTimeToMediaTime(beginTime);
@@ -336,7 +333,7 @@ void PlatformCALayerWin::addAnimationForKey(const String& key, PlatformCAAnimati
     // Tell the host about it so we can fire the start animation event
     AbstractCACFLayerTreeHost* host = layerTreeHostForLayer(this);
     if (host)
-        host->addPendingAnimatedLayer(this);
+        host->addPendingAnimatedLayer(*this);
 }
 
 void PlatformCALayerWin::removeAnimationForKey(const String& key)
@@ -353,7 +350,7 @@ void PlatformCALayerWin::removeAnimationForKey(const String& key)
     setNeedsCommit();
 }
 
-PassRefPtr<PlatformCAAnimation> PlatformCALayerWin::animationForKey(const String& key)
+RefPtr<PlatformCAAnimation> PlatformCALayerWin::animationForKey(const String& key)
 {
     HashMap<String, RefPtr<PlatformCAAnimation> >::iterator it = m_animations.find(key);
     if (it == m_animations.end())
@@ -519,6 +516,29 @@ void PlatformCALayerWin::setAcceleratesDrawing(bool)
 {
 }
 
+bool PlatformCALayerWin::wantsDeepColorBackingStore() const
+{
+    return false;
+}
+
+void PlatformCALayerWin::setWantsDeepColorBackingStore(bool)
+{
+}
+
+bool PlatformCALayerWin::supportsSubpixelAntialiasedText() const
+{
+    return false;
+}
+
+void PlatformCALayerWin::setSupportsSubpixelAntialiasedText(bool)
+{
+}
+
+bool PlatformCALayerWin::hasContents() const
+{
+    return !!CACFLayerGetContents(m_layer.get());
+}
+
 CFTypeRef PlatformCALayerWin::contents() const
 {
     return CACFLayerGetContents(m_layer.get());
@@ -654,7 +674,7 @@ void PlatformCALayerWin::setShapeRoundedRect(const FloatRoundedRect&)
 WindRule PlatformCALayerWin::shapeWindRule() const
 {
     // FIXME: implement.
-    return RULE_NONZERO;
+    return WindRule::NonZero;
 }
 
 void PlatformCALayerWin::setShapeWindRule(WindRule)
@@ -745,13 +765,12 @@ static void printLayer(StringBuilder& builder, const PlatformCALayer* layer, int
     case PlatformCALayer::LayerTypeWebLayer: layerTypeName = "web-layer"; break;
     case PlatformCALayer::LayerTypeSimpleLayer: layerTypeName = "simple-layer"; break;
     case PlatformCALayer::LayerTypeTransformLayer: layerTypeName = "transform-layer"; break;
-    case PlatformCALayer::LayerTypeWebTiledLayer: layerTypeName = "web-tiled-layer"; break;
     case PlatformCALayer::LayerTypeTiledBackingLayer: layerTypeName = "tiled-backing-layer"; break;
     case PlatformCALayer::LayerTypePageTiledBackingLayer: layerTypeName = "page-tiled-backing-layer"; break;
     case PlatformCALayer::LayerTypeTiledBackingTileLayer: layerTypeName = "tiled-backing-tile-layer"; break;
     case PlatformCALayer::LayerTypeRootLayer: layerTypeName = "root-layer"; break;
     case PlatformCALayer::LayerTypeAVPlayerLayer: layerTypeName = "avplayer-layer"; break;
-    case PlatformCALayer::LayerTypeWebGLLayer: layerTypeName = "webgl-layer"; break;
+    case PlatformCALayer::LayerTypeContentsProvidedLayer: layerTypeName = "contents-provided-layer"; break;
     case PlatformCALayer::LayerTypeBackdropLayer: layerTypeName = "backdrop-layer"; break;
     case PlatformCALayer::LayerTypeShapeLayer: layerTypeName = "shape-layer"; break;
     case PlatformCALayer::LayerTypeLightSystemBackdropLayer: layerTypeName = "light-system-backdrop-layer"; break;
@@ -905,7 +924,7 @@ String PlatformCALayerWin::layerTreeAsString() const
 
     StringBuilder builder;
     builder.append("\n\n** Render tree at time ");
-    builder.appendNumber(monotonicallyIncreasingTime());
+    builder.appendNumber(MonotonicTime::now().secondsSinceEpoch().seconds());
     builder.append(" (bounds ");
     builder.appendNumber(rootBounds.origin.x);
     builder.append(", ");
@@ -922,7 +941,7 @@ String PlatformCALayerWin::layerTreeAsString() const
     return builder.toString();
 }
 
-PassRefPtr<PlatformCALayer> PlatformCALayerWin::createCompatibleLayer(PlatformCALayer::LayerType layerType, PlatformCALayerClient* client) const
+Ref<PlatformCALayer> PlatformCALayerWin::createCompatibleLayer(PlatformCALayer::LayerType layerType, PlatformCALayerClient* client) const
 {
     return PlatformCALayerWin::create(layerType, client);
 }
@@ -935,7 +954,7 @@ TiledBacking* PlatformCALayerWin::tiledBacking()
     return reinterpret_cast<WebTiledBackingLayerWin*>(intern(this))->tiledBacking();
 }
 
-void PlatformCALayerWin::drawTextAtPoint(CGContextRef context, CGFloat x, CGFloat y, CGSize scale, CGFloat fontSize, const char* message, size_t length) const
+void PlatformCALayerWin::drawTextAtPoint(CGContextRef context, CGFloat x, CGFloat y, CGSize scale, CGFloat fontSize, const char* message, size_t length, CGFloat, Color) const
 {
     String text(message, length);
 
@@ -948,7 +967,7 @@ void PlatformCALayerWin::drawTextAtPoint(CGContextRef context, CGFloat x, CGFloa
 
     desc.setComputedSize(scale.width * fontSize);
 
-    FontCascade font = FontCascade(desc, 0, 0);
+    FontCascade font = FontCascade(WTFMove(desc), 0, 0);
     font.update(nullptr);
 
     GraphicsContext cg(context);

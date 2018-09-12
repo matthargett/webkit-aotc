@@ -23,8 +23,7 @@
  pages from the web. It has a memory cache for these objects.
  */
 
-#ifndef CachedStyleSheetClient_h
-#define CachedStyleSheetClient_h
+#pragma once
 
 #include "CachedResourceClient.h"
 #include <wtf/Forward.h>
@@ -36,7 +35,7 @@ class URL;
 
 class CachedStyleSheetClient : public CachedResourceClient {
 public:
-    virtual ~CachedStyleSheetClient() { }
+    virtual ~CachedStyleSheetClient() = default;
     static CachedResourceClientType expectedType() { return StyleSheetType; }
     CachedResourceClientType resourceClientType() const override { return expectedType(); }
     virtual void setCSSStyleSheet(const String& /* href */, const URL& /* baseURL */, const String& /* charset */, const CachedCSSStyleSheet*) { }
@@ -44,5 +43,3 @@ public:
 };
 
 } // namespace WebCore
-
-#endif // CachedStyleSheetClient_h

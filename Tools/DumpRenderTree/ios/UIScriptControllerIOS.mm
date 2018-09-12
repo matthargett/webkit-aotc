@@ -37,6 +37,10 @@ extern DumpRenderTreeBrowserView *gWebBrowserView;
 extern DumpRenderTreeWebScrollView *gWebScrollView;
 
 namespace WTR {
+    
+void UIScriptController::checkForOutstandingCallbacks()
+{
+}
 
 void UIScriptController::doAsyncTask(JSValueRef callback)
 {
@@ -47,6 +51,21 @@ void UIScriptController::doAsyncTask(JSValueRef callback)
             return;
         m_context->asyncTaskComplete(callbackID);
     });
+}
+
+void UIScriptController::doAfterPresentationUpdate(JSValueRef callback)
+{
+    return doAsyncTask(callback);
+}
+
+void UIScriptController::doAfterNextStablePresentationUpdate(JSValueRef callback)
+{
+    doAsyncTask(callback);
+}
+
+void UIScriptController::doAfterVisibleContentRectUpdate(JSValueRef callback)
+{
+    doAsyncTask(callback);
 }
 
 void UIScriptController::zoomToScale(double scale, JSValueRef callback)
@@ -61,6 +80,10 @@ void UIScriptController::zoomToScale(double scale, JSValueRef callback)
             protectedThis->context()->asyncTaskComplete(callbackID);
         }];
     });
+}
+
+void UIScriptController::simulateAccessibilitySettingsChangeNotification(JSValueRef)
+{
 }
 
 double UIScriptController::zoomScale() const
@@ -112,11 +135,11 @@ void UIScriptController::sendEventStream(JSStringRef eventsJSON, JSValueRef call
 {
 }
 
-void UIScriptController::typeCharacterUsingHardwareKeyboard(JSStringRef character, JSValueRef callback)
+void UIScriptController::enterText(JSStringRef)
 {
 }
 
-void UIScriptController::selectTextCandidateAtIndex(long, JSValueRef)
+void UIScriptController::typeCharacterUsingHardwareKeyboard(JSStringRef character, JSValueRef callback)
 {
 }
 
@@ -132,8 +155,31 @@ void UIScriptController::dismissFormAccessoryView()
 {
 }
 
+void UIScriptController::setTimePickerValue(long, long)
+{
+}
+
+void UIScriptController::invokeShareSheetWithResolution(bool)
+{
+}
+
 void UIScriptController::selectFormAccessoryPickerRow(long rowIndex)
 {
+}
+
+JSRetainPtr<JSStringRef> UIScriptController::textContentType() const
+{
+    return nullptr;
+}
+
+JSRetainPtr<JSStringRef> UIScriptController::selectFormPopoverTitle() const
+{
+    return nullptr;
+}
+
+JSRetainPtr<JSStringRef> UIScriptController::formInputLabel() const
+{
+    return nullptr;
 }
     
 JSObjectRef UIScriptController::contentsOfUserInterfaceItem(JSStringRef interfaceItem) const
@@ -141,8 +187,35 @@ JSObjectRef UIScriptController::contentsOfUserInterfaceItem(JSStringRef interfac
     return nullptr;
 }
 
-void UIScriptController::scrollToOffset(long, long)
+static CGPoint contentOffsetBoundedInValidRange(UIScrollView *scrollView, CGPoint contentOffset)
 {
+    UIEdgeInsets contentInsets = scrollView.contentInset;
+    CGSize contentSize = scrollView.contentSize;
+    CGSize scrollViewSize = scrollView.bounds.size;
+
+    CGFloat maxHorizontalOffset = contentSize.width + contentInsets.right - scrollViewSize.width;
+    contentOffset.x = std::min(maxHorizontalOffset, contentOffset.x);
+    contentOffset.x = std::max(-contentInsets.left, contentOffset.x);
+
+    CGFloat maxVerticalOffset = contentSize.height + contentInsets.bottom - scrollViewSize.height;
+    contentOffset.y = std::min(maxVerticalOffset, contentOffset.y);
+    contentOffset.y = std::max(-contentInsets.top, contentOffset.y);
+    return contentOffset;
+}
+
+void UIScriptController::scrollToOffset(long x, long y)
+{
+    [gWebScrollView setContentOffset:contentOffsetBoundedInValidRange(gWebScrollView, CGPointMake(x, y)) animated:YES];
+}
+
+void UIScriptController::immediateScrollToOffset(long x, long y)
+{
+    [gWebScrollView setContentOffset:contentOffsetBoundedInValidRange(gWebScrollView, CGPointMake(x, y)) animated:NO];
+}
+
+void UIScriptController::immediateZoomToScale(double scale)
+{
+    [gWebScrollView setZoomScale:scale animated:NO];
 }
 
 void UIScriptController::keyboardAccessoryBarNext()
@@ -150,6 +223,10 @@ void UIScriptController::keyboardAccessoryBarNext()
 }
 
 void UIScriptController::keyboardAccessoryBarPrevious()
+{
+}
+
+void UIScriptController::applyAutocorrection(JSStringRef, JSStringRef, JSValueRef)
 {
 }
 
@@ -161,6 +238,15 @@ double UIScriptController::minimumZoomScale() const
 double UIScriptController::maximumZoomScale() const
 {
     return gWebScrollView.maximumZoomScale;
+}
+
+std::optional<bool> UIScriptController::stableStateOverride() const
+{
+    return std::nullopt;
+}
+
+void UIScriptController::setStableStateOverride(std::optional<bool>)
+{
 }
 
 JSObjectRef UIScriptController::contentVisibleRect() const
@@ -211,6 +297,81 @@ void UIScriptController::platformClearAllCallbacks()
 }
 
 JSObjectRef UIScriptController::selectionRangeViewRects() const
+{
+    return nullptr;
+}
+
+JSObjectRef UIScriptController::textSelectionCaretRect() const
+{
+    return nullptr;
+}
+
+JSObjectRef UIScriptController::inputViewBounds() const
+{
+    return nullptr;
+}
+
+void UIScriptController::removeAllDynamicDictionaries()
+{
+}
+
+JSRetainPtr<JSStringRef> UIScriptController::scrollingTreeAsText() const
+{
+    return nullptr;
+}
+
+JSObjectRef UIScriptController::propertiesOfLayerWithID(uint64_t layerID) const
+{
+    return nullptr;
+}
+
+void UIScriptController::retrieveSpeakSelectionContent(JSValueRef)
+{
+}
+
+JSRetainPtr<JSStringRef> UIScriptController::accessibilitySpeakSelectionContent() const
+{
+    return nullptr;
+}
+
+void UIScriptController::simulateRotation(DeviceOrientation*, JSValueRef)
+{
+}
+
+void UIScriptController::simulateRotationLikeSafari(DeviceOrientation*, JSValueRef)
+{
+}
+
+void UIScriptController::findString(JSStringRef, unsigned long options, unsigned long maxCount)
+{
+}
+
+void UIScriptController::removeViewFromWindow(JSValueRef)
+{
+}
+
+void UIScriptController::addViewToWindow(JSValueRef)
+{
+}
+
+void UIScriptController::setSafeAreaInsets(double, double, double, double)
+{
+}
+
+void UIScriptController::beginBackSwipe(JSValueRef callback)
+{
+}
+
+void UIScriptController::completeBackSwipe(JSValueRef callback)
+{
+}
+
+JSObjectRef UIScriptController::selectionStartGrabberViewRect() const
+{
+    return nullptr;
+}
+
+JSObjectRef UIScriptController::selectionEndGrabberViewRect() const
 {
     return nullptr;
 }

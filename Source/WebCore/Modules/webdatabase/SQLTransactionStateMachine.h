@@ -23,18 +23,16 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
  */
 
-#ifndef SQLTransactionStateMachine_h
-#define SQLTransactionStateMachine_h
+#pragma once
 
 #include "SQLTransactionState.h"
-#include <wtf/ThreadSafeRefCounted.h>
 
 namespace WebCore {
 
 template<typename T>
 class SQLTransactionStateMachine {
 public:
-    virtual ~SQLTransactionStateMachine() { }
+    virtual ~SQLTransactionStateMachine() = default;
 
 protected:
     SQLTransactionStateMachine();
@@ -109,5 +107,3 @@ void SQLTransactionStateMachine<T>::runStateMachine()
 }
 
 } // namespace WebCore
-
-#endif // SQLTransactionStateMachine_h

@@ -23,21 +23,22 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-WebInspector.Target = class Target extends WebInspector.Object
+WI.Target = class Target extends WI.Object
 {
-    constructor(name, type, connection)
+    constructor(identifier, name, type, connection)
     {
         super();
 
+        this._identifier = identifier;
         this._name = name;
         this._type = type;
         this._connection = connection;
         this._executionContext = null;
         this._mainResource = null;
+        this._resourceCollection = new WI.ResourceCollection;
+        this._extraScriptCollection = new WI.ScriptCollection;
 
         this._connection.target = this;
-
-        this.initialize();
     }
 
     // Agents
@@ -45,72 +46,70 @@ WebInspector.Target = class Target extends WebInspector.Object
     get RuntimeAgent() { return this._connection._agents.Runtime; }
     get ConsoleAgent() { return this._connection._agents.Console; }
     get DebuggerAgent() { return this._connection._agents.Debugger; }
+    get HeapAgent() { return this._connection._agents.Heap; }
 
     // Public
 
+    get identifier() { return this._identifier; }
+    set identifier(identifier) { this._identifier = identifier; }
+
     get name() { return this._name; }
+    set name(name) { this._name = name; }
+
     get type() { return this._type; }
     get connection() { return this._connection; }
     get executionContext() { return this._executionContext; }
 
-    get mainResource() { return this._mainResource; }
-    set mainResource(resource) { this._mainResource = resource; }
+    get resourceCollection() { return this._resourceCollection; }
+    get extraScriptCollection() { return this._extraScriptCollection; }
+
+    get displayName() { return this._name; }
+
+    get mainResource()
+    {
+        return this._mainResource;
+    }
+
+    set mainResource(resource)
+    {
+        console.assert(!this._mainResource);
+
+        this._mainResource = resource;
+
+        this.dispatchEventToListeners(WI.Target.Event.MainResourceAdded, {resource});
+    }
+
+    addResource(resource)
+    {
+        this._resourceCollection.add(resource);
+
+        this.dispatchEventToListeners(WI.Target.Event.ResourceAdded, {resource});
+    }
+
+    adoptResource(resource)
+    {
+        resource._target = this;
+
+        this.addResource(resource);
+    }
+
+    addScript(script)
+    {
+        this._extraScriptCollection.add(script);
+
+        this.dispatchEventToListeners(WI.Target.Event.ScriptAdded, {script});
+    }
 };
 
-WebInspector.Target.Type = {
-    Main: Symbol("main"),
+WI.Target.Type = {
+    Page: Symbol("page"),
+    JSContext: Symbol("jscontext"),
+    ServiceWorker: Symbol("service-worker"),
     Worker: Symbol("worker"),
 };
 
-WebInspector.MainTarget = class MainTarget extends WebInspector.Target
-{
-    constructor(connection)
-    {
-        super("", WebInspector.Target.Type.Main, InspectorBackend.mainConnection);
-    }
-
-    // Protected (Target)
-
-    get displayName()
-    {
-        if (WebInspector.debuggableType === WebInspector.DebuggableType.Web)
-            return WebInspector.UIString("Main Frame");
-        return WebInspector.UIString("Main Context");
-    }
-
-    initialize()
-    {
-        this._executionContext = new WebInspector.ExecutionContext(this, WebInspector.RuntimeManager.TopLevelContextExecutionIdentifier, this.displayName, true, null);
-    }
-}
-
-WebInspector.WorkerTarget = class WorkerTarget extends WebInspector.Target
-{
-    constructor(name, connection)
-    {
-        super(name, WebInspector.Target.Type.Worker, connection);
-    }
-
-    // Protected (Target)
-
-    get displayName()
-    {
-        return WebInspector.displayNameForURL(this._name);
-    }
-
-    initialize()
-    {
-        if (this.RuntimeAgent) {
-            this.RuntimeAgent.enable();
-            this._executionContext = new WebInspector.ExecutionContext(this, WebInspector.RuntimeManager.TopLevelContextExecutionIdentifier, this.displayName, false, null);
-            // FIXME: Enable Type Profiler
-            // FIXME: Enable Code Coverage Profiler
-        }
-
-        if (this.DebuggerAgent)
-            WebInspector.debuggerManager.initializeTarget(this);
-
-        if (this.ConsoleAgent)
-            this.ConsoleAgent.enable();
-    }
-}
+WI.Target.Event = {
+    MainResourceAdded: "target-main-resource-added",
+    ResourceAdded: "target-resource-added",
+    ScriptAdded: "target-script-added",
+};

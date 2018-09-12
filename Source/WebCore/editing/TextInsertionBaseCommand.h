@@ -23,8 +23,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
  */
 
-#ifndef TextInsertionBaseCommand_h
-#define TextInsertionBaseCommand_h
+#pragma once
 
 #include "CompositeEditCommand.h"
 #include <wtf/text/WTFString.h>
@@ -39,7 +38,7 @@ public:
     virtual ~TextInsertionBaseCommand() { };
 
 protected:
-    explicit TextInsertionBaseCommand(Document&, EditAction = EditActionUnspecified);
+    explicit TextInsertionBaseCommand(Document&, EditAction = EditAction::Unspecified);
     static void applyTextInsertionCommand(Frame*, TextInsertionBaseCommand&, const VisibleSelection& selectionForInsertion, const VisibleSelection& endingSelection);
 };
 
@@ -66,6 +65,4 @@ void forEachLineInString(const String& string, const LineOperation& operation)
     }
 }
 
-}
-
-#endif
+} // namespace WebCore

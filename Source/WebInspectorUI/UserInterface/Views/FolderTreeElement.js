@@ -23,24 +23,14 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-WebInspector.FolderTreeElement = class FolderTreeElement extends WebInspector.GeneralTreeElement
+WI.FolderTreeElement = class FolderTreeElement extends WI.GeneralTreeElement
 {
-    constructor(title, subtitle, additionalClassNames, representedObject)
+    constructor(title, representedObject)
     {
-        var classNames;
-        if (!additionalClassNames)
-            classNames = [];
-        else if (additionalClassNames.constructor === Array)
-            classNames = additionalClassNames;
-        else if (typeof additionalClassNames === "string")
-            classNames = [additionalClassNames];
-
-        classNames.unshift(WebInspector.FolderTreeElement.FolderIconStyleClassName);
-
-        super(classNames, title, subtitle, representedObject, true);
+        const classNames = [WI.FolderTreeElement.FolderIconStyleClassName];
+        const subtitle = null;
+        super(classNames, title, subtitle, representedObject, {hasChildren: true});
     }
-
-    // No Methods or Properties
 };
 
-WebInspector.FolderTreeElement.FolderIconStyleClassName = "folder-icon";
+WI.FolderTreeElement.FolderIconStyleClassName = "folder-icon";

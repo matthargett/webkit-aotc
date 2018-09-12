@@ -23,8 +23,7 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef IDBRequestData_h
-#define IDBRequestData_h
+#pragma once
 
 #if ENABLE(INDEXED_DATABASE)
 
@@ -127,8 +126,11 @@ bool IDBRequestData::decode(Decoder& decoder, IDBRequestData& request)
     if (!decoder.decode(request.m_indexIdentifier))
         return false;
 
-    if (!decoder.decode(request.m_databaseIdentifier))
+    std::optional<IDBDatabaseIdentifier> databaseIdentifier;
+    decoder >> databaseIdentifier;
+    if (!databaseIdentifier)
         return false;
+    request.m_databaseIdentifier = WTFMove(*databaseIdentifier);
 
     if (!decoder.decode(request.m_requestedVersion))
         return false;
@@ -174,4 +176,3 @@ bool IDBRequestData::decode(Decoder& decoder, IDBRequestData& request)
 } // namespace WebCore
 
 #endif // ENABLE(INDEXED_DATABASE)
-#endif // IDBRequestData_h

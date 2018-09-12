@@ -23,8 +23,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
  */
 
-#ifndef RemoveNodeCommand_h
-#define RemoveNodeCommand_h
+#pragma once
 
 #include "EditCommand.h"
 
@@ -32,7 +31,7 @@ namespace WebCore {
 
 class RemoveNodeCommand : public SimpleEditCommand {
 public:
-    static Ref<RemoveNodeCommand> create(Ref<Node>&& node, ShouldAssumeContentIsAlwaysEditable shouldAssumeContentIsAlwaysEditable, EditAction editingAction = EditActionUnspecified)
+    static Ref<RemoveNodeCommand> create(Ref<Node>&& node, ShouldAssumeContentIsAlwaysEditable shouldAssumeContentIsAlwaysEditable, EditAction editingAction = EditAction::Unspecified)
     {
         return adoptRef(*new RemoveNodeCommand(WTFMove(node), shouldAssumeContentIsAlwaysEditable, editingAction));
     }
@@ -54,5 +53,3 @@ private:
 };
 
 } // namespace WebCore
-
-#endif // RemoveNodeCommand_h

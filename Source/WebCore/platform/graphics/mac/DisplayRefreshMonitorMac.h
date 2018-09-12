@@ -23,10 +23,9 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
  */
 
-#ifndef DisplayRefreshMonitorMac_h
-#define DisplayRefreshMonitorMac_h
+#pragma once
 
-#if USE(REQUEST_ANIMATION_FRAME_DISPLAY_MONITOR)
+#if USE(REQUEST_ANIMATION_FRAME_DISPLAY_MONITOR) && PLATFORM(MAC)
 
 #include "DisplayRefreshMonitor.h"
 #include <wtf/WeakPtr.h>
@@ -35,27 +34,24 @@ typedef struct __CVDisplayLink *CVDisplayLinkRef;
 
 namespace WebCore {
 
-class DisplayRefreshMonitorMac : public DisplayRefreshMonitor {
+class DisplayRefreshMonitorMac : public DisplayRefreshMonitor, public CanMakeWeakPtr<DisplayRefreshMonitorMac> {
 public:
-    static PassRefPtr<DisplayRefreshMonitorMac> create(PlatformDisplayID displayID)
+    static Ref<DisplayRefreshMonitorMac> create(PlatformDisplayID displayID)
     {
-        return adoptRef(new DisplayRefreshMonitorMac(displayID));
+        return adoptRef(*new DisplayRefreshMonitorMac(displayID));
     }
     
     virtual ~DisplayRefreshMonitorMac();
 
-    void displayLinkFired();
+    void displayLinkFired() override;
     bool requestRefreshCallback() override;
 
 private:
     explicit DisplayRefreshMonitorMac(PlatformDisplayID);
 
-    WeakPtrFactory<DisplayRefreshMonitorMac> m_weakFactory;
-    CVDisplayLinkRef m_displayLink;
+    CVDisplayLinkRef m_displayLink { nullptr };
 };
 
 }
 
-#endif // USE(REQUEST_ANIMATION_FRAME_DISPLAY_MONITOR)
-
-#endif
+#endif // USE(REQUEST_ANIMATION_FRAME_DISPLAY_MONITOR) && PLATFORM(MAC)

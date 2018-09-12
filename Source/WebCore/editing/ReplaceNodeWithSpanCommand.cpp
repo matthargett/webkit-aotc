@@ -31,54 +31,52 @@
 #include "config.h"
 #include "ReplaceNodeWithSpanCommand.h"
 
+#include "Editing.h"
 #include "HTMLSpanElement.h"
-#include "htmlediting.h"
 
 namespace WebCore {
 
-ReplaceNodeWithSpanCommand::ReplaceNodeWithSpanCommand(PassRefPtr<HTMLElement> element)
+ReplaceNodeWithSpanCommand::ReplaceNodeWithSpanCommand(Ref<HTMLElement>&& element)
     : SimpleEditCommand(element->document())
-    , m_elementToReplace(element)
+    , m_elementToReplace(WTFMove(element))
 {
-    ASSERT(m_elementToReplace);
 }
 
 static void swapInNodePreservingAttributesAndChildren(HTMLElement& newNode, HTMLElement& nodeToReplace)
 {
-    ASSERT(nodeToReplace.inDocument());
+    ASSERT(nodeToReplace.isConnected());
     RefPtr<ContainerNode> parentNode = nodeToReplace.parentNode();
 
     // FIXME: Fix this to send the proper MutationRecords when MutationObservers are present.
     newNode.cloneDataFromElement(nodeToReplace);
-    NodeVector children;
-    getChildNodes(nodeToReplace, children);
+    auto children = collectChildNodes(nodeToReplace);
     for (auto& child : children)
-        newNode.appendChild(child, ASSERT_NO_EXCEPTION);
+        newNode.appendChild(child);
 
-    parentNode->insertBefore(newNode, &nodeToReplace, ASSERT_NO_EXCEPTION);
-    parentNode->removeChild(nodeToReplace, ASSERT_NO_EXCEPTION);
+    parentNode->insertBefore(newNode, &nodeToReplace);
+    parentNode->removeChild(nodeToReplace);
 }
 
 void ReplaceNodeWithSpanCommand::doApply()
 {
-    if (!m_elementToReplace->inDocument())
+    if (!m_elementToReplace->isConnected())
         return;
     if (!m_spanElement)
         m_spanElement = HTMLSpanElement::create(m_elementToReplace->document());
-    swapInNodePreservingAttributesAndChildren(*m_spanElement, *m_elementToReplace);
+    swapInNodePreservingAttributesAndChildren(*m_spanElement, m_elementToReplace);
 }
 
 void ReplaceNodeWithSpanCommand::doUnapply()
 {
-    if (!m_spanElement->inDocument())
+    if (!m_spanElement->isConnected())
         return;
-    swapInNodePreservingAttributesAndChildren(*m_elementToReplace, *m_spanElement);
+    swapInNodePreservingAttributesAndChildren(m_elementToReplace, *m_spanElement);
 }
 
 #ifndef NDEBUG
 void ReplaceNodeWithSpanCommand::getNodesInCommand(HashSet<Node*>& nodes)
 {
-    addNodeAndDescendants(m_elementToReplace.get(), nodes);
+    addNodeAndDescendants(m_elementToReplace.ptr(), nodes);
     addNodeAndDescendants(m_spanElement.get(), nodes);
 }
 #endif

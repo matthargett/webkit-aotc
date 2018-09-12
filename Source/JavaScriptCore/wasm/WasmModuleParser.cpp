@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016 Apple Inc. All rights reserved.
+ * Copyright (C) 2016-2018 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -28,290 +28,80 @@
 
 #if ENABLE(WEBASSEMBLY)
 
-#include "WasmFormat.h"
+#include "IdentifierInlines.h"
+#include "WasmMemoryInformation.h"
+#include "WasmNameSectionParser.h"
 #include "WasmOps.h"
+#include "WasmSectionParser.h"
 #include "WasmSections.h"
-
-#include <sys/mman.h>
 
 namespace JSC { namespace Wasm {
 
-static const bool verbose = false;
-
-bool ModuleParser::parse()
+auto ModuleParser::parse() -> Result
 {
     const size_t minSize = 8;
-    if (length() < minSize) {
-        m_errorMessage = "Module is " + String::number(length()) + " bytes, expected at least " + String::number(minSize) + " bytes";
-        return false;
-    }
-    if (!consumeCharacter(0) || !consumeString("asm")) {
-        m_errorMessage = "Modules doesn't start with '\\0asm'";
-        return false;
-    }
-
-    // Skip the version number for now since we don't do anything with it.
     uint32_t versionNumber;
-    if (!parseUInt32(versionNumber)) {
-        // FIXME improve error message https://bugs.webkit.org/show_bug.cgi?id=163919
-        m_errorMessage = "couldn't parse version number";
-        return false;
-    }
 
-    if (versionNumber != magicNumber) {
-        // FIXME improve error message https://bugs.webkit.org/show_bug.cgi?id=163919
-        m_errorMessage = "unexpected version number";
-        return false;
-    }
+    WASM_PARSER_FAIL_IF(length() < minSize, "expected a module of at least ", minSize, " bytes");
+    WASM_PARSER_FAIL_IF(length() > maxModuleSize, "module size ", length(), " is too large, maximum ", maxModuleSize);
+    WASM_PARSER_FAIL_IF(!consumeCharacter(0) || !consumeString("asm"), "modules doesn't start with '\\0asm'");
+    WASM_PARSER_FAIL_IF(!parseUInt32(versionNumber), "can't parse version number");
+    WASM_PARSER_FAIL_IF(versionNumber != expectedVersionNumber, "unexpected version number ", versionNumber, " expected ", expectedVersionNumber);
 
-
-    if (verbose)
-        dataLogLn("Passed processing header.");
-
-    Sections::Section previousSection = Sections::Unknown;
+    // This is not really a known section.
+    Section previousKnownSection = Section::Begin;
     while (m_offset < length()) {
-        if (verbose)
-            dataLogLn("Starting to parse next section at offset: ", m_offset);
-
         uint8_t sectionByte;
-        if (!parseUInt7(sectionByte)) {
-            // FIXME improve error message https://bugs.webkit.org/show_bug.cgi?id=163919
-            m_errorMessage = "couldn't get section byte";
-            return false;
-        }
 
-        if (verbose)
-            dataLogLn("Section byte: ", sectionByte);
+        WASM_PARSER_FAIL_IF(!parseUInt7(sectionByte), "can't get section byte");
 
-        Sections::Section section = Sections::Unknown;
-        if (sectionByte) {
-            if (sectionByte < Sections::Unknown)
-                section = static_cast<Sections::Section>(sectionByte);
-        }
-
-        if (!Sections::validateOrder(previousSection, section)) {
-            // FIXME improve error message https://bugs.webkit.org/show_bug.cgi?id=163919
-            m_errorMessage = "invalid section order";
-            return false;
-        }
+        Section section = Section::Custom;
+        WASM_PARSER_FAIL_IF(!decodeSection(sectionByte, section));
+        ASSERT(section != Section::Begin);
 
         uint32_t sectionLength;
-        if (!parseVarUInt32(sectionLength)) {
-            // FIXME improve error message https://bugs.webkit.org/show_bug.cgi?id=163919
-            m_errorMessage = "couldn't get section length";
-            return false;
-        }
+        WASM_PARSER_FAIL_IF(!validateOrder(previousKnownSection, section), "invalid section order, ", previousKnownSection, " followed by ", section);
+        WASM_PARSER_FAIL_IF(!parseVarUInt32(sectionLength), "can't get ", section, " section's length");
+        WASM_PARSER_FAIL_IF(sectionLength > length() - m_offset, section, " section of size ", sectionLength, " would overflow Module's size");
 
-        if (sectionLength > length() - m_offset) {
-            // FIXME improve error message https://bugs.webkit.org/show_bug.cgi?id=163919
-            m_errorMessage = "section content would overflow Module's size";
-            return false;
-        }
-
-        auto end = m_offset + sectionLength;
+        SectionParser parser(source() + m_offset, sectionLength, m_offset, m_info.get());
 
         switch (section) {
+#define WASM_SECTION_PARSE(NAME, ID, DESCRIPTION)                   \
+        case Section::NAME: {                                       \
+            WASM_FAIL_IF_HELPER_FAILS(parser.parse ## NAME());             \
+            break;                                                  \
+        }
+        FOR_EACH_KNOWN_WASM_SECTION(WASM_SECTION_PARSE)
+#undef WASM_SECTION_PARSE
 
-        case Sections::Memory: {
-            if (verbose)
-                dataLogLn("Parsing Memory.");
-            if (!parseMemory()) {
-                // FIXME improve error message https://bugs.webkit.org/show_bug.cgi?id=163919
-                m_errorMessage = "couldn't parse memory";
-                return false;
-            }
+        case Section::Custom: {
+            WASM_FAIL_IF_HELPER_FAILS(parser.parseCustom());
             break;
         }
 
-        case Sections::FunctionTypes: {
-            if (verbose)
-                dataLogLn("Parsing types.");
-            if (!parseFunctionTypes()) {
-                // FIXME improve error message https://bugs.webkit.org/show_bug.cgi?id=163919
-                m_errorMessage = "couldn't parse types";
-                return false;
-            }
-            break;
-        }
-
-        case Sections::Signatures: {
-            if (verbose)
-                dataLogLn("Parsing function signatures.");
-            if (!parseFunctionSignatures()) {
-                // FIXME improve error message https://bugs.webkit.org/show_bug.cgi?id=163919
-                m_errorMessage = "couldn't parse function signatures";
-                return false;
-            }
-            break;
-        }
-
-        case Sections::Definitions: {
-            if (verbose)
-                dataLogLn("Parsing function definitions.");
-            if (!parseFunctionDefinitions()) {
-                // FIXME improve error message https://bugs.webkit.org/show_bug.cgi?id=163919
-                m_errorMessage = "couldn't parse function definitions";
-                return false;
-            }
-            break;
-        }
-
-        case Sections::Unknown:
-        // FIXME: Delete this when we support all the sections.
-        default: {
-            if (verbose)
-                dataLogLn("Unknown section, skipping.");
-            // Ignore section's name LEB and bytes: they're already included in sectionLength.
-            m_offset += sectionLength;
+        case Section::Begin: {
+            RELEASE_ASSERT_NOT_REACHED();
             break;
         }
         }
 
-        if (verbose)
-            dataLogLn("Finished parsing section.");
+        WASM_PARSER_FAIL_IF(parser.length() != parser.offset(), "parsing ended before the end of ", section, " section");
 
-        if (end != m_offset) {
-            // FIXME improve error message https://bugs.webkit.org/show_bug.cgi?id=163919
-            m_errorMessage = "parsing ended before the end of the section";
-            return false;
-        }
+        m_offset += sectionLength;
 
-        previousSection = section;
+
+        if (isKnownSection(section))
+            previousKnownSection = section;
     }
 
-    // TODO
-    m_failed = false;
-    return true;
-}
-
-bool ModuleParser::parseMemory()
-{
-    uint8_t flags;
-    if (!parseVarUInt1(flags))
-        return false;
-
-    uint32_t size;
-    if (!parseVarUInt32(size))
-        return false;
-    if (size > maxPageCount)
-        return false;
-
-    uint32_t capacity = maxPageCount;
-    if (flags) {
-        if (!parseVarUInt32(capacity))
-            return false;
-        if (size > capacity || capacity > maxPageCount)
-            return false;
+    if (UNLIKELY(Options::useEagerWebAssemblyModuleHashing())) {
+        SHA1 hasher;
+        hasher.addBytes(source(), length());
+        m_info->nameSection->setHash(hasher.computeHexDigest());
     }
 
-    capacity *= pageSize;
-    size *= pageSize;
-
-    Vector<unsigned> pinnedSizes = { 0 };
-    m_memory = std::make_unique<Memory>(size, capacity, pinnedSizes);
-    return m_memory->memory();
-}
-
-bool ModuleParser::parseFunctionTypes()
-{
-    uint32_t count;
-    if (!parseVarUInt32(count))
-        return false;
-
-    if (verbose)
-        dataLogLn("count: ", count);
-
-    m_signatures.resize(count);
-
-    for (uint32_t i = 0; i < count; ++i) {
-        uint8_t type;
-        if (!parseUInt7(type))
-            return false;
-        if (type != 0x40) // Function type constant.
-            return false;
-
-        if (verbose)
-            dataLogLn("Got function type.");
-
-        uint32_t argumentCount;
-        if (!parseVarUInt32(argumentCount))
-            return false;
-
-        if (verbose)
-            dataLogLn("argumentCount: ", argumentCount);
-
-        Vector<Type> argumentTypes;
-        argumentTypes.resize(argumentCount);
-
-        for (unsigned i = 0; i < argumentCount; ++i) {
-            if (!parseUInt7(type) || !isValueType(static_cast<Type>(type)))
-                return false;
-            argumentTypes[i] = static_cast<Type>(type);
-        }
-
-        if (!parseVarUInt1(type))
-            return false;
-        Type returnType;
-
-        if (verbose)
-            dataLogLn(type);
-
-        if (type) {
-            Type value;
-            if (!parseValueType(value))
-                return false;
-            returnType = static_cast<Type>(value);
-        } else
-            returnType = Type::Void;
-
-        m_signatures[i] = { returnType, WTFMove(argumentTypes) };
-    }
-    return true;
-}
-
-bool ModuleParser::parseFunctionSignatures()
-{
-    uint32_t count;
-    if (!parseVarUInt32(count))
-        return false;
-
-    m_functions.resize(count);
-
-    for (uint32_t i = 0; i < count; ++i) {
-        uint32_t typeNumber;
-        if (!parseVarUInt32(typeNumber))
-            return false;
-
-        if (typeNumber >= m_signatures.size())
-            return false;
-
-        m_functions[i].signature = &m_signatures[typeNumber];
-    }
-
-    return true;
-}
-
-bool ModuleParser::parseFunctionDefinitions()
-{
-    uint32_t count;
-    if (!parseVarUInt32(count))
-        return false;
-
-    if (count != m_functions.size())
-        return false;
-
-    for (uint32_t i = 0; i < count; ++i) {
-        uint32_t functionSize;
-        if (!parseVarUInt32(functionSize))
-            return false;
-
-        FunctionInformation& info = m_functions[i];
-        info.start = m_offset;
-        info.end = m_offset + functionSize;
-        m_offset = info.end;
-    }
-
-    return true;
+    return { };
 }
 
 } } // namespace JSC::Wasm

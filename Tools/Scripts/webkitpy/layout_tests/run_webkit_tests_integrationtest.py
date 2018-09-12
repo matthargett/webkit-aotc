@@ -54,7 +54,6 @@ from webkitpy.layout_tests.models.test_run_results import INTERRUPTED_EXIT_STATU
 from webkitpy.port import Port
 from webkitpy.port import test
 from webkitpy.test.skip import skip_if
-from webkitpy.tool.mocktool import MockOptions
 
 
 def parse_args(extra_args=None, tests_included=False, new_results=False, print_nothing=True):
@@ -67,6 +66,10 @@ def parse_args(extra_args=None, tests_included=False, new_results=False, print_n
 
     if not '--child-processes' in extra_args:
         args.extend(['--child-processes', 1])
+
+    if not '--world-leaks' in extra_args:
+        args.append('--world-leaks')
+
     args.extend(extra_args)
     if not tests_included:
         # We use the glob to test that globbing works.
@@ -332,6 +335,9 @@ class RunTest(unittest.TestCase, StreamTestingMixin):
     def test_gc_between_tests(self):
         self.assertTrue(passing_run(['--gc-between-tests']))
 
+    def test_check_for_world_leaks(self):
+        self.assertTrue(passing_run(['--world-leaks']))
+
     def test_complex_text(self):
         self.assertTrue(passing_run(['--complex-text']))
 
@@ -532,24 +538,24 @@ class RunTest(unittest.TestCase, StreamTestingMixin):
 
     def test_crash_log(self):
         # FIXME: Need to rewrite these tests to not be mac-specific, or move them elsewhere.
-        # Currently CrashLog uploading only works on Darwin.
-        if not self._platform.is_mac():
+        # Currently CrashLog uploading only works on Darwin and Windows.
+        if not self._platform.is_mac() or self._platform.is_win():
             return
         mock_crash_report = make_mock_crash_report_darwin('DumpRenderTree', 12345)
         host = MockHost()
-        host.filesystem.write_text_file('/Users/mock/Library/Logs/DiagnosticReports/DumpRenderTree_2011-06-13-150719_quadzen.crash', mock_crash_report)
+        host.filesystem.write_text_file('/tmp/layout-test-results/DumpRenderTree_2011-06-13-150719_quadzen.crash', mock_crash_report)
         _, regular_output, _ = logging_run(['failures/unexpected/crash-with-stderr.html', '--dump-render-tree'], tests_included=True, host=host)
         expected_crash_log = mock_crash_report
         self.assertEqual(host.filesystem.read_text_file('/tmp/layout-test-results/failures/unexpected/crash-with-stderr-crash-log.txt'), expected_crash_log)
 
     def test_web_process_crash_log(self):
         # FIXME: Need to rewrite these tests to not be mac-specific, or move them elsewhere.
-        # Currently CrashLog uploading only works on Darwin.
-        if not self._platform.is_mac():
+        # Currently CrashLog uploading only works on Darwin and Windows.
+        if not self._platform.is_mac() or self._platform.is_win():
             return
         mock_crash_report = make_mock_crash_report_darwin('WebProcess', 12345)
         host = MockHost()
-        host.filesystem.write_text_file('/Users/mock/Library/Logs/DiagnosticReports/WebProcess_2011-06-13-150719_quadzen.crash', mock_crash_report)
+        host.filesystem.write_text_file('/tmp/layout-test-results/WebProcess_2011-06-13-150719_quadzen.crash', mock_crash_report)
         logging_run(['failures/unexpected/web-process-crash-with-stderr.html'], tests_included=True, host=host)
         self.assertEqual(host.filesystem.read_text_file('/tmp/layout-test-results/failures/unexpected/web-process-crash-with-stderr-crash-log.txt'), mock_crash_report)
 

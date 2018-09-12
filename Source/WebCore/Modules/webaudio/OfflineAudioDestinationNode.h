@@ -22,8 +22,7 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef OfflineAudioDestinationNode_h
-#define OfflineAudioDestinationNode_h
+#pragma once
 
 #include "AudioBuffer.h"
 #include "AudioDestinationNode.h"
@@ -35,7 +34,7 @@ namespace WebCore {
 class AudioBus;
 class AudioContext;
     
-class OfflineAudioDestinationNode : public AudioDestinationNode {
+class OfflineAudioDestinationNode final : public AudioDestinationNode {
 public:
     static Ref<OfflineAudioDestinationNode> create(AudioContext& context, AudioBuffer* renderTarget)
     {
@@ -64,9 +63,8 @@ private:
     RefPtr<AudioBus> m_renderBus;
     
     // Rendering thread.
-    volatile ThreadIdentifier m_renderThread;
+    RefPtr<Thread> m_renderThread;
     bool m_startedRendering;
-    static void offlineRenderEntry(void* threadData);
     void offlineRender();
     
     // For completion callback on main thread.
@@ -74,5 +72,3 @@ private:
 };
 
 } // namespace WebCore
-
-#endif // OfflineAudioDestinationNode_h

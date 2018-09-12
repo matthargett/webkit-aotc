@@ -26,35 +26,25 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef FetchLoaderClient_h
-#define FetchLoaderClient_h
-
-#if ENABLE(FETCH_API)
+#pragma once
 
 #include <wtf/Forward.h>
 
-namespace JSC {
-class ArrayBuffer;
-}
-
 namespace WebCore {
 
+class ResourceError;
 class ResourceResponse;
 
 class FetchLoaderClient {
 public:
-    virtual ~FetchLoaderClient() { }
+    virtual ~FetchLoaderClient() = default;
 
     virtual void didReceiveResponse(const ResourceResponse&) { }
 
     virtual void didReceiveData(const char*, size_t) { }
 
     virtual void didSucceed() = 0;
-    virtual void didFail() = 0;
+    virtual void didFail(const ResourceError&) = 0;
 };
 
 } // namespace WebCore
-
-#endif // ENABLE(FETCH_API)
-
-#endif // FetchLoaderClient_h

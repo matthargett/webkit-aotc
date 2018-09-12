@@ -1,7 +1,5 @@
 /*
- * This file is part of the WebKit project.
- *
- * Copyright (C) 2006, 2008, 2013, 2014 Apple Inc.
+ * Copyright (C) 2006-2017 Apple Inc. All rights reserved.
  * Copyright (C) 2009 Kenneth Rohde Christiansen
  *
  * This library is free software; you can redistribute it and/or
@@ -21,8 +19,7 @@
  *
  */
 
-#ifndef RenderThemeWin_h
-#define RenderThemeWin_h
+#pragma once
 
 #include "RenderTheme.h"
 
@@ -47,9 +44,9 @@ struct ThemeData {
     unsigned m_classicState;
 };
 
-class RenderThemeWin final: public RenderTheme {
+class RenderThemeWin final : public RenderTheme {
 public:
-    static Ref<RenderTheme> create();
+    friend NeverDestroyed<RenderThemeWin>;
 
     String extraDefaultStyleSheet() override;
     String extraQuirksStyleSheet() override;
@@ -57,12 +54,12 @@ public:
     // A method asking if the theme's controls actually care about redrawing when hovered.
     bool supportsHover(const RenderStyle&) const override;
 
-    Color platformActiveSelectionBackgroundColor() const override;
-    Color platformInactiveSelectionBackgroundColor() const override;
-    Color platformActiveSelectionForegroundColor() const override;
-    Color platformInactiveSelectionForegroundColor() const override;
+    Color platformActiveSelectionBackgroundColor(OptionSet<StyleColor::Options>) const override;
+    Color platformInactiveSelectionBackgroundColor(OptionSet<StyleColor::Options>) const override;
+    Color platformActiveSelectionForegroundColor(OptionSet<StyleColor::Options>) const override;
+    Color platformInactiveSelectionForegroundColor(OptionSet<StyleColor::Options>) const override;
 
-    Color systemColor(CSSValueID) const override;
+    Color systemColor(CSSValueID, OptionSet<StyleColor::Options>) const override;
 
     bool paintCheckbox(const RenderObject& o, const PaintInfo& i, const IntRect& r) override
     { return paintButton(o, i, r); }
@@ -179,6 +176,4 @@ private:
     String m_mediaControlsStyleSheet;
 };
 
-};
-
-#endif
+} // namespace WebCore

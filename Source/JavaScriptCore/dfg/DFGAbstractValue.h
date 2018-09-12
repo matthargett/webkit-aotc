@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011-2016 Apple Inc. All rights reserved.
+ * Copyright (C) 2011-2018 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -28,17 +28,17 @@
 #if ENABLE(DFG_JIT)
 
 #include "ArrayProfile.h"
+#include "DFGAbstractValueClobberEpoch.h"
 #include "DFGFiltrationResult.h"
 #include "DFGFrozenValue.h"
 #include "DFGNodeFlags.h"
 #include "DFGStructureAbstractValue.h"
 #include "DFGStructureClobberState.h"
 #include "InferredType.h"
-#include "JSCell.h"
+#include "JSCast.h"
 #include "ResultType.h"
 #include "SpeculatedType.h"
 #include "DumpContext.h"
-#include "StructureSet.h"
 
 namespace JSC {
 
@@ -104,23 +104,36 @@ struct AbstractValue {
         checkConsistency();
     }
     
-    static void clobberStructuresFor(AbstractValue& value)
+    ALWAYS_INLINE void fastForwardFromTo(AbstractValueClobberEpoch oldEpoch, AbstractValueClobberEpoch newEpoch)
     {
-        value.clobberStructures();
-    }
-    
-    void observeInvalidationPoint()
-    {
-        m_structure.observeInvalidationPoint();
+        if (newEpoch == oldEpoch)
+            return;
+        
+        if (!(m_type & SpecCell))
+            return;
+
+        if (newEpoch.clobberEpoch() != oldEpoch.clobberEpoch())
+            clobberStructures();
+        if (newEpoch.structureClobberState() == StructuresAreWatched)
+            m_structure.observeInvalidationPoint();
+
         checkConsistency();
     }
     
-    static void observeInvalidationPointFor(AbstractValue& value)
+    ALWAYS_INLINE void fastForwardTo(AbstractValueClobberEpoch newEpoch)
     {
-        value.observeInvalidationPoint();
+        if (newEpoch == m_effectEpoch)
+            return;
+        
+        if (!(m_type & SpecCell)) {
+            m_effectEpoch = newEpoch;
+            return;
+        }
+
+        fastForwardToSlow(newEpoch);
     }
     
-    void observeTransition(Structure* from, Structure* to)
+    void observeTransition(RegisteredStructure from, RegisteredStructure to)
     {
         if (m_type & SpecCell) {
             m_structure.observeTransition(from, to);
@@ -133,7 +146,7 @@ struct AbstractValue {
     
     class TransitionObserver {
     public:
-        TransitionObserver(Structure* from, Structure* to)
+        TransitionObserver(RegisteredStructure from, RegisteredStructure to)
             : m_from(from)
             , m_to(to)
         {
@@ -144,8 +157,8 @@ struct AbstractValue {
             value.observeTransition(m_from, m_to);
         }
     private:
-        Structure* m_from;
-        Structure* m_to;
+        RegisteredStructure m_from;
+        RegisteredStructure m_to;
     };
     
     class TransitionsObserver {
@@ -207,15 +220,26 @@ struct AbstractValue {
         return result;
     }
     
+    void set(Graph&, const AbstractValue& other)
+    {
+        *this = other;
+    }
+    
+    void set(Graph&, AbstractValue&& other)
+    {
+        *this = WTFMove(other);
+    }
+    
     void set(Graph&, const FrozenValue&, StructureClobberState);
     void set(Graph&, Structure*);
-    void set(Graph&, const StructureSet&);
+    void set(Graph&, RegisteredStructure);
+    void set(Graph&, const RegisteredStructureSet&);
     
     // Set this value to represent the given set of types as precisely as possible.
     void setType(Graph&, SpeculatedType);
     
     // As above, but only valid for non-cell types.
-    void setType(SpeculatedType type)
+    ALWAYS_INLINE void setNonCellType(SpeculatedType type)
     {
         RELEASE_ASSERT(!(type & SpecCell));
         m_structure.clear();
@@ -243,7 +267,7 @@ struct AbstractValue {
         return !(*this == other);
     }
     
-    bool merge(const AbstractValue& other)
+    ALWAYS_INLINE bool merge(const AbstractValue& other)
     {
         if (other.isClear())
             return false;
@@ -301,19 +325,57 @@ struct AbstractValue {
     // SpecCell. Hence, after this call, the value will no longer have any non-cell members. But, you can
     // use admittedTypes to preserve some non-cell types. Note that it's wrong for admittedTypes to overlap
     // with SpecCell.
-    FiltrationResult filter(Graph&, const StructureSet&, SpeculatedType admittedTypes = SpecNone);
+    FiltrationResult filter(Graph&, const RegisteredStructureSet&, SpeculatedType admittedTypes = SpecNone);
     
     FiltrationResult filterArrayModes(ArrayModes);
-    FiltrationResult filter(SpeculatedType);
+
+    ALWAYS_INLINE FiltrationResult filter(SpeculatedType type)
+    {
+        if ((m_type & type) == m_type)
+            return FiltrationOK;
+    
+        // Fast path for the case that we don't even have a cell.
+        if (!(m_type & SpecCell)) {
+            m_type &= type;
+            FiltrationResult result;
+            if (m_type == SpecNone) {
+                clear();
+                result = Contradiction;
+            } else
+                result = FiltrationOK;
+            checkConsistency();
+            return result;
+        }
+        
+        return filterSlow(type);
+    }
+    
     FiltrationResult filterByValue(const FrozenValue& value);
     FiltrationResult filter(const AbstractValue&);
     FiltrationResult filterClassInfo(Graph&, const ClassInfo*);
 
     FiltrationResult filter(Graph&, const InferredType::Descriptor&);
     
-    FiltrationResult changeStructure(Graph&, const StructureSet&);
+    ALWAYS_INLINE FiltrationResult fastForwardToAndFilterUnproven(AbstractValueClobberEpoch newEpoch, SpeculatedType type)
+    {
+        if (m_type & SpecCell)
+            return fastForwardToAndFilterSlow(newEpoch, type);
+        
+        m_effectEpoch = newEpoch;
+        m_type &= type;
+        FiltrationResult result;
+        if (m_type == SpecNone) {
+            clear();
+            result = Contradiction;
+        } else
+            result = FiltrationOK;
+        checkConsistency();
+        return result;
+    }
+
+    FiltrationResult changeStructure(Graph&, const RegisteredStructureSet&);
     
-    bool contains(Structure*) const;
+    bool contains(RegisteredStructure) const;
 
     bool validate(JSValue value) const
     {
@@ -397,6 +459,19 @@ struct AbstractValue {
     // effect that makes non-obvious changes to the heap.
     ArrayModes m_arrayModes;
     
+    // The effect epoch is usually ignored. This field is used by InPlaceAbstractState.
+    //
+    // InPlaceAbstractState needs to be able to clobberStructures() for all values it tracks. That
+    // could be a lot of values. So, it makes this operation O(1) by bumping its effect epoch and
+    // calling AbstractValue::fastForwardTo() anytime it vends someone an AbstractValue, which lazily
+    // does clobberStructures(). The epoch type used here (AbstractValueClobberEpoch) is a bit more
+    // complex than the normal Epoch, because it knows how to track clobberStructures() and
+    // observeInvalidationPoint() precisely using integer math.
+    //
+    // One reason why it's here is to steal the 32-bit hole between m_arrayModes and m_value on
+    // 64-bit systems.
+    AbstractValueClobberEpoch m_effectEpoch;
+    
     // This is a proven constraint on the possible values that this value can
     // have now or any time in the future, unless it is reassigned. Note that this
     // implies nothing about the structure. Oddly, JSValue() (i.e. the empty value)
@@ -448,12 +523,16 @@ private:
     
     void makeTop(SpeculatedType top)
     {
-        m_type |= top;
+        m_type = top;
         m_arrayModes = ALL_ARRAY_MODES;
         m_structure.makeTop();
         m_value = JSValue();
         checkConsistency();
     }
+    
+    void fastForwardToSlow(AbstractValueClobberEpoch);
+    FiltrationResult filterSlow(SpeculatedType);
+    FiltrationResult fastForwardToAndFilterSlow(AbstractValueClobberEpoch, SpeculatedType);
     
     void filterValueByType();
     void filterArrayModesByType();

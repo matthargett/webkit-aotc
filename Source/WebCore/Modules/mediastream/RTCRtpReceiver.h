@@ -28,33 +28,38 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef RTCRtpReceiver_h
-#define RTCRtpReceiver_h
+#pragma once
 
 #if ENABLE(WEB_RTC)
 
-#include "RTCRtpSenderReceiverBase.h"
+#include "MediaStreamTrack.h"
+#include "RTCRtpReceiverBackend.h"
+#include "ScriptWrappable.h"
 
 namespace WebCore {
 
-class RTCRtpReceiver : public RTCRtpSenderReceiverBase {
+
+class RTCRtpReceiver : public RefCounted<RTCRtpReceiver>, public ScriptWrappable  {
 public:
-    static Ref<RTCRtpReceiver> create(Ref<MediaStreamTrack>&& track)
+    static Ref<RTCRtpReceiver> create(Ref<MediaStreamTrack>&& track, std::unique_ptr<RTCRtpReceiverBackend>&& backend)
     {
-        return adoptRef(*new RTCRtpReceiver(WTFMove(track)));
+        return adoptRef(*new RTCRtpReceiver(WTFMove(track), WTFMove(backend)));
     }
 
-    bool isDispatched() const { return m_isDispatched; }
-    void setDispatched(bool isDispatched) { m_isDispatched = isDispatched; }
+    void stop();
+
+    void setBackend(std::unique_ptr<RTCRtpReceiverBackend>&& backend) { m_backend = WTFMove(backend); }
+    RTCRtpParameters getParameters() { return m_backend ? m_backend->getParameters() : RTCRtpParameters(); }
+
+    MediaStreamTrack& track() { return m_track.get(); }
 
 private:
-    explicit RTCRtpReceiver(Ref<MediaStreamTrack>&&);
+    RTCRtpReceiver(Ref<MediaStreamTrack>&&, std::unique_ptr<RTCRtpReceiverBackend>&&);
 
-    bool m_isDispatched { false };
+    Ref<MediaStreamTrack> m_track;
+    std::unique_ptr<RTCRtpReceiverBackend> m_backend;
 };
 
 } // namespace WebCore
 
 #endif // ENABLE(WEB_RTC)
-
-#endif // RTCRtpReceiver_h

@@ -23,82 +23,55 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef CryptoKey_h
-#define CryptoKey_h
+#pragma once
 
 #if ENABLE(SUBTLE_CRYPTO)
 
+#include "CryptoAesKeyAlgorithm.h"
 #include "CryptoAlgorithmIdentifier.h"
+#include "CryptoEcKeyAlgorithm.h"
+#include "CryptoHmacKeyAlgorithm.h"
+#include "CryptoKeyAlgorithm.h"
 #include "CryptoKeyType.h"
 #include "CryptoKeyUsage.h"
+#include "CryptoRsaHashedKeyAlgorithm.h"
+#include "CryptoRsaKeyAlgorithm.h"
 #include <wtf/Forward.h>
-#include <wtf/RefCounted.h>
+#include <wtf/ThreadSafeRefCounted.h>
 #include <wtf/TypeCasts.h>
+#include <wtf/Variant.h>
 #include <wtf/Vector.h>
 #include <wtf/text/WTFString.h>
 
 namespace WebCore {
 
-class CryptoAlgorithmDescriptionBuilder;
-class CryptoKeyData;
-
 enum class CryptoKeyClass {
     AES,
+    EC,
     HMAC,
-    RSA
-};
-
-enum class KeyAlgorithmClass {
-    AES,
-    HMAC,
-    HRSA,
     RSA,
+    Raw,
 };
 
-class KeyAlgorithm {
-public:
-    virtual ~KeyAlgorithm()
-    {
-    }
-
-    virtual KeyAlgorithmClass keyAlgorithmClass() const = 0;
-
-    const String& name() const { return m_name; }
-
-protected:
-    explicit KeyAlgorithm(const String& name)
-        : m_name(name)
-    {
-    }
-
-private:
-    String m_name;
-};
-
-class CryptoKey : public RefCounted<CryptoKey> {
+class CryptoKey : public ThreadSafeRefCounted<CryptoKey> {
 public:
     using Type = CryptoKeyType;
-    CryptoKey(CryptoAlgorithmIdentifier, Type, bool extractable, CryptoKeyUsage);
-    virtual ~CryptoKey();
+    using KeyAlgorithm = Variant<CryptoKeyAlgorithm, CryptoAesKeyAlgorithm, CryptoEcKeyAlgorithm, CryptoHmacKeyAlgorithm, CryptoRsaHashedKeyAlgorithm, CryptoRsaKeyAlgorithm>;
 
-    virtual CryptoKeyClass keyClass() const = 0;
+    CryptoKey(CryptoAlgorithmIdentifier, Type, bool extractable, CryptoKeyUsageBitmap);
+    virtual ~CryptoKey();
 
     Type type() const;
     bool extractable() const { return m_extractable; }
-    virtual std::unique_ptr<KeyAlgorithm> buildAlgorithm() const = 0;
+    Vector<CryptoKeyUsage> usages() const;
+    virtual KeyAlgorithm algorithm() const = 0;
 
-    // FIXME: Confusing to have CryptoKeyUsage and CryptoKey::Usage named almost the same, but be slightly different.
-    // CryptoKeyUsage values are bit masks so they can be combined with "or", while this is a normal enum that must
-    // match what is defined in the IDL. Maybe we can rename CryptoKeyUsage to CryptoKey::UsagesBitmap?
-    enum class Usage { Encrypt, Decrypt, Sign, Verify, DeriveKey, DeriveBits, WrapKey, UnwrapKey };
-    Vector<Usage> usages() const;
+    virtual CryptoKeyClass keyClass() const = 0;
 
     CryptoAlgorithmIdentifier algorithmIdentifier() const { return m_algorithmIdentifier; }
-    CryptoKeyUsage usagesBitmap() const { return m_usages; }
-    void setUsagesBitmap(CryptoKeyUsage usage) { m_usages = usage; };
-    bool allows(CryptoKeyUsage usage) const { return usage == (m_usages & usage); }
-
-    virtual std::unique_ptr<CryptoKeyData> exportData() const = 0;
+    CryptoKeyUsageBitmap usagesBitmap() const { return m_usages; }
+    void setUsagesBitmap(CryptoKeyUsageBitmap usage) { m_usages = usage; };
+    bool allows(CryptoKeyUsageBitmap usage) const { return usage == (m_usages & usage); }
 
     static Vector<uint8_t> randomData(size_t);
 
@@ -106,7 +79,7 @@ private:
     CryptoAlgorithmIdentifier m_algorithmIdentifier;
     Type m_type;
     bool m_extractable;
-    CryptoKeyUsage m_usages;
+    CryptoKeyUsageBitmap m_usages;
 };
 
 inline auto CryptoKey::type() const -> Type
@@ -121,10 +94,4 @@ SPECIALIZE_TYPE_TRAITS_BEGIN(WebCore::ToClassName) \
     static bool isType(const WebCore::CryptoKey& key) { return key.keyClass() == WebCore::KeyClass; } \
 SPECIALIZE_TYPE_TRAITS_END()
 
-#define SPECIALIZE_TYPE_TRAITS_KEY_ALGORITHM(ToClassName, KeyAlgorithmClass) \
-SPECIALIZE_TYPE_TRAITS_BEGIN(WebCore::ToClassName) \
-    static bool isType(const WebCore::KeyAlgorithm& algorithm) { return algorithm.keyAlgorithmClass() == WebCore::KeyAlgorithmClass; } \
-SPECIALIZE_TYPE_TRAITS_END()
-
 #endif // ENABLE(SUBTLE_CRYPTO)
-#endif // CryptoKey_h

@@ -1,73 +1,68 @@
 {
     "domain": "DOMDebugger",
     "description": "DOM debugging allows setting breakpoints on particular DOM operations and events. JavaScript execution will stop on these operations as if there was a regular breakpoint set.",
-    "availability": "web",
+    "availability": ["web"],
     "types": [
         {
             "id": "DOMBreakpointType",
             "type": "string",
             "enum": ["subtree-modified", "attribute-modified", "node-removed"],
             "description": "DOM breakpoint type."
+        },
+        {
+            "id": "EventBreakpointType",
+            "type": "string",
+            "enum": ["animation-frame", "listener", "timer"],
+            "description": "Event breakpoint type."
         }
     ],
     "commands": [
         {
             "name": "setDOMBreakpoint",
+            "description": "Sets breakpoint on particular operation with DOM.",
             "parameters": [
                 { "name": "nodeId", "$ref": "DOM.NodeId", "description": "Identifier of the node to set breakpoint on." },
                 { "name": "type", "$ref": "DOMBreakpointType", "description": "Type of the operation to stop upon." }
-            ],
-            "description": "Sets breakpoint on particular operation with DOM."
+            ]
         },
         {
             "name": "removeDOMBreakpoint",
+            "description": "Removes DOM breakpoint that was set using <code>setDOMBreakpoint</code>.",
             "parameters": [
                 { "name": "nodeId", "$ref": "DOM.NodeId", "description": "Identifier of the node to remove breakpoint from." },
                 { "name": "type", "$ref": "DOMBreakpointType", "description": "Type of the breakpoint to remove." }
-            ],
-            "description": "Removes DOM breakpoint that was set using <code>setDOMBreakpoint</code>."
+            ]
         },
         {
-            "name": "setEventListenerBreakpoint",
+            "name": "setEventBreakpoint",
+            "description": "Sets breakpoint on particular event of given type.",
             "parameters": [
-                { "name": "eventName", "type": "string", "description": "DOM Event name to stop on (any DOM event will do)." }
-            ],
-            "description": "Sets breakpoint on particular DOM event."
+                { "name": "breakpointType", "$ref": "EventBreakpointType" },
+                { "name": "eventName", "type": "string", "description": "The name of the event to stop on." }
+            ]
         },
         {
-            "name": "removeEventListenerBreakpoint",
+            "name": "removeEventBreakpoint",
+            "description": "Removes breakpoint on particular event of given type.",
             "parameters": [
-                { "name": "eventName", "type": "string", "description": "Event name." }
-            ],
-            "description": "Removes breakpoint on particular DOM event."
-        },
-        {
-            "name": "setInstrumentationBreakpoint",
-            "parameters": [
-                { "name": "eventName", "type": "string", "description": "Instrumentation name to stop on." }
-            ],
-            "description": "Sets breakpoint on particular native event."
-        },
-        {
-            "name": "removeInstrumentationBreakpoint",
-            "parameters": [
-                { "name": "eventName", "type": "string", "description": "Instrumentation name to stop on." }
-            ],
-            "description": "Sets breakpoint on particular native event."
+                { "name": "breakpointType", "$ref": "EventBreakpointType" },
+                { "name": "eventName", "type": "string", "description": "The name of the event to stop on." }
+            ]
         },
         {
             "name": "setXHRBreakpoint",
+            "description": "Sets breakpoint on XMLHttpRequest.",
             "parameters": [
-                { "name": "url", "type": "string", "description": "Resource URL substring. All XHRs having this substring in the URL will get stopped upon." }
-            ],
-            "description": "Sets breakpoint on XMLHttpRequest."
+                { "name": "url", "type": "string", "description": "Resource URL substring or regular expression. All XHRs having this substring in the URL will get stopped upon. An empty string will pause on all XHRs." },
+                { "name": "isRegex", "type": "boolean", "optional": true, "description": "Whether the URL string is a regular expression." }
+            ]
         },
         {
             "name": "removeXHRBreakpoint",
+            "description": "Removes breakpoint from XMLHttpRequest.",
             "parameters": [
-                { "name": "url", "type": "string", "description": "Resource URL substring." }
-            ],
-            "description": "Removes breakpoint from XMLHttpRequest."
+                { "name": "url", "type": "string", "description": "Resource URL substring. An empty string will stop pausing on all XHRs." }
+            ]
         }
     ]
 }

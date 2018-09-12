@@ -23,17 +23,15 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
  */
 
-#ifndef CachedResourceHandle_h
-#define CachedResourceHandle_h
+#pragma once
 
-#include "PlatformExportMacros.h"
 #include <wtf/Forward.h>
 
 namespace WebCore {
 
 class CachedResource;
 
-class CachedResourceHandleBase {
+class WEBCORE_EXPORT CachedResourceHandleBase {
 public:
     ~CachedResourceHandleBase();
 
@@ -50,7 +48,7 @@ protected:
     CachedResourceHandleBase(CachedResource*);
     CachedResourceHandleBase(const CachedResourceHandleBase&);
 
-    WEBCORE_EXPORT void setResource(CachedResource*);
+    void setResource(CachedResource*);
     
 private:
     CachedResourceHandleBase& operator=(const CachedResourceHandleBase&) { return *this; } 
@@ -97,5 +95,3 @@ template <class R, class RR> bool operator!=(const RR* res, const CachedResource
 }
 
 } // namespace WebCore
-
-#endif // CachedResourceHandle

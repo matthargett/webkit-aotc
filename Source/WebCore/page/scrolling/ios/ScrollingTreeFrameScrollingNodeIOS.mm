@@ -26,27 +26,25 @@
 #import "config.h"
 #import "ScrollingTreeFrameScrollingNodeIOS.h"
 
-#if ENABLE(ASYNC_SCROLLING)
+#if ENABLE(ASYNC_SCROLLING) && PLATFORM(IOS)
 
 #import "FrameView.h"
 #import "ScrollingCoordinator.h"
 #import "ScrollingTree.h"
 #import "ScrollingStateTree.h"
-#import "Settings.h"
 #import "TileController.h"
 #import "WebLayer.h"
-
 #import <QuartzCore/QuartzCore.h>
 
 namespace WebCore {
 
-Ref<ScrollingTreeFrameScrollingNodeIOS> ScrollingTreeFrameScrollingNodeIOS::create(ScrollingTree& scrollingTree, ScrollingNodeID nodeID)
+Ref<ScrollingTreeFrameScrollingNodeIOS> ScrollingTreeFrameScrollingNodeIOS::create(ScrollingTree& scrollingTree, ScrollingNodeType nodeType, ScrollingNodeID nodeID)
 {
-    return adoptRef(*new ScrollingTreeFrameScrollingNodeIOS(scrollingTree, nodeID));
+    return adoptRef(*new ScrollingTreeFrameScrollingNodeIOS(scrollingTree, nodeType, nodeID));
 }
 
-ScrollingTreeFrameScrollingNodeIOS::ScrollingTreeFrameScrollingNodeIOS(ScrollingTree& scrollingTree, ScrollingNodeID nodeID)
-    : ScrollingTreeFrameScrollingNode(scrollingTree, nodeID)
+ScrollingTreeFrameScrollingNodeIOS::ScrollingTreeFrameScrollingNodeIOS(ScrollingTree& scrollingTree, ScrollingNodeType nodeType, ScrollingNodeID nodeID)
+    : ScrollingTreeFrameScrollingNode(scrollingTree, nodeType, nodeID)
 {
 }
 
@@ -54,9 +52,9 @@ ScrollingTreeFrameScrollingNodeIOS::~ScrollingTreeFrameScrollingNodeIOS()
 {
 }
 
-void ScrollingTreeFrameScrollingNodeIOS::updateBeforeChildren(const ScrollingStateNode& stateNode)
+void ScrollingTreeFrameScrollingNodeIOS::commitStateBeforeChildren(const ScrollingStateNode& stateNode)
 {
-    ScrollingTreeFrameScrollingNode::updateBeforeChildren(stateNode);
+    ScrollingTreeFrameScrollingNode::commitStateBeforeChildren(stateNode);
     
     const auto& scrollingStateNode = downcast<ScrollingStateFrameScrollingNode>(stateNode);
 
@@ -86,9 +84,9 @@ void ScrollingTreeFrameScrollingNodeIOS::updateBeforeChildren(const ScrollingSta
     }
 }
 
-void ScrollingTreeFrameScrollingNodeIOS::updateAfterChildren(const ScrollingStateNode& stateNode)
+void ScrollingTreeFrameScrollingNodeIOS::commitStateAfterChildren(const ScrollingStateNode& stateNode)
 {
-    ScrollingTreeFrameScrollingNode::updateAfterChildren(stateNode);
+    ScrollingTreeFrameScrollingNode::commitStateAfterChildren(stateNode);
 
     const auto& scrollingStateNode = downcast<ScrollingStateFrameScrollingNode>(stateNode);
 
@@ -109,15 +107,16 @@ void ScrollingTreeFrameScrollingNodeIOS::setScrollPositionWithoutContentEdgeCons
 {
     if (shouldUpdateScrollLayerPositionSynchronously()) {
         m_probableMainThreadScrollPosition = scrollPosition;
-        scrollingTree().scrollingTreeNodeDidScroll(scrollingNodeID(), scrollPosition, SetScrollingLayerPosition);
+        scrollingTree().scrollingTreeNodeDidScroll(scrollingNodeID(), scrollPosition, std::nullopt, ScrollingLayerPositionAction::Set);
         return;
     }
 
-    setScrollLayerPosition(scrollPosition);
-    scrollingTree().scrollingTreeNodeDidScroll(scrollingNodeID(), scrollPosition);
+    FloatRect layoutViewport; // FIXME: implement for iOS WK1.
+    setScrollLayerPosition(scrollPosition, layoutViewport);
+    scrollingTree().scrollingTreeNodeDidScroll(scrollingNodeID(), scrollPosition, std::nullopt);
 }
 
-void ScrollingTreeFrameScrollingNodeIOS::setScrollLayerPosition(const FloatPoint& scrollPosition)
+void ScrollingTreeFrameScrollingNodeIOS::setScrollLayerPosition(const FloatPoint& scrollPosition, const FloatRect&)
 {
     ASSERT(!shouldUpdateScrollLayerPositionSynchronously());
     [m_scrollLayer setPosition:-scrollPosition];
@@ -202,4 +201,4 @@ FloatPoint ScrollingTreeFrameScrollingNodeIOS::maximumScrollPosition() const
 
 } // namespace WebCore
 
-#endif // ENABLE(ASYNC_SCROLLING)
+#endif // ENABLE(ASYNC_SCROLLING) && PLATFORM(IOS)

@@ -29,15 +29,12 @@
  */
 
 #import "config.h"
-#import "AccessibilityCommonMac.h"
 #import "AccessibilityController.h"
 
-#if HAVE(ACCESSIBILITY)
-
+#import "AccessibilityCommonMac.h"
 #import "AccessibilityNotificationHandler.h"
 #import "InjectedBundle.h"
 #import "InjectedBundlePage.h"
-
 #import <JavaScriptCore/JSRetainPtr.h>
 #import <JavaScriptCore/JSStringRef.h>
 #import <JavaScriptCore/JSStringRefCF.h>
@@ -54,7 +51,8 @@ bool AccessibilityController::addNotificationListener(JSValueRef functionCallbac
 
     if (m_globalNotificationHandler)
         return false;
-    m_globalNotificationHandler = [[AccessibilityNotificationHandler alloc] init];
+
+    m_globalNotificationHandler = adoptNS([[AccessibilityNotificationHandler alloc] init]);
     [m_globalNotificationHandler.get() setCallback:functionCallback];
     [m_globalNotificationHandler.get() startObserving];
 
@@ -69,10 +67,6 @@ bool AccessibilityController::removeNotificationListener()
     m_globalNotificationHandler.clear();
 
     return true;
-}
-
-void AccessibilityController::logAccessibilityEvents()
-{
 }
 
 void AccessibilityController::resetToConsistentState()
@@ -100,10 +94,10 @@ static id findAccessibleObjectById(id obj, NSString *idAttribute)
     return nullptr;
 }
 
-PassRefPtr<AccessibilityUIElement> AccessibilityController::accessibleElementById(JSStringRef idAttribute)
+RefPtr<AccessibilityUIElement> AccessibilityController::accessibleElementById(JSStringRef idAttribute)
 {
     WKBundlePageRef page = InjectedBundle::singleton().page()->page();
-    id root = static_cast<PlatformUIElement>(WKAccessibilityRootObject(page));
+    id root = (__bridge id)WKAccessibilityRootObject(page);
 
     id result = findAccessibleObjectById(root, [NSString stringWithJSStringRef:idAttribute]);
     if (result)
@@ -119,5 +113,3 @@ JSRetainPtr<JSStringRef> AccessibilityController::platformName()
 }
 
 } // namespace WTR
-
-#endif // HAVE(ACCESSIBILITY)

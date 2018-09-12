@@ -44,15 +44,16 @@ namespace JSC {
 template <class Parent>
 inline JSCallbackObject<Parent>* JSCallbackObject<Parent>::asCallbackObject(JSValue value)
 {
-    ASSERT(asObject(value)->inherits(info()));
+    ASSERT(asObject(value)->inherits(*value.getObject()->vm(), info()));
     return jsCast<JSCallbackObject*>(asObject(value));
 }
 
 template <class Parent>
-inline JSCallbackObject<Parent>* JSCallbackObject<Parent>::asCallbackObject(EncodedJSValue value)
+inline JSCallbackObject<Parent>* JSCallbackObject<Parent>::asCallbackObject(EncodedJSValue encodedValue)
 {
-    ASSERT(asObject(JSValue::decode(value))->inherits(info()));
-    return jsCast<JSCallbackObject*>(asObject(JSValue::decode(value)));
+    JSValue value = JSValue::decode(encodedValue);
+    ASSERT(asObject(value)->inherits(*value.getObject()->vm(), info()));
+    return jsCast<JSCallbackObject*>(asObject(value));
 }
 
 template <class Parent>
@@ -74,18 +75,25 @@ JSCallbackObject<Parent>::JSCallbackObject(VM& vm, JSClassRef jsClass, Structure
 template <class Parent>
 JSCallbackObject<Parent>::~JSCallbackObject()
 {
+    VM* vm = this->HeapCell::vm();
+    vm->currentlyDestructingCallbackObject = this;
+    ASSERT(m_classInfo);
+    vm->currentlyDestructingCallbackObjectClassInfo = m_classInfo;
     JSObjectRef thisRef = toRef(static_cast<JSObject*>(this));
     for (JSClassRef jsClass = classRef(); jsClass; jsClass = jsClass->parentClass) {
         if (JSObjectFinalizeCallback finalize = jsClass->finalize)
             finalize(thisRef);
     }
+    vm->currentlyDestructingCallbackObject = nullptr;
+    vm->currentlyDestructingCallbackObjectClassInfo = nullptr;
 }
     
 template <class Parent>
 void JSCallbackObject<Parent>::finishCreation(ExecState* exec)
 {
-    Base::finishCreation(exec->vm());
-    ASSERT(Parent::inherits(info()));
+    VM& vm = exec->vm();
+    Base::finishCreation(vm);
+    ASSERT(Parent::inherits(vm, info()));
     init(exec);
 }
 
@@ -93,7 +101,7 @@ void JSCallbackObject<Parent>::finishCreation(ExecState* exec)
 template <class Parent>
 void JSCallbackObject<Parent>::finishCreation(VM& vm)
 {
-    ASSERT(Parent::inherits(info()));
+    ASSERT(Parent::inherits(vm, info()));
     ASSERT(Parent::isGlobalObject());
     Base::finishCreation(vm);
     init(jsCast<JSGlobalObject*>(this)->globalExec());
@@ -117,17 +125,19 @@ void JSCallbackObject<Parent>::init(ExecState* exec)
         JSObjectInitializeCallback initialize = initRoutines[i];
         initialize(toRef(exec), toRef(this));
     }
+    
+    m_classInfo = this->classInfo();
 }
 
 template <class Parent>
-String JSCallbackObject<Parent>::className(const JSObject* object)
+String JSCallbackObject<Parent>::className(const JSObject* object, VM& vm)
 {
     const JSCallbackObject* thisObject = jsCast<const JSCallbackObject*>(object);
     String thisClassName = thisObject->classRef()->className();
     if (!thisClassName.isEmpty())
         return thisClassName;
     
-    return Parent::className(object);
+    return Parent::className(object, vm);
 }
 
 template <class Parent>
@@ -149,7 +159,7 @@ bool JSCallbackObject<Parent>::getOwnPropertySlot(JSObject* object, ExecState* e
                     propertyNameRef = OpaqueJSString::create(name);
                 JSLock::DropAllLocks dropAllLocks(exec);
                 if (hasProperty(ctx, thisRef, propertyNameRef.get())) {
-                    slot.setCustom(thisObject, ReadOnly | DontEnum, callbackGetter);
+                    slot.setCustom(thisObject, PropertyAttribute::ReadOnly | PropertyAttribute::DontEnum, callbackGetter);
                     return true;
                 }
             } else if (JSObjectGetPropertyCallback getProperty = jsClass->getProperty) {
@@ -163,11 +173,11 @@ bool JSCallbackObject<Parent>::getOwnPropertySlot(JSObject* object, ExecState* e
                 }
                 if (exception) {
                     throwException(exec, scope, toJS(exec, exception));
-                    slot.setValue(thisObject, ReadOnly | DontEnum, jsUndefined());
+                    slot.setValue(thisObject, PropertyAttribute::ReadOnly | PropertyAttribute::DontEnum, jsUndefined());
                     return true;
                 }
                 if (value) {
-                    slot.setValue(thisObject, ReadOnly | DontEnum, toJS(exec, value));
+                    slot.setValue(thisObject, PropertyAttribute::ReadOnly | PropertyAttribute::DontEnum, toJS(exec, value));
                     return true;
                 }
             }
@@ -176,7 +186,7 @@ bool JSCallbackObject<Parent>::getOwnPropertySlot(JSObject* object, ExecState* e
                 if (staticValues->contains(name)) {
                     JSValue value = thisObject->getStaticValue(exec, propertyName);
                     if (value) {
-                        slot.setValue(thisObject, ReadOnly | DontEnum, value);
+                        slot.setValue(thisObject, PropertyAttribute::ReadOnly | PropertyAttribute::DontEnum, value);
                         return true;
                     }
                 }
@@ -184,7 +194,7 @@ bool JSCallbackObject<Parent>::getOwnPropertySlot(JSObject* object, ExecState* e
             
             if (OpaqueJSClassStaticFunctionsTable* staticFunctions = jsClass->staticFunctions(exec)) {
                 if (staticFunctions->contains(name)) {
-                    slot.setCustom(thisObject, ReadOnly | DontEnum, staticFunctionGetter);
+                    slot.setCustom(thisObject, PropertyAttribute::ReadOnly | PropertyAttribute::DontEnum, staticFunctionGetter);
                     return true;
                 }
             }
@@ -197,7 +207,7 @@ bool JSCallbackObject<Parent>::getOwnPropertySlot(JSObject* object, ExecState* e
 template <class Parent>
 bool JSCallbackObject<Parent>::getOwnPropertySlotByIndex(JSObject* object, ExecState* exec, unsigned propertyName, PropertySlot& slot)
 {
-    return object->methodTable()->getOwnPropertySlot(object, exec, Identifier::from(exec, propertyName), slot);
+    return object->methodTable(exec->vm())->getOwnPropertySlot(object, exec, Identifier::from(exec, propertyName), slot);
 }
 
 template <class Parent>
@@ -404,7 +414,7 @@ template <class Parent>
 bool JSCallbackObject<Parent>::deletePropertyByIndex(JSCell* cell, ExecState* exec, unsigned propertyName)
 {
     JSCallbackObject* thisObject = jsCast<JSCallbackObject*>(cell);
-    return thisObject->methodTable()->deleteProperty(thisObject, exec, Identifier::from(exec, propertyName));
+    return thisObject->methodTable(exec->vm())->deleteProperty(thisObject, exec, Identifier::from(exec, propertyName));
 }
 
 template <class Parent>
@@ -426,7 +436,7 @@ EncodedJSValue JSCallbackObject<Parent>::construct(ExecState* exec)
     VM& vm = exec->vm();
     auto scope = DECLARE_THROW_SCOPE(vm);
 
-    JSObject* constructor = exec->callee();
+    JSObject* constructor = exec->jsCallee();
     JSContextRef execRef = toRef(exec);
     JSObjectRef constructorRef = toRef(constructor);
     
@@ -500,7 +510,7 @@ EncodedJSValue JSCallbackObject<Parent>::call(ExecState* exec)
     auto scope = DECLARE_THROW_SCOPE(vm);
 
     JSContextRef execRef = toRef(exec);
-    JSObjectRef functionRef = toRef(exec->callee());
+    JSObjectRef functionRef = toRef(exec->jsCallee());
     JSObjectRef thisObjRef = toRef(jsCast<JSObject*>(exec->thisValue().toThis(exec, NotStrictMode)));
     
     for (JSClassRef jsClass = jsCast<JSCallbackObject<Parent>*>(toJS(functionRef))->classRef(); jsClass; jsClass = jsClass->parentClass) {
@@ -643,7 +653,7 @@ EncodedJSValue JSCallbackObject<Parent>::staticFunctionGetter(ExecState* exec, E
             if (OpaqueJSClassStaticFunctionsTable* staticFunctions = jsClass->staticFunctions(exec)) {
                 if (StaticFunctionEntry* entry = staticFunctions->get(name)) {
                     if (JSObjectCallAsFunctionCallback callAsFunction = entry->callAsFunction) {
-                        JSObject* o = JSCallbackFunction::create(vm, thisObj->globalObject(), callAsFunction, name);
+                        JSObject* o = JSCallbackFunction::create(vm, thisObj->globalObject(vm), callAsFunction, name);
                         thisObj->putDirect(vm, propertyName, o, entry->attributes);
                         return JSValue::encode(o);
                     }
@@ -652,7 +662,7 @@ EncodedJSValue JSCallbackObject<Parent>::staticFunctionGetter(ExecState* exec, E
         }
     }
 
-    return JSValue::encode(throwException(exec, scope, createReferenceError(exec, ASCIILiteral("Static function property defined with NULL callAsFunction callback."))));
+    return JSValue::encode(throwException(exec, scope, createReferenceError(exec, "Static function property defined with NULL callAsFunction callback."_s)));
 }
 
 template <class Parent>
@@ -687,7 +697,7 @@ EncodedJSValue JSCallbackObject<Parent>::callbackGetter(ExecState* exec, Encoded
         }
     }
 
-    return JSValue::encode(throwException(exec, scope, createReferenceError(exec, ASCIILiteral("hasProperty callback returned true for a property that doesn't exist."))));
+    return JSValue::encode(throwException(exec, scope, createReferenceError(exec, "hasProperty callback returned true for a property that doesn't exist."_s)));
 }
 
 } // namespace JSC

@@ -6,6 +6,12 @@
     </head>
     <body>
         <script>
+            if (window.testRunner)
+                testRunner.setWebRTCUnifiedPlanEnabled(false);
+
+            if (window.internals)
+                internals.useMockRTCPeerConnectionFactory("");
+
             let stream;
             let midAssignedByA;
             let event;

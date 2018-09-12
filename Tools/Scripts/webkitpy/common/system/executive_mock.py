@@ -42,12 +42,20 @@ class MockProcess(object):
         self.stderr = StringIO.StringIO(stderr)
         self.stdin = StringIO.StringIO()
         self.returncode = 0
+        self._is_running = False
 
     def wait(self):
-        return
+        self._is_running = False
+        return self.returncode
 
     def communicate(self, input=None):
+        self._is_running = False
         return (self.stdout, self.stderr)
+
+    def poll(self):
+        if self._is_running:
+            return None
+        return self.returncode
 
 
 # FIXME: This should be unified with MockExecutive2
@@ -100,6 +108,7 @@ class MockExecutive(object):
                     cwd=None,
                     input=None,
                     error_handler=None,
+                    ignore_errors=False,
                     return_exit_code=False,
                     return_stderr=True,
                     decode_output=False,
@@ -134,6 +143,9 @@ class MockExecutive(object):
     def kill_process(self, pid):
         pass
 
+    def interrupt(self, pid):
+        pass
+
     def popen(self, args, cwd=None, env=None, **kwargs):
         self.calls.append(args)
         if self._should_log:
@@ -146,6 +158,7 @@ class MockExecutive(object):
             _log.info("MOCK popen: %s%s%s" % (args, cwd_string, env_string))
         if not self._proc:
             self._proc = MockProcess()
+        self._proc._is_running = True
         return self._proc
 
     def run_in_parallel(self, commands):
@@ -168,6 +181,7 @@ class MockExecutive2(MockExecutive):
         self._stderr = stderr
         self._exit_code = exit_code
         self._exception = exception
+        self._running_pids = {'test-webkitpy': os.getpid()}
         self._run_command_fn = run_command_fn
         self.calls = []
 
@@ -176,12 +190,18 @@ class MockExecutive2(MockExecutive):
                     cwd=None,
                     input=None,
                     error_handler=None,
+                    ignore_errors=False,
                     return_exit_code=False,
                     return_stderr=True,
                     decode_output=False,
                     env=None):
         self.calls.append(args)
         assert(isinstance(args, list) or isinstance(args, tuple))
+
+        if ignore_errors:
+            assert error_handler is None, "don't specify error_handler if ignore_errors is True"
+            error_handler = self.ignore_error
+
         if self._exception:
             raise self._exception  # pylint: disable=E0702
         if self._run_command_fn:

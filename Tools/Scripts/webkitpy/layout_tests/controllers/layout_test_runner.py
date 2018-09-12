@@ -26,6 +26,7 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+import atexit
 import logging
 import math
 import threading
@@ -61,33 +62,39 @@ class TestRunInterruptedException(Exception):
 
 
 class LayoutTestRunner(object):
-    def __init__(self, options, port, printer, results_directory, test_is_slow_fn):
+    def __init__(self, options, port, printer, results_directory, test_is_slow_fn, needs_http=False, needs_websockets=False, needs_web_platform_test_server=False):
         self._options = options
         self._port = port
         self._printer = printer
         self._results_directory = results_directory
         self._test_is_slow = test_is_slow_fn
+        self._needs_http = needs_http
+        self._needs_websockets = needs_websockets
+        self._needs_web_platform_test_server = needs_web_platform_test_server
+
         self._sharder = Sharder(self._port.split_test)
         self._filesystem = self._port.host.filesystem
 
         self._expectations = None
         self._test_inputs = []
-        self._needs_http = None
-        self._needs_websockets = None
-        self._needs_web_platform_test_server = None
         self._retrying = False
         self._current_run_results = None
+        self._did_start_http_server = False
+        self._did_start_websocket_server = False
+        self._did_start_wpt_server = False
+
+        if ((self._needs_http and self._options.http) or self._needs_web_platform_test_server) and self._port.get_option("start_http_servers_if_needed"):
+            self.start_servers()
+            atexit.register(lambda: self.stop_servers())
 
     def get_worker_count(self, test_inputs, child_process_count):
         all_shards = self._sharder.shard_tests(test_inputs, child_process_count, self._options.fully_parallel)
         return min(child_process_count, len(all_shards))
 
-    def run_tests(self, expectations, test_inputs, tests_to_skip, num_workers, needs_http, needs_websockets, needs_web_platform_test_server, retrying):
+    def run_tests(self, expectations, test_inputs, tests_to_skip, num_workers, retrying):
         self._expectations = expectations
         self._test_inputs = test_inputs
-        self._needs_http = needs_http
-        self._needs_websockets = needs_websockets
-        self._needs_web_platform_test_server = needs_web_platform_test_server
+
         self._retrying = retrying
 
         # FIXME: rename all variables to test_run_results or some such ...
@@ -107,9 +114,6 @@ class LayoutTestRunner(object):
         self._printer.write_update('Sharding tests ...')
         all_shards = self._sharder.shard_tests(test_inputs, int(self._options.child_processes), self._options.fully_parallel)
 
-        if (self._needs_http and self._options.http) or self._needs_web_platform_test_server:
-            self.start_servers()
-
         self._printer.print_workers_and_shards(num_workers, len(all_shards))
 
         if self._options.dry_run:
@@ -120,18 +124,16 @@ class LayoutTestRunner(object):
         try:
             with message_pool.get(self, self._worker_factory, num_workers, self._port.worker_startup_delay_secs(), self._port.host) as pool:
                 pool.run(('test_list', shard.name, shard.test_inputs) for shard in all_shards)
-        except TestRunInterruptedException, e:
+        except TestRunInterruptedException as e:
             _log.warning(e.reason)
             run_results.interrupted = True
         except KeyboardInterrupt:
             self._printer.flush()
             self._printer.writeln('Interrupted, exiting ...')
             run_results.keyboard_interrupted = True
-        except Exception, e:
+        except Exception as e:
             _log.debug('%s("%s") raised, exiting' % (e.__class__.__name__, str(e)))
             raise
-        finally:
-            self.stop_servers()
 
         return run_results
 
@@ -141,6 +143,9 @@ class LayoutTestRunner(object):
             self._filesystem.maybe_make_directory(self._filesystem.join(self._results_directory, 'retries'))
             results_directory = self._filesystem.join(self._results_directory, 'retries')
         return Worker(worker_connection, results_directory, self._options)
+
+    def _handle_did_spawn_worker(self, worker_number):
+        self._port.did_spawn_worker(worker_number)
 
     def _mark_interrupted_tests_as_skipped(self, run_results):
         for test_input in self._test_inputs:
@@ -177,8 +182,9 @@ class LayoutTestRunner(object):
             exp_str = got_str = 'SKIP'
             expected = True
         else:
-            expected = self._expectations.matches_an_expected_result(result.test_name, result.type, self._options.pixel_tests or result.reftest_type)
-            exp_str = self._expectations.model().get_expectations_string(result.test_name)
+            expectations = self._expectations.filtered_expectations_for_test(result.test_name, self._options.pixel_tests or bool(result.reftest_type), self._options.world_leaks)
+            expected = self._expectations.matches_an_expected_result(result.test_name, result.type, expectations)
+            exp_str = self._expectations.model().expectations_to_string(expectations)
             got_str = self._expectations.model().expectation_to_string(result.type)
 
         run_results.add(result, expected, self._test_is_slow(result.test_name))
@@ -187,27 +193,49 @@ class LayoutTestRunner(object):
 
         self._interrupt_if_at_failure_limits(run_results)
 
+    def _annotate_results_with_additional_failures(self, run_results, results):
+        for new_result in results:
+            existing_result = run_results.results_by_name.get(new_result.test_name)
+            # When running a chunk (--run-chunk), results_by_name contains all the tests, but (confusingly) all_tests only contains those in the chunk that was run,
+            # and we don't want to modify the results of a test that didn't run. existing_result.test_number is only non-None for tests that ran.
+            if existing_result and existing_result.test_number is not None:
+                expectations = self._expectations.filtered_expectations_for_test(new_result.test_name, self._options.pixel_tests or bool(new_result.reftest_type), self._options.world_leaks)
+                was_expected = self._expectations.matches_an_expected_result(new_result.test_name, existing_result.type, expectations)
+                now_expected = self._expectations.matches_an_expected_result(new_result.test_name, new_result.type, expectations)
+                if was_expected != now_expected:
+                    # When annotation is not just about leaks, this logging should be changed.
+                    _log.warning('  %s -> changed by leak detection from a %s (%s) to a %s (%s)' % (new_result.test_name,
+                        TestExpectations.EXPECTATION_DESCRIPTION[existing_result.type], 'expected' if was_expected else 'unexpected',
+                        TestExpectations.EXPECTATION_DESCRIPTION[new_result.type], 'expected' if now_expected else 'unexpected'))
+                run_results.change_result_to_failure(existing_result, new_result, was_expected, now_expected)
+
     def start_servers(self):
-        if self._needs_http:
+        if self._needs_http and not self._did_start_http_server and not self._port.is_http_server_running():
             self._printer.write_update('Starting HTTP server ...')
             self._port.start_http_server()
-        if self._needs_websockets:
+            self._did_start_http_server = True
+        if self._needs_websockets and not self._did_start_websocket_server and not self._port.is_websocket_server_running():
             self._printer.write_update('Starting WebSocket server ...')
             self._port.start_websocket_server()
-        if self._needs_web_platform_test_server:
+            self._did_start_websocket_server = True
+        if self._needs_web_platform_test_server and not self._did_start_wpt_server and not self._port.is_wpt_server_running():
             self._printer.write_update('Starting Web Platform Test server ...')
             self._port.start_web_platform_test_server()
+            self._did_start_wpt_server = True
 
     def stop_servers(self):
-        if self._needs_http:
+        if self._did_start_http_server:
             self._printer.write_update('Stopping HTTP server ...')
             self._port.stop_http_server()
-        if self._needs_websockets:
+            self._did_start_http_server = False
+        if self._did_start_websocket_server:
             self._printer.write_update('Stopping WebSocket server ...')
             self._port.stop_websocket_server()
-        if self._needs_web_platform_test_server:
+            self._did_start_websocket_server = False
+        if self._did_start_wpt_server:
             self._printer.write_update('Stopping Web Platform Test server ...')
             self._port.stop_web_platform_test_server()
+            self._did_start_wpt_server = False
 
     def handle(self, name, source, *args):
         method = getattr(self, '_handle_' + name)
@@ -220,6 +248,9 @@ class LayoutTestRunner(object):
 
     def _handle_finished_test(self, worker_name, result, log_messages=[]):
         self._update_summary_with_result(self._current_run_results, result)
+
+    def _handle_finished_test_group(self, worker_name, overlay_results, log_messages=[]):
+        self._annotate_results_with_additional_failures(self._current_run_results, overlay_results)
 
 
 class Worker(object):
@@ -258,6 +289,8 @@ class Worker(object):
         for test_input in test_inputs:
             self._run_test(test_input, test_list_name)
 
+        self._finished_test_group(test_inputs)
+
     def _update_test_input(self, test_input):
         if test_input.reference_files is None:
             # Lazy initialization.
@@ -290,6 +323,29 @@ class Worker(object):
         self._caller.post('finished_test', result)
 
         self._clean_up_after_test(test_input, result)
+
+    def _do_post_tests_work(self, driver):
+        additional_results = []
+        if not driver:
+            return additional_results
+
+        post_test_output = driver.do_post_tests_work()
+        if post_test_output:
+            for test_name, doc_list in post_test_output.world_leaks_dict.iteritems():
+                additional_results.append(test_results.TestResult(test_name, [test_failures.FailureDocumentLeak(doc_list)]))
+        return additional_results
+
+    def _finished_test_group(self, test_inputs):
+        _log.debug("%s finished test group" % self._name)
+
+        if self._driver and self._driver.has_crashed():
+            self._kill_driver()
+
+        additional_results = []
+        if not self._options.run_singly:
+            additional_results = self._do_post_tests_work(self._driver)
+
+        self._caller.post('finished_test_group', additional_results)
 
     def stop(self):
         _log.debug("%s cleaning up" % self._name)
@@ -385,6 +441,11 @@ class Worker(object):
             # thread's results.
             _log.error('Test thread hung: killing all DumpRenderTrees')
             failures = [test_failures.FailureTimeout()]
+        else:
+            failure_results = self._do_post_tests_work(driver)
+            for failure_result in failure_results:
+                if failure_result.test_name == result.test_name:
+                    result.convert_to_failure(failure_result)
 
         driver.stop()
 

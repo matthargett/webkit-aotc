@@ -22,8 +22,7 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef AsyncAudioDecoder_h
-#define AsyncAudioDecoder_h
+#pragma once
 
 #include <memory>
 #include <wtf/Forward.h>
@@ -55,6 +54,7 @@ public:
 private:
     class DecodingTask {
         WTF_MAKE_NONCOPYABLE(DecodingTask);
+        WTF_MAKE_FAST_ALLOCATED;
     public:
         DecodingTask(Ref<JSC::ArrayBuffer>&& audioData, float sampleRate, RefPtr<AudioBufferCallback>&& successCallback, RefPtr<AudioBufferCallback>&& errorCallback);
         void decode();
@@ -75,14 +75,11 @@ private:
         RefPtr<AudioBuffer> m_audioBuffer;
     };
     
-    static void threadEntry(void* threadData);
     void runLoop();
 
-    WTF::ThreadIdentifier m_threadID;
+    RefPtr<Thread> m_thread;
     Lock m_threadCreationMutex;
     MessageQueue<DecodingTask> m_queue;
 };
 
 } // namespace WebCore
-
-#endif // AsyncAudioDecoder_h

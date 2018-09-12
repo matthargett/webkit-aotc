@@ -23,12 +23,12 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef IDBKeyData_h
-#define IDBKeyData_h
+#pragma once
 
 #if ENABLE(INDEXED_DATABASE)
 
 #include "IDBKey.h"
+#include <wtf/StdSet.h>
 #include <wtf/Variant.h>
 #include <wtf/text/StringHash.h>
 
@@ -80,22 +80,38 @@ public:
     WEBCORE_EXPORT int compare(const IDBKeyData& other) const;
 
     void setArrayValue(const Vector<IDBKeyData>&);
+    void setBinaryValue(const ThreadSafeDataBuffer&);
     void setStringValue(const String&);
     void setDateValue(double);
     WEBCORE_EXPORT void setNumberValue(double);
 
     template<class Encoder> void encode(Encoder&) const;
-    template<class Decoder> static bool decode(Decoder&, IDBKeyData&);
+    template<class Decoder> static std::optional<IDBKeyData> decode(Decoder&);
     
 #if !LOG_DISABLED
     WEBCORE_EXPORT String loggingString() const;
 #endif
 
     bool isNull() const { return m_isNull; }
-    bool isValid() const { return m_type != KeyType::Invalid; }
+    bool isValid() const;
     KeyType type() const { return m_type; }
 
     bool operator<(const IDBKeyData&) const;
+    bool operator>(const IDBKeyData& other) const
+    {
+        return !(*this < other) && !(*this == other);
+    }
+
+    bool operator<=(const IDBKeyData& other) const
+    {
+        return !(*this > other);
+    }
+
+    bool operator>=(const IDBKeyData& other) const
+    {
+        return !(*this < other);
+    }
+
     bool operator==(const IDBKeyData& other) const;
     bool operator!=(const IDBKeyData& other) const
     {
@@ -120,6 +136,14 @@ public:
         case KeyType::String:
             hashCodes.append(StringHash::hash(WTF::get<String>(m_value)));
             break;
+        case KeyType::Binary: {
+            auto* data = WTF::get<ThreadSafeDataBuffer>(m_value).data();
+            if (!data)
+                hashCodes.append(0);
+            else
+                hashCodes.append(StringHasher::hashMemory(data->data(), data->size()));
+            break;
+        }
         case KeyType::Array:
             for (auto& key : WTF::get<Vector<IDBKeyData>>(m_value))
                 hashCodes.append(key.hash());
@@ -150,6 +174,12 @@ public:
         return WTF::get<double>(m_value);
     }
 
+    const ThreadSafeDataBuffer& binary() const
+    {
+        ASSERT(m_type == KeyType::Binary);
+        return WTF::get<ThreadSafeDataBuffer>(m_value);
+    }
+
     const Vector<IDBKeyData>& array() const
     {
         ASSERT(m_type == KeyType::Array);
@@ -160,7 +190,7 @@ private:
     static void isolatedCopy(const IDBKeyData& source, IDBKeyData& destination);
 
     KeyType m_type;
-    Variant<Vector<IDBKeyData>, String, double> m_value;
+    Variant<Vector<IDBKeyData>, String, double, ThreadSafeDataBuffer> m_value;
 
     bool m_isNull { false };
     bool m_isDeletedValue { false };
@@ -178,6 +208,7 @@ struct IDBKeyDataHashTraits : public WTF::CustomHashTraits<IDBKeyData> {
 
     static void constructDeletedValue(IDBKeyData& key)
     {
+        new (&key) IDBKeyData;
         key = IDBKeyData::deletedValue();
     }
 
@@ -214,6 +245,9 @@ void IDBKeyData::encode(Encoder& encoder) const
     case KeyType::Array:
         encoder << WTF::get<Vector<IDBKeyData>>(m_value);
         break;
+    case KeyType::Binary:
+        encoder << WTF::get<ThreadSafeDataBuffer>(m_value);
+        break;
     case KeyType::String:
         encoder << WTF::get<String>(m_value);
         break;
@@ -225,16 +259,17 @@ void IDBKeyData::encode(Encoder& encoder) const
 }
 
 template<class Decoder>
-bool IDBKeyData::decode(Decoder& decoder, IDBKeyData& keyData)
+std::optional<IDBKeyData> IDBKeyData::decode(Decoder& decoder)
 {
+    IDBKeyData keyData;
     if (!decoder.decode(keyData.m_isNull))
-        return false;
+        return std::nullopt;
 
     if (keyData.m_isNull)
-        return true;
+        return WTFMove(keyData);
 
     if (!decoder.decodeEnum(keyData.m_type))
-        return false;
+        return std::nullopt;
 
     switch (keyData.m_type) {
     case KeyType::Invalid:
@@ -244,25 +279,31 @@ bool IDBKeyData::decode(Decoder& decoder, IDBKeyData& keyData)
     case KeyType::Array:
         keyData.m_value = Vector<IDBKeyData>();
         if (!decoder.decode(WTF::get<Vector<IDBKeyData>>(keyData.m_value)))
-            return false;
+            return std::nullopt;
+        break;
+    case KeyType::Binary:
+        keyData.m_value = ThreadSafeDataBuffer();
+        if (!decoder.decode(WTF::get<ThreadSafeDataBuffer>(keyData.m_value)))
+            return std::nullopt;
         break;
     case KeyType::String:
         keyData.m_value = String();
         if (!decoder.decode(WTF::get<String>(keyData.m_value)))
-            return false;
+            return std::nullopt;
         break;
     case KeyType::Date:
     case KeyType::Number:
         keyData.m_value = 0.0;
         if (!decoder.decode(WTF::get<double>(keyData.m_value)))
-            return false;
+            return std::nullopt;
         break;
     }
 
-    return true;
+    return WTFMove(keyData);
 }
+
+using IDBKeyDataSet = StdSet<IDBKeyData>;
 
 } // namespace WebCore
 
 #endif // ENABLE(INDEXED_DATABASE)
-#endif // IDBKeyData_h

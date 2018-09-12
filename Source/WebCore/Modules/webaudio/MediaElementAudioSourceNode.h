@@ -22,8 +22,7 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef MediaElementAudioSourceNode_h
-#define MediaElementAudioSourceNode_h
+#pragma once
 
 #if ENABLE(WEB_AUDIO) && ENABLE(VIDEO)
 
@@ -38,7 +37,7 @@ namespace WebCore {
 
 class AudioContext;
     
-class MediaElementAudioSourceNode : public AudioNode, public AudioSourceProviderClient {
+class MediaElementAudioSourceNode final : public AudioNode, public AudioSourceProviderClient {
 public:
     static Ref<MediaElementAudioSourceNode> create(AudioContext&, HTMLMediaElement&);
 
@@ -52,7 +51,7 @@ public:
     
     // AudioSourceProviderClient
     void setFormat(size_t numberOfChannels, float sampleRate) override;
-    
+
     void lock();
     void unlock();
 
@@ -65,11 +64,14 @@ private:
     // As an audio source, we will never propagate silence.
     bool propagatesSilence() const override { return false; }
 
+    bool wouldTaintOrigin();
+
     Ref<HTMLMediaElement> m_mediaElement;
     Lock m_processMutex;
 
     unsigned m_sourceNumberOfChannels;
     double m_sourceSampleRate;
+    bool m_muted { false };
 
     std::unique_ptr<MultiChannelResampler> m_multiChannelResampler;
 };
@@ -77,5 +79,3 @@ private:
 } // namespace WebCore
 
 #endif // ENABLE(WEB_AUDIO) && ENABLE(VIDEO)
-
-#endif // MediaElementAudioSourceNode_h

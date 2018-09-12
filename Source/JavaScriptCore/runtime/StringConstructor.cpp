@@ -40,11 +40,11 @@ static EncodedJSValue JSC_HOST_CALL stringFromCodePoint(ExecState*);
 
 namespace JSC {
 
-const ClassInfo StringConstructor::s_info = { "Function", &InternalFunction::s_info, &stringConstructorTable, CREATE_METHOD_TABLE(StringConstructor) };
+const ClassInfo StringConstructor::s_info = { "Function", &InternalFunction::s_info, &stringConstructorTable, nullptr, CREATE_METHOD_TABLE(StringConstructor) };
 
 /* Source for StringConstructor.lut.h
 @begin stringConstructorTable
-  fromCharCode          stringFromCharCode         DontEnum|Function 1
+  fromCharCode          stringFromCharCode         DontEnum|Function 1 FromCharCodeIntrinsic
   fromCodePoint         stringFromCodePoint        DontEnum|Function 1
   raw                   JSBuiltin                  DontEnum|Function 1
 @end
@@ -52,38 +52,48 @@ const ClassInfo StringConstructor::s_info = { "Function", &InternalFunction::s_i
 
 STATIC_ASSERT_IS_TRIVIALLY_DESTRUCTIBLE(StringConstructor);
 
+
+static EncodedJSValue JSC_HOST_CALL callStringConstructor(ExecState*);
+static EncodedJSValue JSC_HOST_CALL constructWithStringConstructor(ExecState*);
+
 StringConstructor::StringConstructor(VM& vm, Structure* structure)
-    : InternalFunction(vm, structure)
+    : InternalFunction(vm, structure, callStringConstructor, constructWithStringConstructor)
 {
 }
 
 void StringConstructor::finishCreation(VM& vm, StringPrototype* stringPrototype)
 {
     Base::finishCreation(vm, stringPrototype->classInfo()->className);
-    putDirectWithoutTransition(vm, vm.propertyNames->prototype, stringPrototype, ReadOnly | DontEnum | DontDelete);
-    putDirectWithoutTransition(vm, vm.propertyNames->length, jsNumber(1), ReadOnly | DontEnum | DontDelete);
+    putDirectWithoutTransition(vm, vm.propertyNames->prototype, stringPrototype, PropertyAttribute::ReadOnly | PropertyAttribute::DontEnum | PropertyAttribute::DontDelete);
+    putDirectWithoutTransition(vm, vm.propertyNames->length, jsNumber(1), PropertyAttribute::ReadOnly | PropertyAttribute::DontEnum);
 }
 
 // ------------------------------ Functions --------------------------------
 
-static NEVER_INLINE JSValue stringFromCharCodeSlowCase(ExecState* exec)
-{
-    unsigned length = exec->argumentCount();
-    UChar* buf;
-    auto impl = StringImpl::createUninitialized(length, buf);
-    for (unsigned i = 0; i < length; ++i)
-        buf[i] = static_cast<UChar>(exec->uncheckedArgument(i).toUInt32(exec));
-    return jsString(exec, WTFMove(impl));
-}
-
 static EncodedJSValue JSC_HOST_CALL stringFromCharCode(ExecState* exec)
 {
-    if (LIKELY(exec->argumentCount() == 1))
-        return JSValue::encode(jsSingleCharacterString(exec, exec->uncheckedArgument(0).toUInt32(exec)));
-    return JSValue::encode(stringFromCharCodeSlowCase(exec));
+    VM& vm = exec->vm();
+    auto scope = DECLARE_THROW_SCOPE(vm);
+
+    unsigned length = exec->argumentCount();
+    if (LIKELY(length == 1)) {
+        scope.release();
+        unsigned code = exec->uncheckedArgument(0).toUInt32(exec);
+        // Not checking for an exception here is ok because jsSingleCharacterString will just fetch an unused string if there's an exception.
+        return JSValue::encode(jsSingleCharacterString(exec, code));
+    }
+
+    UChar* buf;
+    auto impl = StringImpl::createUninitialized(length, buf);
+    for (unsigned i = 0; i < length; ++i) {
+        buf[i] = static_cast<UChar>(exec->uncheckedArgument(i).toUInt32(exec));
+        RETURN_IF_EXCEPTION(scope, encodedJSValue());
+    }
+    scope.release();
+    return JSValue::encode(jsString(exec, WTFMove(impl)));
 }
 
-JSCell* JSC_HOST_CALL stringFromCharCode(ExecState* exec, int32_t arg)
+JSString* JSC_HOST_CALL stringFromCharCode(ExecState* exec, int32_t arg)
 {
     return jsSingleCharacterString(exec, arg);
 }
@@ -104,7 +114,7 @@ static EncodedJSValue JSC_HOST_CALL stringFromCodePoint(ExecState* exec)
         uint32_t codePoint = static_cast<uint32_t>(codePointAsDouble);
 
         if (codePoint != codePointAsDouble || codePoint > UCHAR_MAX_VALUE)
-            return throwVMError(exec, scope, createRangeError(exec, ASCIILiteral("Arguments contain a value that is out of range of code points")));
+            return throwVMError(exec, scope, createRangeError(exec, "Arguments contain a value that is out of range of code points"_s));
 
         if (U_IS_BMP(codePoint))
             builder.append(static_cast<UChar>(codePoint));
@@ -114,13 +124,14 @@ static EncodedJSValue JSC_HOST_CALL stringFromCodePoint(ExecState* exec)
         }
     }
 
+    scope.release();
     return JSValue::encode(jsString(exec, builder.toString()));
 }
 
 static EncodedJSValue JSC_HOST_CALL constructWithStringConstructor(ExecState* exec)
 {
-    JSGlobalObject* globalObject = asInternalFunction(exec->callee())->globalObject();
-    VM& vm = globalObject->vm();
+    VM& vm = exec->vm();
+    JSGlobalObject* globalObject = jsCast<InternalFunction*>(exec->jsCallee())->globalObject(vm);
     auto scope = DECLARE_THROW_SCOPE(vm);
 
     Structure* structure = InternalFunction::createSubclassStructure(exec, exec->newTarget(), globalObject->stringObjectStructure());
@@ -128,16 +139,12 @@ static EncodedJSValue JSC_HOST_CALL constructWithStringConstructor(ExecState* ex
 
     if (!exec->argumentCount())
         return JSValue::encode(StringObject::create(vm, structure));
-    return JSValue::encode(StringObject::create(vm, structure, exec->uncheckedArgument(0).toString(exec)));
+    JSString* str = exec->uncheckedArgument(0).toString(exec);
+    RETURN_IF_EXCEPTION(scope, encodedJSValue());
+    return JSValue::encode(StringObject::create(vm, structure, str));
 }
 
-ConstructType StringConstructor::getConstructData(JSCell*, ConstructData& constructData)
-{
-    constructData.native.function = constructWithStringConstructor;
-    return ConstructType::Host;
-}
-
-JSCell* stringConstructor(ExecState* exec, JSValue argument)
+JSString* stringConstructor(ExecState* exec, JSValue argument)
 {
     if (argument.isSymbol())
         return jsNontrivialString(exec, asSymbol(argument)->descriptiveString());
@@ -149,12 +156,6 @@ static EncodedJSValue JSC_HOST_CALL callStringConstructor(ExecState* exec)
     if (!exec->argumentCount())
         return JSValue::encode(jsEmptyString(exec));
     return JSValue::encode(stringConstructor(exec, exec->uncheckedArgument(0)));
-}
-
-CallType StringConstructor::getCallData(JSCell*, CallData& callData)
-{
-    callData.native.function = callStringConstructor;
-    return CallType::Host;
 }
 
 } // namespace JSC

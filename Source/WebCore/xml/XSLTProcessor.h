@@ -20,18 +20,16 @@
  *
  */
 
-#ifndef XSLTProcessor_h
-#define XSLTProcessor_h
+#pragma once
 
 #if ENABLE(XSLT)
 
 #include "Node.h"
 #include "XSLStyleSheet.h"
-#include <wtf/HashMap.h>
-#include <wtf/text/StringHash.h>
-
 #include <libxml/parserInternals.h>
 #include <libxslt/documents.h>
+#include <wtf/HashMap.h>
+#include <wtf/text/StringHash.h>
 
 namespace WebCore {
 
@@ -73,14 +71,13 @@ public:
     typedef HashMap<String, String> ParameterMap;
 
 private:
-    XSLTProcessor() { }
+    XSLTProcessor() = default;
 
     RefPtr<XSLStyleSheet> m_stylesheet;
     RefPtr<Node> m_stylesheetRootNode;
     ParameterMap m_parameters;
 };
 
-}
+} // namespace WebCore
 
-#endif
-#endif
+#endif // ENABLE(XSLT)

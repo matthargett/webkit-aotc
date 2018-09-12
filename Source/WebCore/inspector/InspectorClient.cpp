@@ -31,20 +31,23 @@
 #include "config.h"
 #include "InspectorClient.h"
 
-#include "MainFrame.h"
+#include "Frame.h"
+#include "InspectorController.h"
 #include "Page.h"
 #include "ScriptController.h"
 #include "ScriptSourceCode.h"
-
-using namespace Inspector;
+#include <JavaScriptCore/FrameTracers.h>
 
 namespace WebCore {
+using namespace JSC;
+using namespace Inspector;
 
 void InspectorClient::doDispatchMessageOnFrontendPage(Page* frontendPage, const String& message)
 {
     if (!frontendPage)
         return;
 
+    SuspendExceptionScope scope(&frontendPage->inspectorController().vm());
     String dispatchToFrontend = makeString("InspectorFrontendAPI.dispatchMessageAsync(", message, ");");
     frontendPage->mainFrame().script().evaluate(ScriptSourceCode(dispatchToFrontend));
 }

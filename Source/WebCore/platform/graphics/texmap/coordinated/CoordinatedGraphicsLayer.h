@@ -24,49 +24,43 @@
 #if USE(COORDINATED_GRAPHICS)
 
 #include "CoordinatedGraphicsState.h"
-#include "CoordinatedImageBacking.h"
 #include "FloatPoint3D.h"
 #include "GraphicsLayer.h"
 #include "GraphicsLayerTransform.h"
 #include "Image.h"
 #include "IntSize.h"
+#include "NicosiaBuffer.h"
+#include "NicosiaPlatformLayer.h"
 #include "TextureMapperAnimation.h"
-#include "TextureMapperPlatformLayer.h"
-#include "TiledBackingStore.h"
-#include "TiledBackingStoreClient.h"
 #include "TransformationMatrix.h"
-#if USE(GRAPHICS_SURFACE)
-#include "GraphicsSurfaceToken.h"
-#endif
 #include <wtf/text/StringHash.h>
+
+namespace Nicosia {
+class PaintingEngine;
+}
 
 namespace WebCore {
 class CoordinatedGraphicsLayer;
 class TextureMapperAnimations;
-class ScrollableArea;
 
 class CoordinatedGraphicsLayerClient {
 public:
     virtual bool isFlushingLayerChanges() const = 0;
     virtual FloatRect visibleContentsRect() const = 0;
-    virtual Ref<CoordinatedImageBacking> createImageBackingIfNeeded(Image*) = 0;
     virtual void detachLayer(CoordinatedGraphicsLayer*) = 0;
-    virtual bool paintToSurface(const IntSize&, CoordinatedSurface::Flags, uint32_t& atlasID, IntPoint&, CoordinatedSurface::Client&) = 0;
-
-    virtual void syncLayerState(CoordinatedLayerID, CoordinatedGraphicsLayerState&) = 0;
+    virtual void attachLayer(CoordinatedGraphicsLayer*) = 0;
+    virtual Nicosia::PaintingEngine& paintingEngine() = 0;
+    virtual void syncLayerState() = 0;
 };
 
-class CoordinatedGraphicsLayer : public GraphicsLayer
-    , public TiledBackingStoreClient
-#if USE(COORDINATED_GRAPHICS_THREADED)
-    , public TextureMapperPlatformLayer::Client
-#endif
-    , public CoordinatedImageBacking::Host {
+class WEBCORE_EXPORT CoordinatedGraphicsLayer : public GraphicsLayer {
 public:
     explicit CoordinatedGraphicsLayer(Type, GraphicsLayerClient&);
     virtual ~CoordinatedGraphicsLayer();
 
-    PlatformLayerID primaryLayerID() const override { return id(); }
+    // FIXME: Merge these two methods.
+    Nicosia::PlatformLayer::LayerID id() const;
+    PlatformLayerID primaryLayerID() const override;
 
     // Reimplementations from GraphicsLayer.h.
     bool setChildren(const Vector<GraphicsLayer*>&) override;
@@ -103,15 +97,15 @@ public:
     void setNeedsDisplayInRect(const FloatRect&, ShouldClipToLayer = ClipToLayer) override;
     void setContentsNeedsDisplay() override;
     void deviceOrPageScaleFactorChanged() override;
-    void flushCompositingState(const FloatRect&, bool) override;
-    void flushCompositingStateForThisLayerOnly(bool) override;
+    void flushCompositingState(const FloatRect&) override;
+    void flushCompositingStateForThisLayerOnly() override;
     bool setFilters(const FilterOperations&) override;
     bool addAnimation(const KeyframeValueList&, const FloatSize&, const Animation*, const String&, double) override;
     void pauseAnimation(const String&, double) override;
     void removeAnimation(const String&) override;
-    void suspendAnimations(double time) override;
+    void suspendAnimations(MonotonicTime) override;
     void resumeAnimations() override;
-    bool usesContentsLayer() const override { return m_platformLayer || m_compositedImage; }
+    bool usesContentsLayer() const override;
 
     void syncPendingStateChangesIncludingSubLayers();
     void updateContentBuffersIncludingSubLayers();
@@ -119,88 +113,37 @@ public:
     FloatPoint computePositionRelativeToBase();
     void computePixelAlignment(FloatPoint& position, FloatSize&, FloatPoint3D& anchorPoint, FloatSize& alignmentOffset);
 
-    void setVisibleContentRectTrajectoryVector(const FloatPoint&);
-
-    void setScrollableArea(ScrollableArea*);
-    bool isScrollable() const { return !!m_scrollableArea; }
-    void commitScrollOffset(const IntSize&);
-
-    CoordinatedLayerID id() const { return m_id; }
-
-    void setFixedToViewport(bool isFixed);
-
-    IntRect coverRect() const { return m_mainBackingStore ? m_mainBackingStore->mapToContents(m_mainBackingStore->coverRect()) : IntRect(); }
     IntRect transformedVisibleRect();
 
-    // TiledBackingStoreClient
-    void tiledBackingStorePaint(GraphicsContext&, const IntRect&) override;
-    void didUpdateTileBuffers() override;
-    void tiledBackingStoreHasPendingTileCreation() override;
-    void createTile(uint32_t tileID, float) override;
-    void updateTile(uint32_t tileID, const SurfaceUpdateInfo&, const IntRect&) override;
-    void removeTile(uint32_t tileID) override;
-    bool paintToSurface(const IntSize&, uint32_t& /* atlasID */, IntPoint&, CoordinatedSurface::Client&) override;
-
     void setCoordinator(CoordinatedGraphicsLayerClient*);
+    void setCoordinatorIncludingSubLayersIfNeeded(CoordinatedGraphicsLayerClient*);
 
     void setNeedsVisibleRectAdjustment();
     void purgeBackingStores();
 
-    CoordinatedGraphicsLayer* findFirstDescendantWithContentsRecursively();
+    const RefPtr<Nicosia::CompositionLayer>& compositionLayer() const;
 
 private:
-    bool isCoordinatedGraphicsLayer() const override { return true; }
+    bool isCoordinatedGraphicsLayer() const;
 
-#if USE(GRAPHICS_SURFACE)
-    enum PendingPlatformLayerOperation {
-        None = 0x00,
-        CreatePlatformLayer = 0x01,
-        DestroyPlatformLayer = 0x02,
-        SyncPlatformLayer = 0x04,
-        CreateAndSyncPlatformLayer = CreatePlatformLayer | SyncPlatformLayer,
-        RecreatePlatformLayer = CreateAndSyncPlatformLayer | DestroyPlatformLayer
-    };
-
-    void destroyPlatformLayerIfNeeded();
-    void createPlatformLayerIfNeeded();
-#endif
-    void syncPlatformLayer();
-#if USE(COORDINATED_GRAPHICS_THREADED)
-    void platformLayerWillBeDestroyed() override;
-    void setPlatformLayerNeedsDisplay() override;
-#endif
+    void updatePlatformLayer();
 
     void setDebugBorder(const Color&, float width) override;
 
-    bool fixedToViewport() const { return m_fixedToViewport; }
-
-    void didChangeLayerState();
     void didChangeAnimations();
     void didChangeGeometry();
     void didChangeChildren();
     void didChangeFilters();
-    void didChangeImageBacking();
+    void didUpdateTileBuffers();
 
-    void resetLayerState();
-    void syncLayerState();
-    void syncAnimations();
-    void syncChildren();
-    void syncFilters();
-    void syncImageBacking();
     void computeTransformedVisibleRect();
     void updateContentBuffers();
 
-    void createBackingStore();
-    void releaseImageBackingIfNeeded();
-
     void notifyFlushRequired();
 
-    // CoordinatedImageBacking::Host
-    bool imageBackingVisible() override;
     bool shouldHaveBackingStore() const;
     bool selfOrAncestorHasActiveTransformAnimation() const;
     bool selfOrAncestorHaveNonAffineTransforms();
-    void adjustContentsScale();
 
     void setShouldUpdateVisibleRect();
     float effectiveContentsScale();
@@ -209,8 +152,7 @@ private:
 
     bool filtersCanBeComposited(const FilterOperations&) const;
 
-    CoordinatedLayerID m_id;
-    CoordinatedGraphicsLayerState m_layerState;
+    Nicosia::PlatformLayer::LayerID m_id;
     GraphicsLayerTransform m_layerTransform;
     TransformationMatrix m_cachedInverseTransform;
     FloatSize m_pixelAlignmentOffset;
@@ -218,45 +160,43 @@ private:
     FloatPoint m_adjustedPosition;
     FloatPoint3D m_adjustedAnchorPoint;
 
+    Color m_solidColor;
+
 #ifndef NDEBUG
     bool m_isPurging;
 #endif
     bool m_shouldUpdateVisibleRect: 1;
     bool m_shouldSyncLayerState: 1;
-    bool m_shouldSyncChildren: 1;
-    bool m_shouldSyncFilters: 1;
-    bool m_shouldSyncImageBacking: 1;
-    bool m_shouldSyncAnimations: 1;
-    bool m_fixedToViewport : 1;
     bool m_movingVisibleRect : 1;
     bool m_pendingContentsScaleAdjustment : 1;
     bool m_pendingVisibleRectAdjustment : 1;
-#if USE(GRAPHICS_SURFACE)
-    bool m_isValidPlatformLayer : 1;
-    unsigned m_pendingPlatformLayerOperation : 3;
-#endif
-#if USE(COORDINATED_GRAPHICS_THREADED)
-    bool m_shouldSyncPlatformLayer : 1;
-#endif
+    bool m_shouldUpdatePlatformLayer : 1;
 
     CoordinatedGraphicsLayerClient* m_coordinator;
-    std::unique_ptr<TiledBackingStore> m_mainBackingStore;
-    std::unique_ptr<TiledBackingStore> m_previousBackingStore;
+
+    struct {
+        bool completeLayer { false };
+        Vector<FloatRect, 32> rects;
+    } m_needsDisplay;
 
     RefPtr<Image> m_compositedImage;
     NativeImagePtr m_compositedNativeImagePtr;
-    RefPtr<CoordinatedImageBacking> m_coordinatedImageBacking;
 
-    PlatformLayer* m_platformLayer;
-#if USE(GRAPHICS_SURFACE)
-    IntSize m_platformLayerSize;
-    GraphicsSurfaceToken m_platformLayerToken;
-#endif
     Timer m_animationStartedTimer;
     TextureMapperAnimations m_animations;
-    double m_lastAnimationStartTime;
+    MonotonicTime m_lastAnimationStartTime;
 
-    ScrollableArea* m_scrollableArea;
+    struct {
+        RefPtr<Nicosia::CompositionLayer> layer;
+        Nicosia::CompositionLayer::LayerState::Delta delta;
+        Nicosia::CompositionLayer::LayerState::RepaintCounter repaintCounter;
+        Nicosia::CompositionLayer::LayerState::DebugBorder debugBorder;
+        bool performLayerSync { false };
+
+        RefPtr<Nicosia::BackingStore> backingStore;
+        RefPtr<Nicosia::ContentLayer> contentLayer;
+        RefPtr<Nicosia::ImageBacking> imageBacking;
+    } m_nicosia;
 };
 
 } // namespace WebCore

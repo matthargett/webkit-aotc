@@ -28,8 +28,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef StorageQuotaCallback_h
-#define StorageQuotaCallback_h
+#pragma once
 
 #if ENABLE(QUOTA)
 
@@ -39,12 +38,10 @@ namespace WebCore {
 
 class StorageQuotaCallback : public RefCounted<StorageQuotaCallback> {
 public:
-    virtual ~StorageQuotaCallback() { }
+    virtual ~StorageQuotaCallback() = default;
     virtual bool handleEvent(unsigned long long grantedQuotaInBytes) = 0;
 };
 
-} // namespace
+} // namespace WebCore
 
 #endif // ENABLE(QUOTA)
-
-#endif // StorageQuotaCallback_h

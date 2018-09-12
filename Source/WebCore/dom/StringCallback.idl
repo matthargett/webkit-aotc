@@ -29,7 +29,5 @@
  */
 
 [
-    Callback=FunctionOnly,
-] callback interface StringCallback {
-    boolean handleEvent(DOMString data);
-};
+    ExportMacro=WEBCORE_EXPORT
+] callback StringCallback = void (DOMString data);

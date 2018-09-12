@@ -38,19 +38,19 @@ log = logging.getLogger('global')
 
 
 class ObjCFrontendDispatcherImplementationGenerator(ObjCGenerator):
-    def __init__(self, model, input_filepath):
-        ObjCGenerator.__init__(self, model, input_filepath)
+    def __init__(self, *args, **kwargs):
+        ObjCGenerator.__init__(self, *args, **kwargs)
 
     def output_filename(self):
         return '%sEventDispatchers.mm' % self.protocol_name()
 
     def domains_to_generate(self):
-        return filter(ObjCGenerator.should_generate_domain_event_dispatcher_filter(self.model()), Generator.domains_to_generate(self))
+        return filter(self.should_generate_events_for_domain, Generator.domains_to_generate(self))
 
     def generate_output(self):
         secondary_headers = [
             '"%sTypeConversions.h"' % self.protocol_name(),
-            '<JavaScriptCore/InspectorValues.h>',
+            '<wtf/JSONValues.h>',
         ]
 
         header_args = {
@@ -67,7 +67,7 @@ class ObjCFrontendDispatcherImplementationGenerator(ObjCGenerator):
         return '\n\n'.join(sections)
 
     def _generate_event_dispatcher_implementations(self, domain):
-        if not domain.events:
+        if not self.should_generate_events_for_domain(domain):
             return ''
 
         lines = []
@@ -87,7 +87,7 @@ class ObjCFrontendDispatcherImplementationGenerator(ObjCGenerator):
         lines.append('    return self;')
         lines.append('}')
         lines.append('')
-        for event in domain.events:
+        for event in self.events_for_domain(domain):
             lines.append(self._generate_event(domain, event))
             lines.append('')
         lines.append('@end')
@@ -119,8 +119,8 @@ class ObjCFrontendDispatcherImplementationGenerator(ObjCGenerator):
         if required_pointer_parameters or optional_pointer_parameters:
             lines.append('')
 
-        lines.append('    Ref<InspectorObject> jsonMessage = InspectorObject::create();')
-        lines.append('    jsonMessage->setString(ASCIILiteral("method"), ASCIILiteral("%s.%s"));' % (domain.domain_name, event.event_name))
+        lines.append('    Ref<JSON::Object> jsonMessage = JSON::Object::create();')
+        lines.append('    jsonMessage->setString("method"_s, "%s.%s"_s);' % (domain.domain_name, event.event_name))
         if event.event_parameters:
             lines.extend(self._generate_event_out_parameters(domain, event))
         lines.append('    router.sendEvent(jsonMessage->toJSONString());')
@@ -139,16 +139,16 @@ class ObjCFrontendDispatcherImplementationGenerator(ObjCGenerator):
 
     def _generate_event_out_parameters(self, domain, event):
         lines = []
-        lines.append('    Ref<InspectorObject> paramsObject = InspectorObject::create();')
+        lines.append('    Ref<JSON::Object> paramsObject = JSON::Object::create();')
         for parameter in event.event_parameters:
             keyed_set_method = CppGenerator.cpp_setter_method_for_type(parameter.type)
             var_name = parameter.parameter_name
             safe_var_name = '(*%s)' % var_name if parameter.is_optional else var_name
             export_expression = self.objc_protocol_export_expression_for_variable(parameter.type, safe_var_name)
             if not parameter.is_optional:
-                lines.append('    paramsObject->%s(ASCIILiteral("%s"), %s);' % (keyed_set_method, parameter.parameter_name, export_expression))
+                lines.append('    paramsObject->%s("%s"_s, %s);' % (keyed_set_method, parameter.parameter_name, export_expression))
             else:
                 lines.append('    if (%s)' % (parameter.parameter_name))
-                lines.append('        paramsObject->%s(ASCIILiteral("%s"), %s);' % (keyed_set_method, parameter.parameter_name, export_expression))
-        lines.append('    jsonMessage->setObject(ASCIILiteral("params"), WTFMove(paramsObject));')
+                lines.append('        paramsObject->%s("%s"_s, %s);' % (keyed_set_method, parameter.parameter_name, export_expression))
+        lines.append('    jsonMessage->setObject("params"_s, WTFMove(paramsObject));')
         return lines

@@ -30,13 +30,13 @@
 #include "IDBConnectionToServer.h"
 #include "IDBResourceIdentifier.h"
 #include "TransactionOperation.h"
-#include <functional>
 #include <wtf/CrossThreadQueue.h>
 #include <wtf/CrossThreadTask.h>
+#include <wtf/Forward.h>
+#include <wtf/Function.h>
 #include <wtf/HashMap.h>
 #include <wtf/MainThread.h>
 #include <wtf/RefPtr.h>
-#include <wtf/Vector.h>
 #include <wtf/text/WTFString.h>
 
 namespace WebCore {
@@ -51,12 +51,15 @@ class ScriptExecutionContext;
 class SecurityOrigin;
 
 struct IDBGetRecordData;
+struct IDBIterateCursorData;
 
 namespace IDBClient {
 
 class IDBConnectionToServer;
 
 class IDBConnectionProxy {
+    WTF_MAKE_NONCOPYABLE(IDBConnectionProxy);
+    WTF_MAKE_FAST_ALLOCATED;
 public:
     IDBConnectionProxy(IDBConnectionToServer&);
 
@@ -77,7 +80,7 @@ public:
     void getCount(TransactionOperation&, const IDBKeyRangeData&);
     void deleteRecord(TransactionOperation&, const IDBKeyRangeData&);
     void openCursor(TransactionOperation&, const IDBCursorInfo&);
-    void iterateCursor(TransactionOperation&, const IDBKeyData&, unsigned long count);
+    void iterateCursor(TransactionOperation&, const IDBIterateCursorData&);
     void renameObjectStore(TransactionOperation&, uint64_t objectStoreIdentifier, const String& newName);
     void renameIndex(TransactionOperation&, uint64_t objectStoreIdentifier, uint64_t indexIdentifier, const String& newName);
 
@@ -96,6 +99,7 @@ public:
     void didAbortTransaction(const IDBResourceIdentifier& transactionIdentifier, const IDBError&);
 
     void didFinishHandlingVersionChangeTransaction(uint64_t databaseConnectionIdentifier, IDBTransaction&);
+    void databaseConnectionPendingClose(IDBDatabase&);
     void databaseConnectionClosed(IDBDatabase&);
 
     void didCloseFromServer(uint64_t databaseConnectionIdentifier, const IDBError&);
@@ -112,7 +116,7 @@ public:
     void ref();
     void deref();
 
-    void getAllDatabaseNames(const SecurityOrigin& mainFrameOrigin, const SecurityOrigin& openingOrigin, std::function<void (const Vector<String>&)>);
+    void getAllDatabaseNames(const SecurityOrigin& mainFrameOrigin, const SecurityOrigin& openingOrigin, WTF::Function<void (const Vector<String>&)>&&);
 
     void registerDatabaseConnection(IDBDatabase&);
     void unregisterDatabaseConnection(IDBDatabase&);

@@ -28,10 +28,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef WebSocketExtensionDispatcher_h
-#define WebSocketExtensionDispatcher_h
-
-#if ENABLE(WEB_SOCKETS)
+#pragma once
 
 #include "WebSocketExtensionProcessor.h"
 #include <wtf/Vector.h>
@@ -61,8 +58,4 @@ private:
     String m_failureReason;
 };
 
-}
-
-#endif // ENABLE(WEB_SOCKETS)
-
-#endif // WebSocketExtensionDispatcher_h
+} // namespace WebCore

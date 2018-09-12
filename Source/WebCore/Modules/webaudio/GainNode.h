@@ -22,8 +22,7 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef GainNode_h
-#define GainNode_h
+#pragma once
 
 #include "AudioNode.h"
 #include "AudioParam.h"
@@ -36,7 +35,7 @@ class AudioContext;
 // GainNode is an AudioNode with one input and one output which applies a gain (volume) change to the audio signal.
 // De-zippering (smoothing) is applied when the gain value is changed dynamically.
 
-class GainNode : public AudioNode {
+class GainNode final : public AudioNode {
 public:
     static Ref<GainNode> create(AudioContext& context, float sampleRate)
     {
@@ -66,5 +65,3 @@ private:
 };
 
 } // namespace WebCore
-
-#endif // GainNode_h

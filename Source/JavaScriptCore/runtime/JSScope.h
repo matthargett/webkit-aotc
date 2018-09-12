@@ -37,8 +37,10 @@ class WatchpointSet;
 
 class JSScope : public JSNonFinalObject {
 public:
-    typedef JSNonFinalObject Base;
-    static const unsigned StructureFlags = Base::StructureFlags;
+    using Base = JSNonFinalObject;
+    static const unsigned StructureFlags = Base::StructureFlags | OverridesToThis;
+
+    DECLARE_EXPORT_INFO;
 
     friend class LLIntOffsetsExtractor;
     static size_t offsetOfNext();
@@ -46,12 +48,13 @@ public:
     static JSObject* objectAtScope(JSScope*);
 
     static JSObject* resolve(ExecState*, JSScope*, const Identifier&);
+    static JSValue resolveScopeForHoistingFuncDeclInEval(ExecState*, JSScope*, const Identifier&);
     static ResolveOp abstractResolve(ExecState*, size_t depthOffset, JSScope*, const Identifier&, GetOrPut, ResolveType, InitializationMode);
 
     static bool hasConstantScope(ResolveType);
     static JSScope* constantScopeForCodeBlock(ResolveType, CodeBlock*);
 
-    static void collectVariablesUnderTDZ(JSScope*, VariableEnvironment& result);
+    static void collectClosureVariablesUnderTDZ(JSScope*, VariableEnvironment& result);
 
     static void visitChildren(JSCell*, SlotVisitor&);
 
@@ -67,14 +70,17 @@ public:
     ScopeChainIterator end();
     JSScope* next();
 
-    JSGlobalObject* globalObject();
-    JSGlobalObject* globalObject(VM&);
     JSObject* globalThis();
 
-    SymbolTable* symbolTable();
+    SymbolTable* symbolTable(VM&);
+
+    JS_EXPORT_PRIVATE static JSValue toThis(JSCell*, ExecState*, ECMAMode);
 
 protected:
     JSScope(VM&, Structure*, JSScope* next);
+
+    template<typename ReturnPredicateFunctor, typename SkipPredicateFunctor>
+    static JSObject* resolve(ExecState*, JSScope*, const Identifier&, ReturnPredicateFunctor, SkipPredicateFunctor);
 
 private:
     WriteBarrier<JSScope> m_next;
@@ -123,16 +129,6 @@ inline JSScope* JSScope::next()
     return m_next.get();
 }
 
-inline JSGlobalObject* JSScope::globalObject()
-{ 
-    return structure()->globalObject();
-}
-
-inline JSGlobalObject* JSScope::globalObject(VM& vm)
-{ 
-    return structure(vm)->globalObject();
-}
-
 inline Register& Register::operator=(JSScope* scope)
 {
     *this = JSValue(scope);
@@ -146,7 +142,7 @@ inline JSScope* Register::scope() const
 
 inline JSGlobalObject* ExecState::lexicalGlobalObject() const
 {
-    return callee()->globalObject();
+    return jsCallee()->globalObject();
 }
 
 inline size_t JSScope::offsetOfNext()

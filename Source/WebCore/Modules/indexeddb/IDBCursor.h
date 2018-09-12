@@ -27,11 +27,12 @@
 
 #if ENABLE(INDEXED_DATABASE)
 
-#include "ActiveDOMObject.h"
-#include "DOMWrapperWorld.h"
 #include "ExceptionOr.h"
+#include "IDBCursorDirection.h"
 #include "IDBCursorInfo.h"
-#include <heap/Strong.h>
+#include <JavaScriptCore/Strong.h>
+#include <wtf/Variant.h>
+#include <wtf/WeakPtr.h>
 
 namespace WebCore {
 
@@ -40,80 +41,77 @@ class IDBIndex;
 class IDBObjectStore;
 class IDBTransaction;
 
-class IDBCursor : public ScriptWrappable, public RefCounted<IDBCursor>, public ActiveDOMObject {
+class IDBCursor : public ScriptWrappable, public RefCounted<IDBCursor> {
 public:
-    static Ref<IDBCursor> create(IDBTransaction&, IDBObjectStore&, const IDBCursorInfo&);
-    static Ref<IDBCursor> create(IDBTransaction&, IDBIndex&, const IDBCursorInfo&);
-
-    static const AtomicString& directionNext();
-    static const AtomicString& directionNextUnique();
-    static const AtomicString& directionPrev();
-    static const AtomicString& directionPrevUnique();
-
-    static Optional<IndexedDB::CursorDirection> stringToDirection(const String& modeString);
-    static const AtomicString& directionToString(IndexedDB::CursorDirection mode);
+    static Ref<IDBCursor> create(IDBObjectStore&, const IDBCursorInfo&);
+    static Ref<IDBCursor> create(IDBIndex&, const IDBCursorInfo&);
     
     virtual ~IDBCursor();
 
-    const String& direction() const;
+    using Source = Variant<RefPtr<IDBObjectStore>, RefPtr<IDBIndex>>;
+
+    const Source& source() const;
+    IDBCursorDirection direction() const;
     JSC::JSValue key() const;
     JSC::JSValue primaryKey() const;
     JSC::JSValue value() const;
-    IDBObjectStore* objectStore() const { return m_objectStore.get(); }
-    IDBIndex* index() const { return m_index.get(); }
 
     ExceptionOr<Ref<IDBRequest>> update(JSC::ExecState&, JSC::JSValue);
     ExceptionOr<void> advance(unsigned);
     ExceptionOr<void> continueFunction(JSC::ExecState&, JSC::JSValue key);
+    ExceptionOr<void> continuePrimaryKey(JSC::ExecState&, JSC::JSValue key, JSC::JSValue primaryKey);
     ExceptionOr<Ref<IDBRequest>> deleteFunction(JSC::ExecState&);
 
     ExceptionOr<void> continueFunction(const IDBKeyData&);
 
     const IDBCursorInfo& info() const { return m_info; }
 
-    void setRequest(IDBRequest& request) { m_request = &request; }
-    void clearRequest() { m_request = nullptr; }
-    IDBRequest* request() { return m_request; }
+    void setRequest(IDBRequest& request) { m_request = makeWeakPtr(&request); }
+    void clearRequest() { m_request.clear(); }
+    IDBRequest* request() { return m_request.get(); }
 
     void setGetResult(IDBRequest&, const IDBGetResult&);
 
     virtual bool isKeyCursorWithValue() const { return false; }
 
-    void decrementOutstandingRequestCount();
-
-    bool hasPendingActivity() const final;
-
 protected:
-    IDBCursor(IDBTransaction&, IDBObjectStore&, const IDBCursorInfo&);
-    IDBCursor(IDBTransaction&, IDBIndex&, const IDBCursorInfo&);
+    IDBCursor(IDBObjectStore&, const IDBCursorInfo&);
+    IDBCursor(IDBIndex&, const IDBCursorInfo&);
 
 private:
-    const char* activeDOMObjectName() const final;
-    bool canSuspendForDocumentSuspension() const final;
-
     bool sourcesDeleted() const;
     IDBObjectStore& effectiveObjectStore() const;
     IDBTransaction& transaction() const;
 
     void uncheckedIterateCursor(const IDBKeyData&, unsigned count);
-
-    // Cursors are created with an outstanding iteration request.
-    unsigned m_outstandingRequestCount { 1 };
+    void uncheckedIterateCursor(const IDBKeyData&, const IDBKeyData&);
 
     IDBCursorInfo m_info;
-    RefPtr<IDBObjectStore> m_objectStore;
-    RefPtr<IDBIndex> m_index;
-    IDBRequest* m_request { nullptr };
+    Source m_source;
+    WeakPtr<IDBRequest> m_request;
 
     bool m_gotValue { false };
 
     IDBKeyData m_currentKeyData;
     IDBKeyData m_currentPrimaryKeyData;
 
+    // FIXME: The following uses of JSC::Strong are incorrect and can lead to storage leaks
+    // due to reference cycles; we should use JSValueInWrappedObject instead.
     JSC::Strong<JSC::Unknown> m_currentKey;
     JSC::Strong<JSC::Unknown> m_currentPrimaryKey;
     JSC::Strong<JSC::Unknown> m_currentValue;
 };
+
+
+inline const IDBCursor::Source& IDBCursor::source() const
+{
+    return m_source;
+}
+
+inline IDBCursorDirection IDBCursor::direction() const
+{
+    return m_info.cursorDirection();
+}
 
 inline JSC::JSValue IDBCursor::key() const
 {

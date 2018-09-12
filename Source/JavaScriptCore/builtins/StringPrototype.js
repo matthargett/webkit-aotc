@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015 Andy VanWagoner <thetalecrafter@gmail.com>.
+ * Copyright (C) 2015 Andy VanWagoner <andy@vanwagoner.family>.
  * Copyright (C) 2016 Yusuke Suzuki <utatane.tea@gmail.com>
  * Copyright (C) 2016 Apple Inc. All rights reserved.
  *
@@ -131,7 +131,7 @@ function padStart(maxLength/*, fillString*/)
         return string;
 
     var filler;
-    var fillString = arguments[1];
+    var fillString = @argument(1);
     if (fillString === @undefined)
         filler = " ";
     else {
@@ -168,7 +168,7 @@ function padEnd(maxLength/*, fillString*/)
         return string;
 
     var filler;
-    var fillString = arguments[1];
+    var fillString = @argument(1);
     if (fillString === @undefined)
         filler = " ";
     else {
@@ -191,7 +191,10 @@ function padEnd(maxLength/*, fillString*/)
 }
 
 @globalPrivate
-function hasObservableSideEffectsForStringReplace(regexp, replacer) {
+function hasObservableSideEffectsForStringReplace(regexp, replacer)
+{
+    "use strict";
+
     if (replacer !== @regExpPrototypeSymbolReplace)
         return true;
     
@@ -232,6 +235,14 @@ function replace(search, replace)
     return thisString.@replaceUsingStringSearch(searchString, replace);
 }
     
+@globalPrivate
+function getDefaultCollator()
+{
+    "use strict";
+
+    return @getDefaultCollator.collator || (@getDefaultCollator.collator = new @Collator());
+}
+    
 function localeCompare(that/*, locales, options */)
 {
     "use strict";
@@ -251,13 +262,15 @@ function localeCompare(that/*, locales, options */)
     // 5. ReturnIfAbrupt(That).
     var thatString = @toString(that);
 
-    // Avoid creating a collator for defaults.
-    if (arguments[1] === @undefined && arguments[2] === @undefined)
-        return @Collator.prototype.compare(thisString, thatString);
+    // Avoid creating a new collator every time for defaults.
+    var locales = @argument(1);
+    var options = @argument(2);
+    if (locales === @undefined && options === @undefined)
+        return @getDefaultCollator().compare(thisString, thatString);
 
     // 6. Let collator be Construct(%Collator%, «locales, options»).
     // 7. ReturnIfAbrupt(collator).
-    var collator = new @Collator(arguments[1], arguments[2]);
+    var collator = new @Collator(locales, options);
 
     // 8. Return CompareStrings(collator, S, That).
     return collator.compare(thisString, thatString);
@@ -295,4 +308,124 @@ function split(separator, limit)
     }
     
     return @stringSplitFast.@call(this, separator, limit);
+}
+
+@globalPrivate
+function stringConcatSlowPath()
+{
+    "use strict";
+
+    var result = @toString(this);
+    for (var i = 0, length = arguments.length; i < length; ++i)
+        result += @toString(arguments[i]);
+    return result;
+}
+
+function concat(arg /* ... */)
+{
+    "use strict";
+
+    if (this == null)
+        @throwTypeError("String.prototype.concat requires that |this| not be null or undefined");
+
+    if (@argumentCount() === 1)
+        return @toString(this) + @toString(arg);
+    return @tailCallForwardArguments(@stringConcatSlowPath, this);
+}
+
+@globalPrivate
+function createHTML(func, string, tag, attribute, value)
+{
+    "use strict";
+    if (string == null)
+        @throwTypeError(`${func} requires that |this| not be null or undefined`);
+    let S = @toString(string);
+    let p1 = "<" + tag;
+    if (attribute) {
+        let V = @toString(value);
+        let escapedV = V.@replaceUsingRegExp(/"/g, '&quot;');
+        p1 = p1 + " " + @toString(attribute) + '="' + escapedV + '"'
+    }
+    let p2 = p1 + ">"
+    let p3 = p2 + S;
+    let p4 = p3 + "</" + tag + ">";
+    return p4;
+}
+
+function anchor(url)
+{
+    "use strict";
+    return @createHTML("String.prototype.link", this, "a", "name", url)
+}
+
+function big()
+{
+    "use strict";
+    return @createHTML("String.prototype.big", this, "big", "", "");
+}
+
+function blink()
+{
+    "use strict";
+    return @createHTML("String.prototype.blink", this, "blink", "", "");
+}
+
+function bold()
+{
+    "use strict";
+    return @createHTML("String.prototype.bold", this, "b", "", "");
+}
+
+function fixed()
+{
+    "use strict";
+    return @createHTML("String.prototype.fixed", this, "tt", "", "");
+}
+
+function fontcolor(color)
+{
+    "use strict";
+    return @createHTML("String.prototype.fontcolor", this, "font", "color", color);
+}
+
+function fontsize(size)
+{
+    "use strict";
+    return @createHTML("String.prototype.fontsize", this, "font", "size", size);
+}
+
+function italics()
+{
+    "use strict";
+    return @createHTML("String.prototype.italics", this, "i", "", "");
+}
+
+function link(url)
+{
+    "use strict";
+    return @createHTML("String.prototype.link", this, "a", "href", url)
+}
+
+function small()
+{
+    "use strict";
+    return @createHTML("String.prototype.small", this, "small", "", "");
+}
+
+function strike()
+{
+    "use strict";
+    return @createHTML("String.prototype.strike", this, "strike", "", "");
+}
+
+function sub()
+{
+    "use strict";
+    return @createHTML("String.prototype.sub", this, "sub", "", "");
+}
+
+function sup()
+{
+    "use strict";
+    return @createHTML("String.prototype.sup", this, "sup", "", "");
 }

@@ -8,13 +8,13 @@
         var d = document.getElementById('theDiv');
         var style = document.defaultView.getComputedStyle(d, '');
         
-        if (style && style.cursor == 'url(' + document.location + '), auto')
+        if (style && style.cursor == 'url("' + document.location + '"), auto')
             document.getElementById('result').innerHTML = 'SUCCESS';            
     }
     </script>
 </head>
 <body onload="runTest()">
-<div id="theDiv" style="cursor: url()">
+<div id="theDiv" style="cursor: url(), auto">
 <div>This tests that the invalid cursor property value does not get applied. See Bug 11221.</div>
 <div id="result">FAILURE</div>
 </body>

@@ -27,7 +27,8 @@
 
 #if ENABLE(GAMEPAD)
 
-#include <wtf/Vector.h>
+#include <wtf/Forward.h>
+#include <wtf/HashSet.h>
 
 namespace WebCore {
 
@@ -36,7 +37,7 @@ class PlatformGamepad;
 
 class GamepadProvider {
 public:
-    virtual ~GamepadProvider() { }
+    virtual ~GamepadProvider() = default;
 
     WEBCORE_EXPORT static GamepadProvider& singleton();
     WEBCORE_EXPORT static void setSharedProvider(GamepadProvider&);
@@ -46,6 +47,13 @@ public:
     virtual const Vector<PlatformGamepad*>& platformGamepads() = 0;
     virtual bool isMockGamepadProvider() const { return false; }
 
+protected:
+    WEBCORE_EXPORT void dispatchPlatformGamepadInputActivity();
+    void setShouldMakeGamepadsVisibile() { m_shouldMakeGamepadsVisible = true; }
+    HashSet<GamepadProviderClient*> m_clients;
+
+private:
+    bool m_shouldMakeGamepadsVisible { false };
 };
 
 } // namespace WebCore

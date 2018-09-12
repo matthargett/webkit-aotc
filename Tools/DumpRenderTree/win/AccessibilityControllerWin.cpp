@@ -29,19 +29,18 @@
 #include "AccessibilityUIElement.h"
 #include "DumpRenderTree.h"
 #include "FrameLoadDelegate.h"
+#include "TestRunner.h"
 #include <JavaScriptCore/JSRetainPtr.h>
 #include <JavaScriptCore/JSStringRef.h>
 #include <JavaScriptCore/JSStringRefBSTR.h>
 #include <WebCore/AccessibilityObjectWrapperWin.h>
 #include <WebCore/COMPtr.h>
-#include <WebKit/WebKit.h>
+#include <WebKitLegacy/WebKit.h>
 #include <comutil.h>
 #include <oleacc.h>
 #include <string>
 #include <wtf/Assertions.h>
 #include <wtf/text/AtomicString.h>
-
-using namespace std;
 
 AccessibilityController::AccessibilityController()
     : m_focusEventHook(0)
@@ -188,33 +187,33 @@ static void CALLBACK logEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG id
     _bstr_t nameBSTR;
     hr = parentObject->get_accName(vChild, &nameBSTR.GetBSTR());
     ASSERT(SUCCEEDED(hr));
-    wstring name(nameBSTR, nameBSTR.length());
+    std::wstring name(nameBSTR, nameBSTR.length());
 
     switch (event) {
         case EVENT_OBJECT_FOCUS:
-            printf("Received focus event for object '%S'.\n", name.c_str());
+            fprintf(testResult, "Received focus event for object '%S'.\n", name.c_str());
             break;
 
         case EVENT_OBJECT_SELECTION:
-            printf("Received selection event for object '%S'.\n", name.c_str());
+            fprintf(testResult, "Received selection event for object '%S'.\n", name.c_str());
             break;
 
         case EVENT_OBJECT_VALUECHANGE: {
             _bstr_t valueBSTR;
             hr = parentObject->get_accValue(vChild, &valueBSTR.GetBSTR());
             ASSERT(SUCCEEDED(hr));
-            wstring value(valueBSTR, valueBSTR.length());
+            std::wstring value(valueBSTR, valueBSTR.length());
 
-            printf("Received value change event for object '%S', value '%S'.\n", name.c_str(), value.c_str());
+            fprintf(testResult, "Received value change event for object '%S', value '%S'.\n", name.c_str(), value.c_str());
             break;
         }
 
         case EVENT_SYSTEM_SCROLLINGSTART:
-            printf("Received scrolling start event for object '%S'.\n", name.c_str());
+            fprintf(testResult, "Received scrolling start event for object '%S'.\n", name.c_str());
             break;
 
         default:
-            printf("Received unknown event for object '%S'.\n", name.c_str());
+            fprintf(testResult, "Received unknown event for object '%S'.\n", name.c_str());
             break;
     }
 }
@@ -303,7 +302,7 @@ void AccessibilityController::setLogAccessibilityEvents(bool logAccessibilityEve
     ASSERT(m_allEventsHook);
 }
 
-static string stringEvent(DWORD event)
+static std::string stringEvent(DWORD event)
 {
     switch(event) {
         case EVENT_OBJECT_VALUECHANGE:
@@ -340,7 +339,7 @@ void AccessibilityController::removeNotificationListener()
 {
 }
 
-void AccessibilityController::winNotificationReceived(PlatformUIElement element, const string& eventName)
+void AccessibilityController::winNotificationReceived(PlatformUIElement element, const std::string& eventName)
 {
     for (auto& slot : m_notificationListeners) {
         COMPtr<IServiceProvider> thisServiceProvider(Query, slot.key);

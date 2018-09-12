@@ -25,8 +25,8 @@
 
 #pragma once
 
-#include <runtime/ArrayBuffer.h>
-#include <runtime/ArrayBufferView.h>
+#include <JavaScriptCore/ArrayBuffer.h>
+#include <JavaScriptCore/ArrayBufferView.h>
 #include <wtf/RefPtr.h>
 #include <wtf/Variant.h>
 
@@ -34,26 +34,31 @@ namespace WebCore {
 
 class BufferSource {
 public:
-    BufferSource(WTF::Variant<RefPtr<JSC::ArrayBufferView>, RefPtr<JSC::ArrayBuffer>>&& variant)
+    using VariantType = WTF::Variant<RefPtr<JSC::ArrayBufferView>, RefPtr<JSC::ArrayBuffer>>;
+
+    BufferSource() { }
+    BufferSource(VariantType&& variant)
         : m_variant(WTFMove(variant))
     { }
+
+    const VariantType& variant() const { return m_variant; }
 
     const uint8_t* data() const
     {
         return WTF::visit([](auto& buffer) -> const uint8_t* {
-            return static_cast<const uint8_t*>(buffer->data());
+            return buffer ? static_cast<const uint8_t*>(buffer->data()) : nullptr;
         }, m_variant);
     }
 
     size_t length() const
     {
         return WTF::visit([](auto& buffer) -> size_t {
-            return buffer->byteLength();
+            return buffer ? buffer->byteLength() : 0;
         }, m_variant);
     }
 
 private:
-    WTF::Variant<RefPtr<JSC::ArrayBufferView>, RefPtr<JSC::ArrayBuffer>> m_variant;
+    VariantType m_variant;
 };
 
 } // namespace WebCore

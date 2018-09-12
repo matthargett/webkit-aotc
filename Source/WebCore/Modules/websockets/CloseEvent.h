@@ -28,8 +28,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef CloseEvent_h
-#define CloseEvent_h
+#pragma once
 
 #include "Event.h"
 #include "EventNames.h"
@@ -63,7 +62,7 @@ public:
 
 private:
     CloseEvent(bool wasClean, int code, const String& reason)
-        : Event(eventNames().closeEvent, false, false)
+        : Event(eventNames().closeEvent, CanBubble::No, IsCancelable::No)
         , m_wasClean(wasClean)
         , m_code(code)
         , m_reason(reason)
@@ -84,5 +83,3 @@ private:
 };
 
 } // namespace WebCore
-
-#endif // CloseEvent_h

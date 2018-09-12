@@ -43,22 +43,22 @@ var PLATFORMS = {
             'MAC': {
                 expectationsDirectory: 'mac',
                 subPlatforms: {
-                    'YOSEMITE': {
-                        subPlatforms: {
-                            'WK1': { fallbackPlatforms: ['APPLE_MAC_YOSEMITE', 'APPLE_MAC'] },
-                            'WK2': { fallbackPlatforms: ['APPLE_MAC_YOSEMITE', 'APPLE_MAC', 'WK2'], expectationsDirectory: 'mac-wk2'}
-                        }
-                    },
-                    'ELCAPITAN': {
-                        subPlatforms: {
-                            'WK1': { fallbackPlatforms: ['APPLE_MAC_ELCAPITAN', 'APPLE_MAC'] },
-                            'WK2': { fallbackPlatforms: ['APPLE_MAC_ELCAPITAN', 'APPLE_MAC', 'WK2'], expectationsDirectory: 'mac-wk2'}
-                        }
-                    },
                     'SIERRA': {
                         subPlatforms: {
                             'WK1': { fallbackPlatforms: ['APPLE_MAC_SIERRA', 'APPLE_MAC'] },
                             'WK2': { fallbackPlatforms: ['APPLE_MAC_SIERRA', 'APPLE_MAC', 'WK2'], expectationsDirectory: 'mac-wk2'}
+                        }
+                    },
+                    'HIGHSIERRA': {
+                        subPlatforms: {
+                            'WK1': { fallbackPlatforms: ['APPLE_MAC_HIGHSIERRA', 'APPLE_MAC'] },
+                            'WK2': { fallbackPlatforms: ['APPLE_MAC_HIGHSIERRA', 'APPLE_MAC', 'WK2'], expectationsDirectory: 'mac-wk2'}
+                        }
+                    },
+                    'MOJAVE': {
+                        subPlatforms: {
+                            'WK1': { fallbackPlatforms: ['APPLE_MAC_MOJAVE', 'APPLE_MAC'] },
+                            'WK2': { fallbackPlatforms: ['APPLE_MAC_MOJAVE', 'APPLE_MAC', 'WK2'], expectationsDirectory: 'mac-wk2'}
                         }
                     },
                 }
@@ -75,27 +75,18 @@ var PLATFORMS = {
     'GTK': {
         expectationsDirectory: 'gtk',
         subPlatforms: {
-            'LINUX': {
-                subPlatforms: {
-                    'WK1': { fallbackPlatforms: ['GTK'] },
-                    'WK2': { fallbackPlatforms: ['GTK', 'WK2'], expectationsDirectory: 'gtk-wk2' }
-                }
-            }
-        }
-    },
-    'EFL': {
-        expectationsDirectory: 'efl',
-        subPlatforms: {
-            'LINUX': {
-                subPlatforms: {
-                    'WK2': { fallbackPlatforms: ['EFL', 'WK2'], expectationsDirectory: 'efl-wk2' }
-                }
-            }
+            'LINUX': { fallbackPlatforms: ['GTK', 'WK2'] }
         }
     },
     'WK2': {
         basePlatform: true,
         expectationsDirectory: 'wk2'
+    },
+    'WPE': {
+        expectationsDirectory: 'wpe',
+        subPlatforms: {
+            'LINUX': { fallbackPlatforms: ['WPE', 'WK2'] }
+        }
     }
 };
 
@@ -354,22 +345,25 @@ function determineBuilderPlatform(builderNameUpperCase)
     if (string.contains(builderNameUpperCase, 'WIN XP'))
         return 'APPLE_WIN_XP';
 
+    if (string.contains(builderNameUpperCase, 'GTK LINUX'))
+        return 'GTK_LINUX';
+    if (string.contains(builderNameUpperCase, 'WPE LINUX'))
+        return 'WPE_LINUX';
+
+    if (string.contains(builderNameUpperCase, 'MOJAVE'))
+        return determineWKPlatform(builderNameUpperCase, 'APPLE_MAC_MOJAVE');
+    if (string.contains(builderNameUpperCase, 'HIGHSIERRA'))
+        return determineWKPlatform(builderNameUpperCase, 'APPLE_MAC_HIGHSIERRA');
     if (string.contains(builderNameUpperCase, 'SIERRA'))
-        return determineWKPlatform(builderNameUpperCase, 'SIERRA');
+        return determineWKPlatform(builderNameUpperCase, 'APPLE_MAC_SIERRA');
     if (string.contains(builderNameUpperCase, 'EL CAPITAN'))
-        return determineWKPlatform(builderNameUpperCase, 'APPLE_ELCAPITAN');
-    if (string.contains(builderNameUpperCase, 'YOSEMITE'))
-        return determineWKPlatform(builderNameUpperCase, 'APPLE_YOSEMITE');
+        return determineWKPlatform(builderNameUpperCase, 'APPLE_MAC_ELCAPITAN');
     if (string.contains(builderNameUpperCase, 'MAVERICKS'))
-        return determineWKPlatform(builderNameUpperCase, 'APPLE_MAVERICKS');
+        return determineWKPlatform(builderNameUpperCase, 'APPLE_MAC_MAVERICKS');
     if (string.contains(builderNameUpperCase, 'LION'))
         return determineWKPlatform(builderNameUpperCase, 'APPLE_MAC_LION');
     if (string.contains(builderNameUpperCase, ' IOS ') && string.contains(builderNameUpperCase, 'SIMULATOR'))
         return determineWKPlatform(builderNameUpperCase, 'APPLE_IOS_SIMULATOR');
-    if (string.contains(builderNameUpperCase, 'GTK LINUX'))
-        return determineWKPlatform(builderNameUpperCase, 'GTK_LINUX');
-    if (string.contains(builderNameUpperCase, 'EFL'))
-        return determineWKPlatform(builderNameUpperCase, 'EFL_LINUX');
 }
 
 function platformAndBuildType(builderName)
@@ -707,6 +701,8 @@ function getParsedExpectations(data)
             'Yosemite': 'YOSEMITE',
             'ElCapitan': 'ELCAPITAN',
             'Sierra': 'SIERRA',
+            'HighSierra': 'HIGHSIERRA',
+            'Mojave': 'MOJAVE',
             'Win7': 'WIN7',
             'XP': 'XP',
             'Vista': 'VISTA',
@@ -1322,13 +1318,14 @@ function createBugHTML(test)
 {
     var symptom = test.isFlaky ? 'flaky' : 'failing';
     var title = encodeURIComponent('Layout Test ' + test.test + ' is ' + symptom);
+    var dashboardURL = 'https://webkit-test-results.webkit.org/dashboards/flakiness_dashboard.html#showAllRuns=true&tests=' + encodeURIComponent(test.test);
     var description = encodeURIComponent('The following layout test is ' + symptom + ' on ' +
-        '[insert platform]\n\n' + test.test + '\n\nProbable cause:\n\n' +
-        '[insert probable cause]');
+        '[insert platform]\n\n' + test.test + '\n\nProbable cause:\n\n' + '[insert probable cause]' +
+        '\n\nFlakiness Dashboard:\n\n' + dashboardURL);
     
     var component = encodeURIComponent('Tools / Tests');
     url = 'https://bugs.webkit.org/enter_bug.cgi?assigned_to=webkit-unassigned%40lists.webkit.org&product=WebKit&form_name=enter_bug&component=' + component + '&short_desc=' + title + '&comment=' + description;
-    return '<a href="' + url + '" class="file-bug">File</a>';
+    return '<a href="' + url + '" class="file-bug" target="_blank">File</a>';
 }
 
 function isCrossBuilderView()

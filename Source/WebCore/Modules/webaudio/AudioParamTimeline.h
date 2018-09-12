@@ -26,18 +26,18 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef AudioParamTimeline_h
-#define AudioParamTimeline_h
+#pragma once
 
 #include "AudioContext.h"
-#include <runtime/Float32Array.h>
+#include <JavaScriptCore/Float32Array.h>
 #include <wtf/Lock.h>
-#include <wtf/RefCounted.h>
 #include <wtf/Vector.h>
 
 namespace WebCore {
 
 class AudioParamTimeline {
+    WTF_MAKE_NONCOPYABLE(AudioParamTimeline);
+    WTF_MAKE_FAST_ALLOCATED;
 public:
     AudioParamTimeline()
     {
@@ -110,5 +110,3 @@ private:
 };
 
 } // namespace WebCore
-
-#endif // AudioParamTimeline_h

@@ -18,8 +18,7 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifndef AutoTableLayout_h
-#define AutoTableLayout_h
+#pragma once
 
 #include "LayoutUnit.h"
 #include "Length.h"
@@ -60,13 +59,11 @@ private:
         bool emptyCellsOnly { true };
     };
 
-    Vector<Layout, 4> m_layoutStruct;
-    Vector<RenderTableCell*, 4> m_spanCells;
+    Vector<Layout> m_layoutStruct;
+    Vector<RenderTableCell*> m_spanCells;
     bool m_hasPercent : 1;
     mutable bool m_effectiveLogicalWidthDirty : 1;
     LayoutUnit m_scaledWidthFromPercentColumns;
 };
 
 } // namespace WebCore
-
-#endif // AutoTableLayout_h

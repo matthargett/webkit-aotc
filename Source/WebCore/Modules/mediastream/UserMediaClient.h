@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2011 Ericsson AB. All rights reserved.
- * Copyright (C) 2016 Apple Inc. All rights reserved.
+ * Copyright (C) 2016-2018 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -29,21 +29,16 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef UserMediaClient_h
-#define UserMediaClient_h
+#pragma once
 
 #if ENABLE(MEDIA_STREAM)
 
-#include <functional>
-#include <wtf/Vector.h>
-#include <wtf/text/WTFString.h>
+#include <wtf/ObjectIdentifier.h>
 
 namespace WebCore {
 
 class MediaDevicesEnumerationRequest;
-class MediaConstraints;
 class Page;
-class RealtimeMediaSource;
 class UserMediaRequest;
 
 class UserMediaClient {
@@ -56,8 +51,13 @@ public:
     virtual void enumerateMediaDevices(MediaDevicesEnumerationRequest&) = 0;
     virtual void cancelMediaDevicesEnumerationRequest(MediaDevicesEnumerationRequest&) = 0;
 
+    enum DeviceChangeObserverTokenType { };
+    using DeviceChangeObserverToken = ObjectIdentifier<DeviceChangeObserverTokenType>;
+    virtual DeviceChangeObserverToken addDeviceChangeObserver(WTF::Function<void()>&&) = 0;
+    virtual void removeDeviceChangeObserver(DeviceChangeObserverToken) = 0;
+
 protected:
-    virtual ~UserMediaClient() { }
+    virtual ~UserMediaClient() = default;
 };
 
 WEBCORE_EXPORT void provideUserMediaTo(Page*, UserMediaClient*);
@@ -65,5 +65,3 @@ WEBCORE_EXPORT void provideUserMediaTo(Page*, UserMediaClient*);
 } // namespace WebCore
 
 #endif // ENABLE(MEDIA_STREAM)
-
-#endif // UserMediaClient_h

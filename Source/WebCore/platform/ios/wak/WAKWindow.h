@@ -84,6 +84,7 @@ WEBCORE_EXPORT @interface WAKWindow : WAKResponder
     WAKView *_nextResponder;
 
     BOOL _visible;
+    BOOL _isInSnapshottingPaint;
     BOOL _useOrientationDependentFontAntialiasing;
     BOOL _entireWindowVisibleForTesting;
 }
@@ -115,7 +116,7 @@ WEBCORE_EXPORT @interface WAKWindow : WAKResponder
 - (void)setVisible:(BOOL)visible;
 - (NSSelectionDirection)keyViewSelectionDirection;
 - (BOOL)makeFirstResponder:(NSResponder *)aResponder;
-- (WAKView *)_newFirstResponderAfterResigning;
+- (WAKView *)_newFirstResponderAfterResigning NS_RETURNS_NOT_RETAINED;
 - (void)setFrame:(NSRect)frameRect display:(BOOL)flag;
 - (CGRect)frame;
 - (void)setContentRect:(CGRect)rect;
@@ -130,6 +131,9 @@ WEBCORE_EXPORT @interface WAKWindow : WAKResponder
 - (void)sendEvent:(WebEvent *)anEvent;
 - (void)sendEventSynchronously:(WebEvent *)anEvent;
 - (void)sendMouseMoveEvent:(WebEvent *)anEvent contentChange:(WKContentChange *)aContentChange;
+
+- (void)setIsInSnapshottingPaint:(BOOL)isInSnapshottingPaint;
+- (BOOL)isInSnapshottingPaint;
 
 // Thread safe way of providing the "usable" rect of the WAKWindow in the viewport/scrollview.
 - (CGRect)exposedScrollViewRect;

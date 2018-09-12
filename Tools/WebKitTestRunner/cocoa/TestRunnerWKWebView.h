@@ -40,12 +40,21 @@
 @property (nonatomic, copy) void (^didShowKeyboardCallback)(void);
 @property (nonatomic, copy) void (^didHideKeyboardCallback)(void);
 @property (nonatomic, copy) void (^didEndScrollingCallback)(void);
-
-- (instancetype)initWithFrame:(CGRect)frame configuration:(WKWebViewConfiguration *)configuration;
-- (void)dealloc;
+@property (nonatomic, copy) void (^rotationDidEndCallback)(void);
+@property (nonatomic, copy) NSString *accessibilitySpeakSelectionContent;
 
 - (void)zoomToScale:(double)scale animated:(BOOL)animated completionHandler:(void (^)(void))completionHandler;
+- (void)accessibilityRetrieveSpeakSelectionContentWithCompletionHandler:(void (^)(void))completionHandler;
+- (void)_didEndRotation;
+
+@property (nonatomic, assign) UIEdgeInsets overrideSafeAreaInsets;
+
+@property (nonatomic, assign) BOOL usesSafariLikeRotation;
+@property (nonatomic, readonly, getter=isInteractingWithFormControl) BOOL interactingWithFormControl;
+
 #endif
+
+@property (nonatomic, retain, setter=_setStableStateOverride:) NSNumber *_stableStateOverride;
 
 @end
 

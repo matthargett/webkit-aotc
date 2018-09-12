@@ -37,9 +37,9 @@ function test()
     suite.addTestCase({
         name: "CheckFunctionConstructorMultipleTimes",
         description: "Trigger multiple Function constructor calls with the same source and expect multiple Scripts added with sourceURLs.",
-        test: (resolve, reject) => {
+        test(resolve, reject) {
             let seen = 0;
-            WebInspector.debuggerManager.addEventListener(WebInspector.DebuggerManager.Event.ScriptAdded, (event) => {
+            WI.debuggerManager.addEventListener(WI.DebuggerManager.Event.ScriptAdded, (event) => {
                 if (event.data.script.sourceURL === "test-Function-constructor.js")
                     seen++;
             });
@@ -53,9 +53,9 @@ function test()
     suite.addTestCase({
         name: "CheckProgramMultipleTimes",
         description: "Trigger multiple program executions with the same source and expect multiple Scripts added with sourceURLs.",
-        test: (resolve, reject) => {
+        test(resolve, reject) {
             let seen = 0;
-            WebInspector.debuggerManager.addEventListener(WebInspector.DebuggerManager.Event.ScriptAdded, (event) => {
+            WI.debuggerManager.addEventListener(WI.DebuggerManager.Event.ScriptAdded, (event) => {
                 if (event.data.script.sourceURL === "test-program.js")
                     seen++;
             });
@@ -69,9 +69,9 @@ function test()
     suite.addTestCase({
         name: "CheckEvalMultipleTimes",
         description: "Trigger eval with the same source and expect multiple Scripts added with sourceURLs.",
-        test: (resolve, reject) => {
+        test(resolve, reject) {
             let seen = 0;
-            WebInspector.debuggerManager.addEventListener(WebInspector.DebuggerManager.Event.ScriptAdded, (event) => {
+            WI.debuggerManager.addEventListener(WI.DebuggerManager.Event.ScriptAdded, (event) => {
                 if (event.data.script.sourceURL === "test-eval.js")
                     seen++;
             });

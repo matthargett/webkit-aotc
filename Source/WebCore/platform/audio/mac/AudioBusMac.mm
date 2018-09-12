@@ -29,10 +29,6 @@
 #import "AudioBus.h"
 
 #import "AudioFileReader.h"
-#import <wtf/AutodrainedPool.h>
-#import <wtf/RefPtr.h>
-#import <wtf/PassRefPtr.h>
-#import <Foundation/Foundation.h>
 
 @interface WebCoreAudioBundleClass : NSObject
 @end
@@ -42,23 +38,17 @@
 
 namespace WebCore {
 
-PassRefPtr<AudioBus> AudioBus::loadPlatformResource(const char* name, float sampleRate)
+RefPtr<AudioBus> AudioBus::loadPlatformResource(const char* name, float sampleRate)
 {
-    // This method can be called from other than the main thread, so we need an auto-release pool.
-    AutodrainedPool pool;
-    
-    NSBundle *bundle = [NSBundle bundleForClass:[WebCoreAudioBundleClass class]];
-    NSURL *audioFileURL = [bundle URLForResource:[NSString stringWithUTF8String:name] withExtension:@"wav" subdirectory:@"audio"];
-    NSDataReadingOptions options = NSDataReadingMappedIfSafe;
-    NSData *audioData = [NSData dataWithContentsOfURL:audioFileURL options:options error:nil];
-
-    if (audioData) {
-        RefPtr<AudioBus> bus(createBusFromInMemoryAudioFile([audioData bytes], [audioData length], false, sampleRate));
-        return bus;
+    @autoreleasepool {
+        NSBundle *bundle = [NSBundle bundleForClass:[WebCoreAudioBundleClass class]];
+        NSURL *audioFileURL = [bundle URLForResource:[NSString stringWithUTF8String:name] withExtension:@"wav" subdirectory:@"audio"];
+        if (NSData *audioData = [NSData dataWithContentsOfURL:audioFileURL options:NSDataReadingMappedIfSafe error:nil])
+            return createBusFromInMemoryAudioFile([audioData bytes], [audioData length], false, sampleRate);
     }
 
     ASSERT_NOT_REACHED();
-    return 0;
+    return nullptr;
 }
 
 } // namespace WebCore

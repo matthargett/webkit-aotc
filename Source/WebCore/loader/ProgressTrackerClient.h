@@ -23,8 +23,7 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef ProgressTrackerClient_h
-#define ProgressTrackerClient_h
+#pragma once
 
 namespace WebCore {
 
@@ -32,7 +31,7 @@ class Frame;
 
 class ProgressTrackerClient {
 protected:
-    virtual ~ProgressTrackerClient() { }
+    virtual ~ProgressTrackerClient() = default;
 
 public:
     virtual void progressTrackerDestroyed() { }
@@ -46,5 +45,3 @@ public:
 };
 
 } // namespace WebCore
-
-#endif // ProgressTrackerClient_h

@@ -23,8 +23,7 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef CryptoAlgorithmHMAC_h
-#define CryptoAlgorithmHMAC_h
+#pragma once
 
 #include "CryptoAlgorithm.h"
 
@@ -32,38 +31,29 @@
 
 namespace WebCore {
 
-class CryptoAlgorithmHmacParamsDeprecated;
 class CryptoKeyHMAC;
 
 class CryptoAlgorithmHMAC final : public CryptoAlgorithm {
 public:
-    static const char* const s_name;
-    static const CryptoAlgorithmIdentifier s_identifier = CryptoAlgorithmIdentifier::HMAC;
-
+    static constexpr const char* s_name = "HMAC";
+    static constexpr CryptoAlgorithmIdentifier s_identifier = CryptoAlgorithmIdentifier::HMAC;
     static Ref<CryptoAlgorithm> create();
 
-    CryptoAlgorithmIdentifier identifier() const override;
-
-    void generateKey(const std::unique_ptr<CryptoAlgorithmParameters>&&, bool extractable, CryptoKeyUsage, KeyOrKeyPairCallback&&, ExceptionCallback&&, ScriptExecutionContext*) final;
-
-    // The following will be deprecated.
-    void sign(const CryptoAlgorithmParametersDeprecated&, const CryptoKey&, const CryptoOperationData&, VectorCallback&&, VoidCallback&& failureCallback, ExceptionCode&) override;
-    void verify(const CryptoAlgorithmParametersDeprecated&, const CryptoKey&, const CryptoOperationData& signature, const CryptoOperationData&, BoolCallback&&, VoidCallback&& failureCallback, ExceptionCode&) override;
-    void generateKey(const CryptoAlgorithmParametersDeprecated&, bool extractable, CryptoKeyUsage, KeyOrKeyPairCallback&&, VoidCallback&& failureCallback, ExceptionCode&, ScriptExecutionContext*) override;
-    void importKey(const CryptoAlgorithmParametersDeprecated&, const CryptoKeyData&, bool extractable, CryptoKeyUsage, KeyCallback&&, VoidCallback&& failureCallback, ExceptionCode&) override;
-
 private:
-    CryptoAlgorithmHMAC();
-    virtual ~CryptoAlgorithmHMAC();
+    CryptoAlgorithmHMAC() = default;
+    CryptoAlgorithmIdentifier identifier() const final;
 
-    bool keyAlgorithmMatches(const CryptoAlgorithmHmacParamsDeprecated& algorithmParameters, const CryptoKey&) const;
-    void platformSign(const CryptoAlgorithmHmacParamsDeprecated&, const CryptoKeyHMAC&, const CryptoOperationData&, VectorCallback&&, VoidCallback&& failureCallback, ExceptionCode&);
-    void platformVerify(const CryptoAlgorithmHmacParamsDeprecated&, const CryptoKeyHMAC&, const CryptoOperationData& signature, const CryptoOperationData&, BoolCallback&&, VoidCallback&& failureCallback, ExceptionCode&);
+    void sign(const CryptoAlgorithmParameters&, Ref<CryptoKey>&&, Vector<uint8_t>&&, VectorCallback&&, ExceptionCallback&&, ScriptExecutionContext&, WorkQueue&) final;
+    void verify(const CryptoAlgorithmParameters&, Ref<CryptoKey>&&, Vector<uint8_t>&& signature, Vector<uint8_t>&&, BoolCallback&&, ExceptionCallback&&, ScriptExecutionContext&, WorkQueue&) final;
+    void generateKey(const CryptoAlgorithmParameters&, bool extractable, CryptoKeyUsageBitmap, KeyOrKeyPairCallback&&, ExceptionCallback&&, ScriptExecutionContext&) final;
+    void importKey(CryptoKeyFormat, KeyData&&, const CryptoAlgorithmParameters&, bool extractable, CryptoKeyUsageBitmap, KeyCallback&&, ExceptionCallback&&) final;
+    void exportKey(CryptoKeyFormat, Ref<CryptoKey>&&, KeyDataCallback&&, ExceptionCallback&&) final;
+    ExceptionOr<size_t> getKeyLength(const CryptoAlgorithmParameters&) final;
+
+    static ExceptionOr<Vector<uint8_t>> platformSign(const CryptoKeyHMAC&, const Vector<uint8_t>&);
+    static ExceptionOr<bool> platformVerify(const CryptoKeyHMAC&, const Vector<uint8_t>&, const Vector<uint8_t>&);
 };
 
-}
+} // namespace WebCore
 
 #endif // ENABLE(SUBTLE_CRYPTO)
-
-
-#endif // CryptoAlgorithmHMAC_h

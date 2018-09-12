@@ -23,14 +23,14 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifndef RenderSVGPath_h
-#define RenderSVGPath_h
+#pragma once
 
 #include "RenderSVGShape.h"
 
 namespace WebCore {
 
 class RenderSVGPath final : public RenderSVGShape {
+    WTF_MAKE_ISO_ALLOCATED(RenderSVGPath);
 public:
     RenderSVGPath(SVGGraphicsElement&, RenderStyle&&);
     virtual ~RenderSVGPath();
@@ -43,7 +43,7 @@ private:
     FloatRect calculateUpdatedStrokeBoundingBox() const;
 
     void strokeShape(GraphicsContext&) const override;
-    bool shapeDependentStrokeContains(const FloatPoint&) override;
+    bool shapeDependentStrokeContains(const FloatPoint&, PointCoordinateSpace = GlobalCoordinateSpace) override;
 
     bool shouldStrokeZeroLengthSubpath() const;
     Path* zeroLengthLinecapPath(const FloatPoint&) const;
@@ -58,5 +58,3 @@ private:
 } // namespace WebCore
 
 SPECIALIZE_TYPE_TRAITS_RENDER_OBJECT(RenderSVGPath, isSVGPath())
-
-#endif // RenderSVGPath_h

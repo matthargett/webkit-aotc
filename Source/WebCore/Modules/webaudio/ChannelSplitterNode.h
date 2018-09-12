@@ -22,8 +22,7 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef ChannelSplitterNode_h
-#define ChannelSplitterNode_h
+#pragma once
 
 #include "AudioNode.h"
 
@@ -31,7 +30,7 @@ namespace WebCore {
 
 class AudioContext;
     
-class ChannelSplitterNode : public AudioNode {
+class ChannelSplitterNode final : public AudioNode {
 public:
     static RefPtr<ChannelSplitterNode> create(AudioContext&, float sampleRate, unsigned numberOfOutputs);
 
@@ -47,5 +46,3 @@ private:
 };
 
 } // namespace WebCore
-
-#endif // ChannelSplitterNode_h

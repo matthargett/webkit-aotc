@@ -22,13 +22,10 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef AudioBasicProcessorNode_h
-#define AudioBasicProcessorNode_h
+#pragma once
 
 #include "AudioNode.h"
 #include <memory>
-#include <wtf/RefCounted.h>
-#include <wtf/Threading.h>
 
 namespace WebCore {
 
@@ -63,5 +60,3 @@ protected:
 };
 
 } // namespace WebCore
-
-#endif // AudioBasicProcessorNode_h

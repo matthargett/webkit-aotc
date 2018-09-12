@@ -24,38 +24,40 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef MediaStreamTrackPrivate_h
-#define MediaStreamTrackPrivate_h
+#pragma once
 
 #if ENABLE(MEDIA_STREAM)
 
 #include "RealtimeMediaSource.h"
-#include <wtf/RefCounted.h>
-#include <wtf/text/AtomicString.h>
 
 namespace WebCore {
 
 class AudioSourceProvider;
 class GraphicsContext;
 class MediaSample;
-class MediaSourceSettings;
 class RealtimeMediaSourceCapabilities;
+class WebAudioSourceProvider;
 
 class MediaStreamTrackPrivate : public RefCounted<MediaStreamTrackPrivate>, public RealtimeMediaSource::Observer {
 public:
     class Observer {
     public:
-        virtual ~Observer() { }
+        virtual ~Observer() = default;
 
+        virtual void trackStarted(MediaStreamTrackPrivate&) { };
         virtual void trackEnded(MediaStreamTrackPrivate&) = 0;
         virtual void trackMutedChanged(MediaStreamTrackPrivate&) = 0;
         virtual void trackSettingsChanged(MediaStreamTrackPrivate&) = 0;
         virtual void trackEnabledChanged(MediaStreamTrackPrivate&) = 0;
         virtual void sampleBufferUpdated(MediaStreamTrackPrivate&, MediaSample&) { };
+        virtual void readyStateChanged(MediaStreamTrackPrivate&) { };
+
+        // May get called on a background thread.
+        virtual void audioSamplesAvailable(MediaStreamTrackPrivate&, const MediaTime&, const PlatformAudioData&, const AudioStreamDescription&, size_t) { };
     };
-    
-    static RefPtr<MediaStreamTrackPrivate> create(RefPtr<RealtimeMediaSource>&&);
-    static RefPtr<MediaStreamTrackPrivate> create(RefPtr<RealtimeMediaSource>&&, const String& id);
+
+    static Ref<MediaStreamTrackPrivate> create(Ref<RealtimeMediaSource>&&);
+    static Ref<MediaStreamTrackPrivate> create(Ref<RealtimeMediaSource>&&, String&& id);
 
     virtual ~MediaStreamTrackPrivate();
 
@@ -64,22 +66,23 @@ public:
 
     bool ended() const { return m_isEnded; }
 
-    void startProducingData() { m_source->startProducingData(); }
-    void stopProducingData() { m_source->stopProducingData(); }
+    void startProducingData() { m_source->start(); }
+    void stopProducingData() { m_source->stop(); }
     bool isProducingData() { return m_source->isProducingData(); }
 
-    bool muted() const;
-    void setMuted(bool muted) const { m_source->setMuted(muted); }
+    bool isIsolated() const { return m_source->isIsolated(); }
 
-    bool readonly() const;
-    bool remote() const;
+    bool muted() const;
+    void setMuted(bool muted) { m_source->setMuted(muted); }
+
+    bool isCaptureTrack() const;
 
     bool enabled() const { return m_isEnabled; }
     void setEnabled(bool);
 
-    RefPtr<MediaStreamTrackPrivate> clone();
+    Ref<MediaStreamTrackPrivate> clone();
 
-    RealtimeMediaSource& source() const { return *m_source.get(); }
+    RealtimeMediaSource& source() { return m_source.get(); }
     RealtimeMediaSource::Type type() const;
 
     void endTrack();
@@ -88,33 +91,45 @@ public:
     void removeObserver(Observer&);
 
     const RealtimeMediaSourceSettings& settings() const;
-    RefPtr<RealtimeMediaSourceCapabilities> capabilities() const;
+    const RealtimeMediaSourceCapabilities& capabilities() const;
 
-    RefPtr<MediaConstraints> constraints() const;
-    void applyConstraints(const MediaConstraints&, RealtimeMediaSource::SuccessHandler, RealtimeMediaSource::FailureHandler);
+    void applyConstraints(const MediaConstraints&, RealtimeMediaSource::SuccessHandler&&, RealtimeMediaSource::FailureHandler&&);
 
     AudioSourceProvider* audioSourceProvider();
 
     void paintCurrentFrameInContext(GraphicsContext&, const FloatRect&);
 
+    enum class ReadyState { None, Live, Ended };
+    ReadyState readyState() const { return m_readyState; }
+
+    void setIdForTesting(String&& id) { m_id = WTFMove(id); }
+
 private:
-    explicit MediaStreamTrackPrivate(const MediaStreamTrackPrivate&);
-    MediaStreamTrackPrivate(RefPtr<RealtimeMediaSource>&&, const String& id);
+    MediaStreamTrackPrivate(Ref<RealtimeMediaSource>&&, String&& id);
 
     // RealtimeMediaSourceObserver
+    void sourceStarted() final;
     void sourceStopped() final;
     void sourceMutedChanged() final;
     void sourceSettingsChanged() final;
     bool preventSourceFromStopping() final;
-    void sourceHasMoreMediaData(MediaSample&) final;
+    void videoSampleAvailable(MediaSample&) final;
+    void audioSamplesAvailable(const MediaTime&, const PlatformAudioData&, const AudioStreamDescription&, size_t) final;
 
-    Vector<Observer*> m_observers;
-    RefPtr<RealtimeMediaSource> m_source;
-    RefPtr<MediaConstraints> m_constraints;
+    void updateReadyState();
+
+    void forEachObserver(const WTF::Function<void(Observer&)>&) const;
+
+    mutable RecursiveLock m_observersLock;
+    HashSet<Observer*> m_observers;
+    Ref<RealtimeMediaSource> m_source;
 
     String m_id;
-    bool m_isEnabled;
-    bool m_isEnded;
+    ReadyState m_readyState { ReadyState::None };
+    bool m_isEnabled { true };
+    bool m_isEnded { false };
+    bool m_haveProducedData { false };
+    RefPtr<WebAudioSourceProvider> m_audioSourceProvider;
 };
 
 typedef Vector<RefPtr<MediaStreamTrackPrivate>> MediaStreamTrackPrivateVector;
@@ -122,5 +137,3 @@ typedef Vector<RefPtr<MediaStreamTrackPrivate>> MediaStreamTrackPrivateVector;
 } // namespace WebCore
 
 #endif // ENABLE(MEDIA_STREAM)
-
-#endif // MediaStreamTrackPrivate_h

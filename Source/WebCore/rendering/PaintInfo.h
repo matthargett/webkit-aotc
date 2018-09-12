@@ -23,8 +23,7 @@
  *
  */
 
-#ifndef PaintInfo_h
-#define PaintInfo_h
+#pragma once
 
 #include "AffineTransform.h"
 #include "GraphicsContext.h"
@@ -34,11 +33,13 @@
 #include <limits>
 #include <wtf/HashMap.h>
 #include <wtf/ListHashSet.h>
+#include <wtf/OptionSet.h>
 
 namespace WebCore {
 
 class OverlapTestRequestClient;
 class RenderInline;
+class RenderLayer;
 class RenderLayerModelObject;
 class RenderObject;
 
@@ -49,9 +50,10 @@ typedef HashMap<OverlapTestRequestClient*, IntRect> OverlapTestRequestMap;
  * (tx|ty) is the calculated position of the parent
  */
 struct PaintInfo {
-    PaintInfo(GraphicsContext& newContext, const LayoutRect& newRect, PaintPhase newPhase, PaintBehavior newPaintBehavior,
+    PaintInfo(GraphicsContext& newContext, const LayoutRect& newRect, PaintPhase newPhase, OptionSet<PaintBehavior> newPaintBehavior,
         RenderObject* newSubtreePaintRoot = nullptr, ListHashSet<RenderInline*>* newOutlineObjects = nullptr,
-        OverlapTestRequestMap* overlapTestRequests = nullptr, const RenderLayerModelObject* newPaintContainer = nullptr)
+        OverlapTestRequestMap* overlapTestRequests = nullptr, const RenderLayerModelObject* newPaintContainer = nullptr,
+        const RenderLayer* enclosingSelfPaintingLayer = nullptr, bool newRequireSecurityOriginAccessForWidgets = false)
             : rect(newRect)
             , phase(newPhase)
             , paintBehavior(newPaintBehavior)
@@ -59,6 +61,8 @@ struct PaintInfo {
             , outlineObjects(newOutlineObjects)
             , overlapTestRequests(overlapTestRequests)
             , paintContainer(newPaintContainer)
+            , requireSecurityOriginAccessForWidgets(newRequireSecurityOriginAccessForWidgets)
+            , m_enclosingSelfPaintingLayer(enclosingSelfPaintingLayer)
             , m_context(&newContext)
     {
     }
@@ -92,12 +96,14 @@ struct PaintInfo {
     }
 
     bool forceTextColor() const { return forceBlackText() || forceWhiteText(); }
-    bool forceBlackText() const { return paintBehavior & PaintBehaviorForceBlackText; }
-    bool forceWhiteText() const { return paintBehavior & PaintBehaviorForceWhiteText; }
+    bool forceBlackText() const { return paintBehavior.contains(PaintBehavior::ForceBlackText); }
+    bool forceWhiteText() const { return paintBehavior.contains(PaintBehavior::ForceWhiteText); }
     Color forcedTextColor() const { return (forceBlackText()) ? Color::black : Color::white; }
 
-    bool skipRootBackground() const { return paintBehavior & PaintBehaviorSkipRootBackground; }
-    bool paintRootBackgroundOnly() const { return paintBehavior & PaintBehaviorRootBackgroundOnly; }
+    bool skipRootBackground() const { return paintBehavior.contains(PaintBehavior::SkipRootBackground); }
+    bool paintRootBackgroundOnly() const { return paintBehavior.contains(PaintBehavior::RootBackgroundOnly); }
+
+    const RenderLayer* enclosingSelfPaintingLayer() const { return m_enclosingSelfPaintingLayer; }
 
     void applyTransform(const AffineTransform& localToAncestorTransform)
     {
@@ -109,23 +115,23 @@ struct PaintInfo {
         if (rect.isInfinite())
             return;
 
-        FloatRect tranformedRect(localToAncestorTransform.inverse().valueOr(AffineTransform()).mapRect(rect));
+        FloatRect tranformedRect(localToAncestorTransform.inverse().value_or(AffineTransform()).mapRect(rect));
         rect.setLocation(LayoutPoint(tranformedRect.location()));
         rect.setSize(LayoutSize(tranformedRect.size()));
     }
 
     LayoutRect rect;
     PaintPhase phase;
-    PaintBehavior paintBehavior;
+    OptionSet<PaintBehavior> paintBehavior;
     RenderObject* subtreePaintRoot; // used to draw just one element and its visual children
     ListHashSet<RenderInline*>* outlineObjects; // used to list outlines that should be painted by a block with inline children
     OverlapTestRequestMap* overlapTestRequests;
     const RenderLayerModelObject* paintContainer; // the layer object that originates the current painting
+    bool requireSecurityOriginAccessForWidgets { false };
+    const RenderLayer* m_enclosingSelfPaintingLayer { nullptr };
 
 private:
     GraphicsContext* m_context;
 };
 
 } // namespace WebCore
-
-#endif // PaintInfo_h

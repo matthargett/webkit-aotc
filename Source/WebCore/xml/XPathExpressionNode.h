@@ -24,8 +24,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef XPathExpressionNode_h
-#define XPathExpressionNode_h
+#pragma once
 
 #include "XPathValue.h"
 
@@ -46,7 +45,7 @@ class Expression {
 public:
     static EvaluationContext& evaluationContext();
 
-    virtual ~Expression() { }
+    virtual ~Expression() = default;
 
     virtual Value evaluate() const = 0;
     virtual Value::Type resultType() const = 0;
@@ -86,5 +85,3 @@ private:
 
 } // namespace XPath
 } // namespace WebCore
-
-#endif // XPathExpressionNode_h

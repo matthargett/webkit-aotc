@@ -42,6 +42,7 @@ class IDBValue;
 
 struct IDBGetAllRecordsData;
 struct IDBGetRecordData;
+struct IDBIterateCursorData;
 struct SecurityOriginData;
 
 namespace IndexedDB {
@@ -54,7 +55,7 @@ namespace IDBClient {
 
 class IDBConnectionToServerDelegate {
 public:
-    virtual ~IDBConnectionToServerDelegate() { }
+    virtual ~IDBConnectionToServerDelegate() = default;
 
     virtual uint64_t identifier() const = 0;
     virtual void deleteDatabase(const IDBRequestData&) = 0;
@@ -75,9 +76,10 @@ public:
     virtual void getCount(const IDBRequestData&, const IDBKeyRangeData&) = 0;
     virtual void deleteRecord(const IDBRequestData&, const IDBKeyRangeData&) = 0;
     virtual void openCursor(const IDBRequestData&, const IDBCursorInfo&) = 0;
-    virtual void iterateCursor(const IDBRequestData&, const IDBKeyData&, unsigned long count) = 0;
+    virtual void iterateCursor(const IDBRequestData&, const IDBIterateCursorData&) = 0;
 
     virtual void establishTransaction(uint64_t databaseConnectionIdentifier, const IDBTransactionInfo&) = 0;
+    virtual void databaseConnectionPendingClose(uint64_t databaseConnectionIdentifier) = 0;
     virtual void databaseConnectionClosed(uint64_t databaseConnectionIdentifier) = 0;
     virtual void abortOpenAndUpgradeNeeded(uint64_t databaseConnectionIdentifier, const IDBResourceIdentifier& transactionIdentifier) = 0;
     virtual void didFireVersionChangeEvent(uint64_t databaseConnectionIdentifier, const IDBResourceIdentifier& requestIdentifier) = 0;

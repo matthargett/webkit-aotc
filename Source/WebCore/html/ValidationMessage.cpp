@@ -33,7 +33,6 @@
 
 #include "CSSPropertyNames.h"
 #include "CSSValueKeywords.h"
-#include "ExceptionCodePlaceholder.h"
 #include "HTMLBRElement.h"
 #include "HTMLDivElement.h"
 #include "HTMLFormControlElement.h"
@@ -76,6 +75,14 @@ ValidationMessageClient* ValidationMessage::validationMessageClient() const
 
 void ValidationMessage::updateValidationMessage(const String& message)
 {
+    // We want to hide the validation message as soon as the user starts
+    // typing, even if a constraint is still violated. Thefore, we hide the message instead
+    // of updating it if it is already visible.
+    if (isVisible()) {
+        requestToHideMessage();
+        return;
+    }
+
     String updatedMessage = message;
     if (!validationMessageClient()) {
         // HTML5 specification doesn't ask UA to show the title attribute value
@@ -110,7 +117,7 @@ void ValidationMessage::setMessage(const String& message)
         m_timer = std::make_unique<Timer>(*this, &ValidationMessage::buildBubbleTree);
     else
         m_timer = std::make_unique<Timer>(*this, &ValidationMessage::setMessageDOMAndStartTimer);
-    m_timer->startOneShot(0);
+    m_timer->startOneShot(0_s);
 }
 
 void ValidationMessage::setMessageDOMAndStartTimer()
@@ -120,14 +127,13 @@ void ValidationMessage::setMessageDOMAndStartTimer()
     ASSERT(m_messageBody);
     m_messageHeading->removeChildren();
     m_messageBody->removeChildren();
-    Vector<String> lines;
-    m_message.split('\n', lines);
+    Vector<String> lines = m_message.split('\n');
     Document& document = m_messageHeading->document();
     for (unsigned i = 0; i < lines.size(); ++i) {
         if (i) {
-            m_messageBody->appendChild(Text::create(document, lines[i]), ASSERT_NO_EXCEPTION);
+            m_messageBody->appendChild(Text::create(document, lines[i]));
             if (i < lines.size() - 1)
-                m_messageBody->appendChild(HTMLBRElement::create(document), ASSERT_NO_EXCEPTION);
+                m_messageBody->appendChild(HTMLBRElement::create(document));
         } else
             m_messageHeading->setInnerText(lines[i]);
     }
@@ -137,7 +143,7 @@ void ValidationMessage::setMessageDOMAndStartTimer()
         m_timer = nullptr;
     else {
         m_timer = std::make_unique<Timer>(*this, &ValidationMessage::deleteBubbleTree);
-        m_timer->startOneShot(std::max(5.0, static_cast<double>(m_message.length()) * magnification / 1000));
+        m_timer->startOneShot(std::max(5_s, 1_ms * static_cast<double>(m_message.length()) * magnification));
     }
 }
 
@@ -180,7 +186,7 @@ void ValidationMessage::buildBubbleTree()
     // Need to force position:absolute because RenderMenuList doesn't assume it
     // contains non-absolute or non-fixed renderers as children.
     m_bubble->setInlineStyleProperty(CSSPropertyPosition, CSSValueAbsolute);
-    shadowRoot.appendChild(*m_bubble, ASSERT_NO_EXCEPTION);
+    shadowRoot.appendChild(*m_bubble);
     document.updateLayout();
     adjustBubblePosition(m_element->renderer()->absoluteBoundingBoxRect(), m_bubble.get());
 
@@ -188,24 +194,24 @@ void ValidationMessage::buildBubbleTree()
     clipper->setPseudo(AtomicString("-webkit-validation-bubble-arrow-clipper", AtomicString::ConstructFromLiteral));
     auto bubbleArrow = HTMLDivElement::create(document);
     bubbleArrow->setPseudo(AtomicString("-webkit-validation-bubble-arrow", AtomicString::ConstructFromLiteral));
-    clipper->appendChild(bubbleArrow, ASSERT_NO_EXCEPTION);
-    m_bubble->appendChild(clipper, ASSERT_NO_EXCEPTION);
+    clipper->appendChild(bubbleArrow);
+    m_bubble->appendChild(clipper);
 
     auto message = HTMLDivElement::create(document);
     message->setPseudo(AtomicString("-webkit-validation-bubble-message", AtomicString::ConstructFromLiteral));
     auto icon = HTMLDivElement::create(document);
     icon->setPseudo(AtomicString("-webkit-validation-bubble-icon", AtomicString::ConstructFromLiteral));
-    message->appendChild(icon, ASSERT_NO_EXCEPTION);
+    message->appendChild(icon);
     auto textBlock = HTMLDivElement::create(document);
     textBlock->setPseudo(AtomicString("-webkit-validation-bubble-text-block", AtomicString::ConstructFromLiteral));
     m_messageHeading = HTMLDivElement::create(document);
     m_messageHeading->setPseudo(AtomicString("-webkit-validation-bubble-heading", AtomicString::ConstructFromLiteral));
-    textBlock->appendChild(*m_messageHeading, ASSERT_NO_EXCEPTION);
+    textBlock->appendChild(*m_messageHeading);
     m_messageBody = HTMLDivElement::create(document);
     m_messageBody->setPseudo(AtomicString("-webkit-validation-bubble-body", AtomicString::ConstructFromLiteral));
-    textBlock->appendChild(*m_messageBody, ASSERT_NO_EXCEPTION);
-    message->appendChild(textBlock, ASSERT_NO_EXCEPTION);
-    m_bubble->appendChild(message, ASSERT_NO_EXCEPTION);
+    textBlock->appendChild(*m_messageBody);
+    message->appendChild(textBlock);
+    m_bubble->appendChild(message);
 
     setMessageDOMAndStartTimer();
 
@@ -221,7 +227,7 @@ void ValidationMessage::requestToHideMessage()
 
     // We must not modify the DOM tree in this context by the same reason as setMessage().
     m_timer = std::make_unique<Timer>(*this, &ValidationMessage::deleteBubbleTree);
-    m_timer->startOneShot(0);
+    m_timer->startOneShot(0_s);
 }
 
 bool ValidationMessage::shadowTreeContains(const Node& node) const
@@ -237,7 +243,7 @@ void ValidationMessage::deleteBubbleTree()
     if (m_bubble) {
         m_messageHeading = nullptr;
         m_messageBody = nullptr;
-        m_element->userAgentShadowRoot()->removeChild(*m_bubble, ASSERT_NO_EXCEPTION);
+        m_element->userAgentShadowRoot()->removeChild(*m_bubble);
         m_bubble = nullptr;
     }
     m_message = String();

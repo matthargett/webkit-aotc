@@ -23,24 +23,25 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef NotificationPermissionCallback_h
-#define NotificationPermissionCallback_h
+#pragma once
 
 #if ENABLE(NOTIFICATIONS)
 
+#include "ActiveDOMCallback.h"
+#include "CallbackResult.h"
+#include "Notification.h"
 #include <wtf/Forward.h>
 #include <wtf/RefCounted.h>
 
 namespace WebCore {
 
-class NotificationPermissionCallback : public RefCounted<NotificationPermissionCallback> {
+class NotificationPermissionCallback : public RefCounted<NotificationPermissionCallback>, public ActiveDOMCallback {
 public:
-    virtual ~NotificationPermissionCallback() { }
-    virtual bool handleEvent(const String& permission) = 0;
+    using ActiveDOMCallback::ActiveDOMCallback;
+
+    virtual CallbackResult<void> handleEvent(Notification::Permission) = 0;
 };
 
 } // namespace WebCore
 
 #endif // ENABLE(NOTIFICATIONS)
-
-#endif // NotificationPermissionCallback_h

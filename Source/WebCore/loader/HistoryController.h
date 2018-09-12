@@ -27,8 +27,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef HistoryController_h
-#define HistoryController_h
+#pragma once
 
 #include "FrameLoaderTypes.h"
 #include <wtf/Noncopyable.h>
@@ -40,7 +39,10 @@ namespace WebCore {
 class Frame;
 class HistoryItem;
 class SerializedScriptValue;
-class StringWithDirection;
+
+enum class ShouldTreatAsContinuingLoad;
+
+struct StringWithDirection;
 
 class HistoryController {
     WTF_MAKE_NONCOPYABLE(HistoryController);
@@ -84,22 +86,22 @@ public:
     HistoryItem* provisionalItem() const { return m_provisionalItem.get(); }
     void setProvisionalItem(HistoryItem*);
 
-    void pushState(PassRefPtr<SerializedScriptValue>, const String& title, const String& url);
-    void replaceState(PassRefPtr<SerializedScriptValue>, const String& title, const String& url);
+    void pushState(RefPtr<SerializedScriptValue>&&, const String& title, const String& url);
+    void replaceState(RefPtr<SerializedScriptValue>&&, const String& title, const String& url);
 
     void setDefersLoading(bool);
 
 private:
     friend class Page;
     bool shouldStopLoadingForHistoryItem(HistoryItem&) const;
-    void goToItem(HistoryItem&, FrameLoadType);
+    void goToItem(HistoryItem&, FrameLoadType, ShouldTreatAsContinuingLoad);
 
     void initializeItem(HistoryItem&);
     Ref<HistoryItem> createItem();
     Ref<HistoryItem> createItemTree(Frame& targetFrame, bool clipAtTarget);
 
     void recursiveSetProvisionalItem(HistoryItem&, HistoryItem*);
-    void recursiveGoToItem(HistoryItem&, HistoryItem*, FrameLoadType);
+    void recursiveGoToItem(HistoryItem&, HistoryItem*, FrameLoadType, ShouldTreatAsContinuingLoad);
     bool isReplaceLoadTypeWithProvisionalItem(FrameLoadType);
     bool isReloadTypeWithProvisionalItem(FrameLoadType);
     void recursiveUpdateForCommit();
@@ -123,5 +125,3 @@ private:
 };
 
 } // namespace WebCore
-
-#endif // HistoryController_h

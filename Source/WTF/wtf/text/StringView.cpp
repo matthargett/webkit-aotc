@@ -1,6 +1,6 @@
 /*
 
-Copyright (C) 2014, 2016 Apple Inc. All rights reserved.
+Copyright (C) 2014-2017 Apple Inc. All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions
@@ -28,10 +28,12 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "StringView.h"
 
 #include <mutex>
+#include <unicode/ubrk.h>
 #include <wtf/HashMap.h>
 #include <wtf/Lock.h>
 #include <wtf/NeverDestroyed.h>
 #include <wtf/Optional.h>
+#include <wtf/text/StringBuffer.h>
 #include <wtf/text/TextBreakIterator.h>
 #include <wtf/unicode/UTF8.h>
 
@@ -79,7 +81,7 @@ bool StringView::endsWithIgnoringASCIICase(const StringView& suffix) const
     return ::WTF::endsWithIgnoringASCIICase(*this, suffix);
 }
 
-CString StringView::utf8(ConversionMode mode) const
+Expected<CString, UTF8ConversionError> StringView::tryGetUtf8(ConversionMode mode) const
 {
     if (isNull())
         return CString("", 0);
@@ -88,14 +90,46 @@ CString StringView::utf8(ConversionMode mode) const
     return StringImpl::utf8ForCharacters(characters16(), length(), mode);
 }
 
+CString StringView::utf8(ConversionMode mode) const
+{
+    auto expectedString = tryGetUtf8(mode);
+    RELEASE_ASSERT(expectedString);
+    return expectedString.value();
+}
+
 size_t StringView::find(StringView matchString, unsigned start) const
 {
     return findCommon(*this, matchString, start);
 }
 
+void StringView::SplitResult::Iterator::findNextSubstring()
+{
+    for (size_t separatorPosition; (separatorPosition = m_result.m_string.find(m_result.m_separator, m_position)) != notFound; ++m_position) {
+        if (m_result.m_allowEmptyEntries || separatorPosition > m_position) {
+            m_length = separatorPosition - m_position;
+            return;
+        }
+    }
+    m_length = m_result.m_string.length() - m_position;
+    if (!m_length && !m_result.m_allowEmptyEntries)
+        m_isDone = true;
+}
+
+auto StringView::SplitResult::Iterator::operator++() -> Iterator&
+{
+    ASSERT(m_position <= m_result.m_string.length() && !m_isDone);
+    m_position += m_length;
+    if (m_position < m_result.m_string.length()) {
+        ++m_position;
+        findNextSubstring();
+    } else if (!m_isDone)
+        m_isDone = true;
+    return *this;
+}
+
 class StringView::GraphemeClusters::Iterator::Impl {
 public:
-    Impl(const StringView& stringView, Optional<NonSharedCharacterBreakIterator>&& iterator, unsigned index)
+    Impl(const StringView& stringView, std::optional<NonSharedCharacterBreakIterator>&& iterator, unsigned index)
         : m_stringView(stringView)
         , m_iterator(WTFMove(iterator))
         , m_index(index)
@@ -131,33 +165,18 @@ public:
             return 0;
         if (m_index == m_stringView.length())
             return m_index;
-        return textBreakFollowing(m_iterator.value(), m_index);
+        return ubrk_following(m_iterator.value(), m_index);
     }
 
 private:
     const StringView& m_stringView;
-    Optional<NonSharedCharacterBreakIterator> m_iterator;
+    std::optional<NonSharedCharacterBreakIterator> m_iterator;
     unsigned m_index;
     unsigned m_indexEnd;
 };
 
-Vector<StringView> StringView::split(UChar separator)
-{
-    Vector<StringView> result;
-    unsigned startPos = 0;
-    size_t endPos;
-    while ((endPos = find(separator, startPos)) != notFound) {
-        if (startPos != endPos)
-            result.append(substring(startPos, endPos - startPos));
-        startPos = endPos + 1;
-    }
-    if (startPos != length())
-        result.append(substring(startPos));
-    return result;
-}
-
 StringView::GraphemeClusters::Iterator::Iterator(const StringView& stringView, unsigned index)
-    : m_impl(std::make_unique<Impl>(stringView, stringView.isNull() ? Nullopt : Optional<NonSharedCharacterBreakIterator>(NonSharedCharacterBreakIterator(stringView)), index))
+    : m_impl(std::make_unique<Impl>(stringView, stringView.isNull() ? std::nullopt : std::optional<NonSharedCharacterBreakIterator>(NonSharedCharacterBreakIterator(stringView)), index))
 {
 }
 
@@ -191,6 +210,35 @@ bool StringView::GraphemeClusters::Iterator::operator!=(const Iterator& other) c
     return !(*this == other);
 }
 
+enum class ASCIICase { Lower, Upper };
+
+template<ASCIICase type, typename CharacterType>
+String convertASCIICase(const CharacterType* input, unsigned length)
+{
+    if (!input)
+        return { };
+
+    StringBuffer<CharacterType> buffer(length);
+    CharacterType* characters = buffer.characters();
+    for (unsigned i = 0; i < length; ++i)
+        characters[i] = type == ASCIICase::Lower ? toASCIILower(input[i]) : toASCIIUpper(input[i]);
+    return String::adopt(WTFMove(buffer));
+}
+
+String StringView::convertToASCIILowercase() const
+{
+    if (m_is8Bit)
+        return convertASCIICase<ASCIICase::Lower>(static_cast<const LChar*>(m_characters), m_length);
+    return convertASCIICase<ASCIICase::Lower>(static_cast<const UChar*>(m_characters), m_length);
+}
+
+String StringView::convertToASCIIUppercase() const
+{
+    if (m_is8Bit)
+        return convertASCIICase<ASCIICase::Upper>(static_cast<const LChar*>(m_characters), m_length);
+    return convertASCIICase<ASCIICase::Upper>(static_cast<const UChar*>(m_characters), m_length);
+}
+
 #if CHECK_STRINGVIEW_LIFETIME
 
 // Manage reference count manually so UnderlyingString does not need to be defined in the header.
@@ -207,7 +255,7 @@ StringView::UnderlyingString::UnderlyingString(const StringImpl& string)
 {
 }
 
-static StaticLock underlyingStringsMutex;
+static Lock underlyingStringsMutex;
 
 static HashMap<const StringImpl*, StringView::UnderlyingString*>& underlyingStrings()
 {
@@ -219,7 +267,7 @@ void StringView::invalidate(const StringImpl& stringToBeDestroyed)
 {
     UnderlyingString* underlyingString;
     {
-        std::lock_guard<StaticLock> lock(underlyingStringsMutex);
+        std::lock_guard<Lock> lock(underlyingStringsMutex);
         underlyingString = underlyingStrings().take(&stringToBeDestroyed);
         if (!underlyingString)
             return;
@@ -236,7 +284,7 @@ bool StringView::underlyingStringIsValid() const
 void StringView::adoptUnderlyingString(UnderlyingString* underlyingString)
 {
     if (m_underlyingString) {
-        std::lock_guard<StaticLock> lock(underlyingStringsMutex);
+        std::lock_guard<Lock> lock(underlyingStringsMutex);
         if (!--m_underlyingString->refCount) {
             if (m_underlyingString->isValid) {
                 underlyingStrings().remove(&m_underlyingString->string);
@@ -253,7 +301,7 @@ void StringView::setUnderlyingString(const StringImpl* string)
     if (!string)
         underlyingString = nullptr;
     else {
-        std::lock_guard<StaticLock> lock(underlyingStringsMutex);
+        std::lock_guard<Lock> lock(underlyingStringsMutex);
         auto result = underlyingStrings().add(string, nullptr);
         if (result.isNewEntry)
             result.iterator->value = new UnderlyingString(*string);

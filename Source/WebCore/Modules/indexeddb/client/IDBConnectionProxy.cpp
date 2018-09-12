@@ -31,6 +31,7 @@
 #include "IDBCursorInfo.h"
 #include "IDBDatabase.h"
 #include "IDBGetRecordData.h"
+#include "IDBIterateCursorData.h"
 #include "IDBKeyRangeData.h"
 #include "IDBOpenDBRequest.h"
 #include "IDBRequestData.h"
@@ -221,12 +222,12 @@ void IDBConnectionProxy::openCursor(TransactionOperation& operation, const IDBCu
     callConnectionOnMainThread(&IDBConnectionToServer::openCursor, requestData, info);
 }
 
-void IDBConnectionProxy::iterateCursor(TransactionOperation& operation, const IDBKeyData& key, unsigned long count)
+void IDBConnectionProxy::iterateCursor(TransactionOperation& operation, const IDBIterateCursorData& data)
 {
     const IDBRequestData requestData { operation };
     saveOperation(operation);
 
-    callConnectionOnMainThread(&IDBConnectionToServer::iterateCursor, requestData, key, count);
+    callConnectionOnMainThread(&IDBConnectionToServer::iterateCursor, requestData, data);
 }
 
 void IDBConnectionProxy::saveOperation(TransactionOperation& operation)
@@ -248,7 +249,7 @@ void IDBConnectionProxy::completeOperation(const IDBResultData& resultData)
     if (!operation)
         return;
 
-    operation->performCompleteOnOriginThread(resultData, WTFMove(operation));
+    operation->transitionToComplete(resultData, WTFMove(operation));
 }
 
 void IDBConnectionProxy::abortOpenAndUpgradeNeeded(uint64_t databaseConnectionIdentifier, const IDBResourceIdentifier& transactionIdentifier)
@@ -315,7 +316,8 @@ void IDBConnectionProxy::didStartTransaction(const IDBResourceIdentifier& transa
         transaction = m_pendingTransactions.take(transactionIdentifier);
     }
 
-    ASSERT(transaction);
+    if (!transaction)
+        return;
 
     transaction->performCallbackOnOriginThread(*transaction, &IDBTransaction::didStart, error);
 }
@@ -383,6 +385,11 @@ void IDBConnectionProxy::didFinishHandlingVersionChangeTransaction(uint64_t data
     callConnectionOnMainThread(&IDBConnectionToServer::didFinishHandlingVersionChangeTransaction, databaseConnectionIdentifier, transaction.info().identifier());
 }
 
+void IDBConnectionProxy::databaseConnectionPendingClose(IDBDatabase& database)
+{
+    callConnectionOnMainThread(&IDBConnectionToServer::databaseConnectionPendingClose, database.databaseConnectionIdentifier());
+}
+
 void IDBConnectionProxy::databaseConnectionClosed(IDBDatabase& database)
 {
     callConnectionOnMainThread(&IDBConnectionToServer::databaseConnectionClosed, database.databaseConnectionIdentifier());
@@ -416,7 +423,7 @@ void IDBConnectionProxy::connectionToServerLost(const IDBError& error)
     Vector<uint64_t> databaseConnectionIdentifiers;
     {
         Locker<Lock> locker(m_databaseConnectionMapLock);
-        copyKeysToVector(m_databaseConnectionMap, databaseConnectionIdentifiers);
+        databaseConnectionIdentifiers = copyToVector(m_databaseConnectionMap.keys());
     }
 
     for (auto connectionIdentifier : databaseConnectionIdentifiers) {
@@ -435,7 +442,7 @@ void IDBConnectionProxy::connectionToServerLost(const IDBError& error)
     Vector<IDBResourceIdentifier> openDBRequestIdentifiers;
     {
         Locker<Lock> locker(m_openDBRequestMapLock);
-        copyKeysToVector(m_openDBRequestMap, openDBRequestIdentifiers);
+        openDBRequestIdentifiers = copyToVector(m_openDBRequestMap.keys());
     }
 
     for (auto& requestIdentifier : openDBRequestIdentifiers) {
@@ -478,12 +485,12 @@ void IDBConnectionProxy::handleMainThreadTasks()
         task->performTask();
 }
 
-void IDBConnectionProxy::getAllDatabaseNames(const SecurityOrigin& mainFrameOrigin, const SecurityOrigin& openingOrigin, std::function<void (const Vector<String>&)> callback)
+void IDBConnectionProxy::getAllDatabaseNames(const SecurityOrigin& mainFrameOrigin, const SecurityOrigin& openingOrigin, Function<void (const Vector<String>&)>&& callback)
 {
     // This method is only meant to be called by the web inspector on the main thread.
     RELEASE_ASSERT(isMainThread());
 
-    m_connectionToServer.getAllDatabaseNames(mainFrameOrigin, openingOrigin, callback);
+    m_connectionToServer.getAllDatabaseNames(mainFrameOrigin, openingOrigin, WTFMove(callback));
 }
 
 void IDBConnectionProxy::registerDatabaseConnection(IDBDatabase& database)
@@ -513,12 +520,12 @@ void IDBConnectionProxy::forgetActiveOperations(const Vector<RefPtr<TransactionO
 template<typename KeyType, typename ValueType>
 void removeItemsMatchingCurrentThread(HashMap<KeyType, ValueType>& map)
 {
-    auto currentThreadID = currentThread();
+    auto& currentThread = Thread::current();
 
     Vector<KeyType> keys;
     keys.reserveInitialCapacity(map.size());
     for (auto& iterator : map) {
-        if (iterator.value->originThreadID() == currentThreadID)
+        if (&iterator.value->originThread() == &currentThread)
             keys.uncheckedAppend(iterator.key);
     }
 

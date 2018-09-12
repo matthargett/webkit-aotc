@@ -20,6 +20,7 @@
 
 #pragma once
 
+#include "JSDOMWrapper.h"
 #include "JSNode.h"
 #include "TestNode.h"
 
@@ -36,8 +37,8 @@ public:
         return ptr;
     }
 
-    static JSC::JSObject* createPrototype(JSC::VM&, JSC::JSGlobalObject*);
-    static JSC::JSObject* prototype(JSC::VM&, JSC::JSGlobalObject*);
+    static JSC::JSObject* createPrototype(JSC::VM&, JSDOMGlobalObject&);
+    static JSC::JSObject* prototype(JSC::VM&, JSDOMGlobalObject&);
 
     DECLARE_INFO;
 
@@ -47,8 +48,8 @@ public:
     }
 
     static JSC::JSValue getConstructor(JSC::VM&, const JSC::JSGlobalObject*);
-    static void visitChildren(JSCell*, JSC::SlotVisitor&);
-
+    static JSC::JSObject* serialize(JSC::ExecState&, JSTestNode& thisObject, JSDOMGlobalObject&, JSC::ThrowScope&);
+    static void heapSnapshot(JSCell*, JSC::HeapSnapshotBuilder&);
     TestNode& wrapped() const
     {
         return static_cast<TestNode&>(Base::wrapped());
@@ -56,12 +57,7 @@ public:
 protected:
     JSTestNode(JSC::Structure*, JSDOMGlobalObject&, Ref<TestNode>&&);
 
-    void finishCreation(JSC::VM& vm)
-    {
-        Base::finishCreation(vm);
-        ASSERT(inherits(info()));
-    }
-
+    void finishCreation(JSC::VM&);
 };
 
 WEBCORE_TESTSUPPORT_EXPORT JSC::JSValue toJS(JSC::ExecState*, JSDOMGlobalObject*, TestNode&);

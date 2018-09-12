@@ -4,13 +4,12 @@ On success, you will see a series of "PASS" messages, followed by "TEST COMPLETE
 
 
 PASS pc = new RTCPeerConnection({iceServers:[{urls:'stun:foo.com'}]}) did not throw exception.
-PASS getUserMedia({audio:true, video:true}, gotStream) did not throw exception.
+PASS navigator.mediaDevices.getUserMedia({audio:true, video:true}).then(gotStream, error) did not throw exception.
 PASS Got a stream.
-PASS pc.getStats(statsHandler2, pc.getLocalStreams()[0].getVideoTracks()[0]) did not throw exception.
 PASS statsHandler2 was called
-PASS result.length is >= 1
+PASS result.size is >= 1
 PASS timestamp is >= startTime
-PASS local.stat("type") is "video"
+FAIL local.type should be video. Was certificate.
 PASS successfullyParsed is true
 
 TEST COMPLETE

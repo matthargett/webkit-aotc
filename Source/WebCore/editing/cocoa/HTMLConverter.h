@@ -23,10 +23,7 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef HTMLConverter_h
-#define HTMLConverter_h
-
-#include "PlatformExportMacros.h"
+#pragma once
 
 OBJC_CLASS NSAttributedString;
 
@@ -41,6 +38,4 @@ WEBCORE_EXPORT NSAttributedString *attributedStringFromRange(Range&);
 WEBCORE_EXPORT NSAttributedString *editingAttributedStringFromRange(Range&, IncludeImagesInAttributedString = IncludeImagesInAttributedString::Yes);
 #endif
 
-}
-
-#endif // HTMLConverter_h
+} // namespace WebCore

@@ -23,12 +23,12 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef CDMSessionAVFoundationObjC_h
-#define CDMSessionAVFoundationObjC_h
+#pragma once
 
-#include "CDMSession.h"
+#include "LegacyCDMSession.h"
 #include <wtf/RetainPtr.h>
 #include <wtf/WeakPtr.h>
+#include <wtf/text/WTFString.h>
 
 #if ENABLE(LEGACY_ENCRYPTED_MEDIA)
 
@@ -39,13 +39,13 @@ namespace WebCore {
 
 class MediaPlayerPrivateAVFoundationObjC;
 
-class CDMSessionAVFoundationObjC : public CDMSession {
+class CDMSessionAVFoundationObjC : public LegacyCDMSession, public CanMakeWeakPtr<CDMSessionAVFoundationObjC> {
 public:
-    CDMSessionAVFoundationObjC(MediaPlayerPrivateAVFoundationObjC* parent, CDMSessionClient*);
+    CDMSessionAVFoundationObjC(MediaPlayerPrivateAVFoundationObjC* parent, LegacyCDMSessionClient*);
     virtual ~CDMSessionAVFoundationObjC();
 
-    CDMSessionType type() override { return CDMSessionTypeAVFoundationObjC; }
-    void setClient(CDMSessionClient* client) override { m_client = client; }
+    LegacyCDMSessionType type() override { return CDMSessionTypeAVFoundationObjC; }
+    void setClient(LegacyCDMSessionClient* client) override { m_client = client; }
     const String& sessionId() const override { return m_sessionId; }
     RefPtr<Uint8Array> generateKeyRequest(const String& mimeType, Uint8Array* initData, String& destinationURL, unsigned short& errorCode, uint32_t& systemCode) override;
     void releaseKeys() override;
@@ -53,18 +53,13 @@ public:
 
     void playerDidReceiveError(NSError *);
 
-    WeakPtr<CDMSessionAVFoundationObjC> createWeakPtr() { return m_weakPtrFactory.createWeakPtr(); }
-
 protected:
     WeakPtr<MediaPlayerPrivateAVFoundationObjC> m_parent;
-    CDMSessionClient* m_client;
+    LegacyCDMSessionClient* m_client;
     String m_sessionId;
     RetainPtr<AVAssetResourceLoadingRequest> m_request;
-    WeakPtrFactory<CDMSessionAVFoundationObjC> m_weakPtrFactory;
 };
 
 }
 
 #endif
-
-#endif // CDMSessionAVFoundationObjC_h

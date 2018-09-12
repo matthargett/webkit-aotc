@@ -49,6 +49,8 @@ std::unique_ptr<RenderThemeGadget> RenderThemeGadget::create(const RenderThemeGa
         return std::make_unique<RenderThemeIconGadget>(info, parent, siblings, position);
     case RenderThemeGadget::Type::Scrollbar:
         return std::make_unique<RenderThemeScrollbarGadget>(info, parent, siblings, position);
+    case RenderThemeGadget::Type::Button:
+        return std::make_unique<RenderThemeButtonGadget>(info, parent, siblings, position);
     }
 
     ASSERT_NOT_REACHED();
@@ -60,8 +62,6 @@ static GRefPtr<GtkStyleContext> createStyleContext(GtkWidgetPath* path, GtkStyle
     GRefPtr<GtkStyleContext> context = adoptGRef(gtk_style_context_new());
     gtk_style_context_set_path(context.get(), path);
     gtk_style_context_set_parent(context.get(), parent);
-    // Unfortunately, we have to explicitly set the state again here for it to take effect.
-    gtk_style_context_set_state(context.get(), gtk_widget_path_iter_get_state(path, -1));
     return context;
 }
 
@@ -72,7 +72,6 @@ static void appendElementToPath(GtkWidgetPath* path, const RenderThemeGadget::In
     gtk_widget_path_iter_set_object_name(path, -1, info.name);
     for (const auto* className : info.classList)
         gtk_widget_path_iter_add_class(path, -1, className);
-    gtk_widget_path_iter_set_state(path, -1, static_cast<GtkStateFlags>(gtk_widget_path_iter_get_state(path, -1) | info.state));
 }
 
 RenderThemeGadget::RenderThemeGadget(const RenderThemeGadget::Info& info, RenderThemeGadget* parent, const Vector<RenderThemeGadget::Info> siblings, unsigned position)
@@ -88,9 +87,7 @@ RenderThemeGadget::RenderThemeGadget(const RenderThemeGadget::Info& info, Render
     m_context = createStyleContext(path.get(), parent ? parent->context() : nullptr);
 }
 
-RenderThemeGadget::~RenderThemeGadget()
-{
-}
+RenderThemeGadget::~RenderThemeGadget() = default;
 
 GtkBorder RenderThemeGadget::marginBox() const
 {
@@ -144,6 +141,16 @@ double RenderThemeGadget::opacity() const
     double returnValue;
     gtk_style_context_get(m_context.get(), gtk_style_context_get_state(m_context.get()), "opacity", &returnValue, nullptr);
     return returnValue;
+}
+
+GtkStateFlags RenderThemeGadget::state() const
+{
+    return gtk_style_context_get_state(m_context.get());
+}
+
+void RenderThemeGadget::setState(GtkStateFlags state)
+{
+    gtk_style_context_set_state(m_context.get(), state);
 }
 
 IntSize RenderThemeGadget::minimumSize() const
@@ -351,13 +358,13 @@ RenderThemeScrollbarGadget::RenderThemeScrollbarGadget(const RenderThemeGadget::
     gtk_style_context_get_style(m_context.get(), "has-backward-stepper", &hasBackward, "has-forward-stepper", &hasForward,
         "has-secondary-backward-stepper", &hasSecondaryBackward, "has-secondary-forward-stepper", &hasSecondaryForward, nullptr);
     if (hasBackward)
-        m_steppers |= Steppers::Backward;
+        m_steppers.add(Steppers::Backward);
     if (hasForward)
-        m_steppers |= Steppers::Forward;
+        m_steppers.add(Steppers::Forward);
     if (hasSecondaryBackward)
-        m_steppers |= Steppers::SecondaryBackward;
+        m_steppers.add(Steppers::SecondaryBackward);
     if (hasSecondaryForward)
-        m_steppers |= Steppers::SecondaryForward;
+        m_steppers.add(Steppers::SecondaryForward);
 }
 
 void RenderThemeScrollbarGadget::renderStepper(cairo_t* cr, const FloatRect& paintRect, RenderThemeGadget* stepperGadget, GtkOrientation orientation, Steppers stepper)
@@ -379,6 +386,17 @@ void RenderThemeScrollbarGadget::renderStepper(cairo_t* cr, const FloatRect& pai
     int stepperSize = std::max(contentsRect.width(), contentsRect.height());
     gtk_render_arrow(stepperGadget->context(), cr, angle, contentsRect.x() + (contentsRect.width() - stepperSize) / 2,
         contentsRect.y() + (contentsRect.height() - stepperSize) / 2, stepperSize);
+}
+
+RenderThemeButtonGadget::RenderThemeButtonGadget(const Info& info, RenderThemeGadget* parent, const Vector<RenderThemeGadget::Info> siblings, unsigned position)
+    : RenderThemeGadget(info, parent, siblings, position)
+{
+}
+
+IntSize RenderThemeButtonGadget::minimumSize() const
+{
+    // Allow buttons to be smaller than the minimum size
+    return IntSize();
 }
 
 } // namespace WebCore

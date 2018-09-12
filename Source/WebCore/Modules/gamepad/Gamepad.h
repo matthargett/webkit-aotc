@@ -23,11 +23,11 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef Gamepad_h
-#define Gamepad_h
+#pragma once
 
 #if ENABLE(GAMEPAD)
 
+#include <wtf/MonotonicTime.h>
 #include <wtf/RefCounted.h>
 #include <wtf/Vector.h>
 #include <wtf/text/WTFString.h>
@@ -50,7 +50,7 @@ public:
     const String& mapping() const { return m_mapping; }
 
     bool connected() const { return m_connected; }
-    double timestamp() const { return m_timestamp; }
+    double timestamp() const { return m_timestamp.secondsSinceEpoch().seconds(); }
     const Vector<double>& axes() const;
     const Vector<Ref<GamepadButton>>& buttons() const;
 
@@ -61,7 +61,7 @@ private:
     String m_id;
     unsigned m_index;
     bool m_connected;
-    double m_timestamp;
+    MonotonicTime m_timestamp;
     String m_mapping;
 
     Vector<double> m_axes;
@@ -71,5 +71,3 @@ private:
 } // namespace WebCore
 
 #endif // ENABLE(GAMEPAD)
-
-#endif // Gamepad_h

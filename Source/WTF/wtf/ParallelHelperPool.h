@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015-2016 Apple Inc. All rights reserved.
+ * Copyright (C) 2015-2017 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -168,8 +168,8 @@ public:
 private:
     friend class ParallelHelperPool;
 
-    void finish(const LockHolder&);
-    RefPtr<SharedTask<void ()>> claimTask(const LockHolder&);
+    void finish(const AbstractLocker&);
+    RefPtr<SharedTask<void ()>> claimTask(const AbstractLocker&);
     void runTask(RefPtr<SharedTask<void ()>>);
     
     RefPtr<ParallelHelperPool> m_pool;
@@ -193,14 +193,14 @@ private:
     class Thread;
     friend class Thread;
 
-    void didMakeWorkAvailable(const LockHolder&);
+    void didMakeWorkAvailable(const AbstractLocker&);
 
-    bool hasClientWithTask(const LockHolder&);
-    ParallelHelperClient* getClientWithTask(const LockHolder&);
-    ParallelHelperClient* waitForClientWithTask(const LockHolder&);
+    bool hasClientWithTask(const AbstractLocker&);
+    ParallelHelperClient* getClientWithTask(const AbstractLocker&);
+    ParallelHelperClient* waitForClientWithTask(const AbstractLocker&);
     
     Box<Lock> m_lock; // AutomaticThread wants this in a box for safety.
-    RefPtr<AutomaticThreadCondition> m_workAvailableCondition;
+    Ref<AutomaticThreadCondition> m_workAvailableCondition;
     Condition m_workCompleteCondition;
 
     WeakRandom m_random;

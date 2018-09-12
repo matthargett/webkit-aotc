@@ -22,10 +22,10 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef PannerNode_h
-#define PannerNode_h
+#pragma once
 
-#include "AudioBus.h"
+#if ENABLE(WEB_AUDIO)
+
 #include "AudioListener.h"
 #include "AudioNode.h"
 #include "AudioParam.h"
@@ -47,7 +47,7 @@ namespace WebCore {
 // A cone effect will attenuate the gain as the orientation moves away from the listener.
 // All of these effects follow the OpenAL specification very closely.
 
-class PannerNode : public AudioNode {
+class PannerNode final : public AudioNode {
 public:
     static Ref<PannerNode> create(AudioContext& context, float sampleRate)
     {
@@ -150,4 +150,4 @@ private:
 
 } // namespace WebCore
 
-#endif // PannerNode_h
+#endif

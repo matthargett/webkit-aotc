@@ -25,7 +25,6 @@
 #include "config.h"
 #include "HTMLTableSectionElement.h"
 
-#include "ExceptionCode.h"
 #include "GenericCachedHTMLCollection.h"
 #include "HTMLCollection.h"
 #include "HTMLNames.h"
@@ -34,8 +33,11 @@
 #include "NodeList.h"
 #include "NodeRareData.h"
 #include "Text.h"
+#include <wtf/IsoMallocInlines.h>
 
 namespace WebCore {
+
+WTF_MAKE_ISO_ALLOCATED_IMPL(HTMLTableSectionElement);
 
 using namespace HTMLNames;
 
@@ -51,7 +53,7 @@ Ref<HTMLTableSectionElement> HTMLTableSectionElement::create(const QualifiedName
 
 const StyleProperties* HTMLTableSectionElement::additionalPresentationAttributeStyle() const
 {
-    auto* table = findParentTable();
+    auto table = findParentTable();
     if (!table)
         return nullptr;
     return table->additionalGroupStyle(true);
@@ -60,25 +62,19 @@ const StyleProperties* HTMLTableSectionElement::additionalPresentationAttributeS
 ExceptionOr<Ref<HTMLElement>> HTMLTableSectionElement::insertRow(int index)
 {
     if (index < -1)
-        return Exception { INDEX_SIZE_ERR };
+        return Exception { IndexSizeError };
     auto children = rows();
     int numRows = children->length();
     if (index > numRows)
-        return Exception { INDEX_SIZE_ERR };
+        return Exception { IndexSizeError };
     auto row = HTMLTableRowElement::create(trTag, document());
-    ExceptionCode ec = 0;
+    ExceptionOr<void> result;
     if (numRows == index || index == -1)
-        appendChild(row, ec);
-    else {
-        Node* n;
-        if (index < 1)
-            n = firstChild();
-        else
-            n = children->item(index);
-        insertBefore(row, n, ec);
-    }
-    if (ec)
-        return Exception { ec };
+        result = appendChild(row);
+    else
+        result = insertBefore(row, index < 1 ? firstChild() : children->item(index));
+    if (result.hasException())
+        return result.releaseException();
     return Ref<HTMLElement> { WTFMove(row) };
 }
 
@@ -92,12 +88,8 @@ ExceptionOr<void> HTMLTableSectionElement::deleteRow(int index)
         index = numRows - 1;
     }
     if (index < 0 || index >= numRows)
-        return Exception { INDEX_SIZE_ERR };
-    ExceptionCode ec = 0;
-    removeChild(*children->item(index), ec);
-    if (ec)
-        return Exception { ec };
-    return { };
+        return Exception { IndexSizeError };
+    return removeChild(*children->item(index));
 }
 
 int HTMLTableSectionElement::numRows() const

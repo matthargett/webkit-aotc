@@ -2,14 +2,18 @@ MODULES = DumpRenderTree WebKitTestRunner MiniBrowser ../Source/ThirdParty/gtest
 
 ifneq (,$(SDKROOT))
 	ifeq (,$(findstring macosx,$(SDKROOT)))
+		# Embedded OS
 		MODULES = DumpRenderTree WebKitTestRunner ../Source/ThirdParty/gtest/xcode TestWebKitAPI
+	endif
+	ifneq (,$(findstring macosx,$(SDKROOT)))
+		MODULES += lldb/lldbWebKitTester
 	endif
 	ifneq (,$(findstring iphone,$(SDKROOT)))
 		MODULES += MobileMiniBrowser
 	endif
-	ifeq (,$(DO_NOT_BUILD_LAYOUT_TEST_RELAY))
-		MODULES += LayoutTestRelay
-	endif
+endif
+ifeq (,$(DO_NOT_BUILD_IMAGE_DIFF))
+	MODULES += ImageDiff
 endif
 
 all:

@@ -20,28 +20,30 @@
 
 #pragma once
 
+#include "ExceptionOr.h"
 #include "SVGAnimatedProperty.h"
-#include "SVGElement.h"
 #include "SVGProperty.h"
 #include <wtf/WeakPtr.h>
 
 namespace WebCore {
+
+class SVGElement;
 
 class SVGPropertyTearOffBase : public SVGProperty {
 public:
     virtual void detachWrapper() = 0;
 };
 
-template<typename PropertyType>
-class SVGPropertyTearOff : public SVGPropertyTearOffBase {
+template<typename T>
+class SVGPropertyTearOff : public SVGPropertyTearOffBase, public CanMakeWeakPtr<SVGPropertyTearOff<T>> {
 public:
-    typedef SVGPropertyTearOff<PropertyType> Self;
+    using PropertyType = T;
+    using Self = SVGPropertyTearOff<PropertyType>;
 
     // Used for child types (baseVal/animVal) of a SVGAnimated* property (for example: SVGAnimatedLength::baseVal()).
     // Also used for list tear offs (for example: text.x.baseVal.getItem(0)).
-    static Ref<Self> create(SVGAnimatedProperty* animatedProperty, SVGPropertyRole role, PropertyType& value)
+    static Ref<Self> create(SVGAnimatedProperty& animatedProperty, SVGPropertyRole role, PropertyType& value)
     {
-        ASSERT(animatedProperty);
         return adoptRef(*new Self(animatedProperty, role, value));
     }
 
@@ -51,12 +53,7 @@ public:
         return adoptRef(*new Self(initialValue));
     }
 
-    static Ref<Self> create(const PropertyType* initialValue)
-    {
-        return adoptRef(*new Self(initialValue));
-    }
-
-    template<typename T> static ExceptionOr<Ref<Self>> create(ExceptionOr<T>&& initialValue)
+    template<typename U> static ExceptionOr<Ref<Self>> create(ExceptionOr<U>&& initialValue)
     {
         if (initialValue.hasException())
             return initialValue.releaseException();
@@ -156,9 +153,6 @@ protected:
             detachChildren();
             delete m_value;
         }
-
-        if (m_animatedProperty)
-            m_animatedProperty->propertyWillBeDeleted(*this);
     }
 
     void detachChildren()
@@ -174,7 +168,7 @@ protected:
     SVGPropertyRole m_role;
     PropertyType* m_value;
     Vector<WeakPtr<SVGPropertyTearOffBase>> m_childTearOffs;
-    bool m_valueIsCopy : 1;
+    bool m_valueIsCopy;
 };
 
 }

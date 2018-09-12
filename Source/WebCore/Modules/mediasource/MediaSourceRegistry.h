@@ -28,14 +28,12 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef MediaSourceRegistry_h
-#define MediaSourceRegistry_h
+#pragma once
 
 #if ENABLE(MEDIA_SOURCE)
 
 #include "URLRegistry.h"
 #include <wtf/HashMap.h>
-#include <wtf/NeverDestroyed.h>
 #include <wtf/text/StringHash.h>
 
 namespace WebCore {
@@ -61,5 +59,4 @@ private:
 
 } // namespace WebCore
 
-#endif
-#endif
+#endif // ENABLE(MEDIA_SOURCE)

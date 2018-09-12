@@ -45,6 +45,7 @@
 #import <WebKit/_WKUserContentExtensionStorePrivate.h>
 #import <mach-o/dyld.h>
 #import <wtf/ObjcRuntimeExtras.h>
+#import <wtf/mac/AppKitCompatibilityDeclarations.h>
 
 @interface NSSound ()
 + (void)_setAlertType:(NSUInteger)alertType;
@@ -65,6 +66,8 @@ void TestController::platformInitialize()
 {
     poseAsClass("WebKitTestRunnerPasteboard", "NSPasteboard");
     poseAsClass("WebKitTestRunnerEvent", "NSEvent");
+    
+    cocoaPlatformInitialize();
 
     [NSSound _setAlertType:0];
 
@@ -87,12 +90,12 @@ void TestController::platformDestroy()
 void TestController::initializeInjectedBundlePath()
 {
     NSString *nsBundlePath = [[[NSBundle mainBundle] bundlePath] stringByAppendingPathComponent:@"WebKitTestRunnerInjectedBundle.bundle"];
-    m_injectedBundlePath.adopt(WKStringCreateWithCFString((CFStringRef)nsBundlePath));
+    m_injectedBundlePath.adopt(WKStringCreateWithCFString((__bridge CFStringRef)nsBundlePath));
 }
 
 void TestController::initializeTestPluginDirectory()
 {
-    m_testPluginDirectory.adopt(WKStringCreateWithCFString((CFStringRef)[[NSBundle mainBundle] bundlePath]));
+    m_testPluginDirectory.adopt(WKStringCreateWithCFString((__bridge CFStringRef)[[NSBundle mainBundle] bundlePath]));
 }
 
 void TestController::platformResetPreferencesToConsistentValues()
@@ -103,7 +106,7 @@ void TestController::platformResetStateToConsistentValues()
 {
     cocoaResetStateToConsistentValues();
 
-    while ([NSApp nextEventMatchingMask:NSEventMaskGesture | NSScrollWheelMask untilDate:nil inMode:NSDefaultRunLoopMode dequeue:YES]) {
+    while ([NSApp nextEventMatchingMask:NSEventMaskGesture | NSEventMaskScrollWheel untilDate:nil inMode:NSDefaultRunLoopMode dequeue:YES]) {
         // Clear out (and ignore) any pending gesture and scroll wheel events.
     }
 }
@@ -122,7 +125,7 @@ void TestController::platformConfigureViewForTest(const TestInvocation& test)
         return;
 
     RetainPtr<CFURLRef> testURL = adoptCF(WKURLCopyCFURL(kCFAllocatorDefault, test.url()));
-    NSURL *filterURL = [(NSURL *)testURL.get() URLByAppendingPathExtension:@"json"];
+    NSURL *filterURL = [(__bridge NSURL *)testURL.get() URLByAppendingPathExtension:@"json"];
 
     NSStringEncoding encoding;
     NSString *contentExtensionString = [[NSString alloc] initWithContentsOfURL:filterURL usedEncoding:&encoding error:NULL];
@@ -130,7 +133,15 @@ void TestController::platformConfigureViewForTest(const TestInvocation& test)
         return;
     
     __block bool doneCompiling = false;
-    [[_WKUserContentExtensionStore defaultStore] compileContentExtensionForIdentifier:@"TestContentExtensions" encodedContentExtension:contentExtensionString completionHandler:^(_WKUserContentFilter *filter, NSError *error)
+
+    NSURL *tempDir;
+    if (const char* dumpRenderTreeTemp = libraryPathForTesting()) {
+        String temporaryFolder = String::fromUTF8(dumpRenderTreeTemp);
+        tempDir = [NSURL fileURLWithPath:[(NSString*)temporaryFolder stringByAppendingPathComponent:@"ContentExtensions"] isDirectory:YES];
+    } else
+        tempDir = [NSURL fileURLWithPath:[NSTemporaryDirectory() stringByAppendingPathComponent:@"ContentExtensions"] isDirectory:YES];
+
+    [[_WKUserContentExtensionStore storeWithURL:tempDir] compileContentExtensionForIdentifier:@"TestContentExtensions" encodedContentExtension:contentExtensionString completionHandler:^(_WKUserContentFilter *filter, NSError *error)
     {
         if (!error)
             [mainWebView()->platformView().configuration.userContentController _addUserContentFilter:filter];
@@ -138,11 +149,10 @@ void TestController::platformConfigureViewForTest(const TestInvocation& test)
             NSLog(@"%@", [error helpAnchor]);
         doneCompiling = true;
     }];
-    platformRunUntil(doneCompiling, 0);
+    platformRunUntil(doneCompiling, noTimeout);
 #endif
 }
 
-#if ENABLE(PLATFORM_FONT_LOOKUP)
 static NSSet *allowedFontFamilySet()
 {
     static NSSet *fontFamilySet = [[NSSet setWithObjects:
@@ -202,6 +212,7 @@ static NSSet *allowedFontFamilySet()
         @"Helvetica CY",
         @"Helvetica Neue",
         @"Helvetica",
+        @"Helvetica2",
         @"Herculanum",
         @"Hiragino Kaku Gothic Pro",
         @"Hiragino Kaku Gothic ProN",
@@ -220,6 +231,7 @@ static NSSet *allowedFontFamilySet()
         @"Kokonor",
         @"Krungthep",
         @"KufiStandardGK",
+        @"LastResort",
         @"LiHei Pro",
         @"LiSong Pro",
         @"Lucida Grande",
@@ -232,6 +244,7 @@ static NSSet *allowedFontFamilySet()
         @"New Peninim MT",
         @"Optima",
         @"Osaka",
+        @"Palatino",
         @"Papyrus",
         @"PCMyungjo",
         @"PilGi",
@@ -297,7 +310,6 @@ static WKRetainPtr<WKArrayRef> generateWhitelist()
 
     return adoptWK(result);
 }
-#endif
 
 void TestController::platformInitializeContext()
 {
@@ -310,9 +322,7 @@ void TestController::platformInitializeContext()
                                           diskPath:nil]);
     [NSURLCache setSharedURLCache:sharedCache.get()];
 
-#if ENABLE(PLATFORM_FONT_LOOKUP)
     WKContextSetFontWhitelist(m_context.get(), generateWhitelist().get());
-#endif
 }
 
 void TestController::setHidden(bool hidden)

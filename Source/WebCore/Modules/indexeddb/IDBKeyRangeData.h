@@ -23,8 +23,7 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef IDBKeyRangeData_h
-#define IDBKeyRangeData_h
+#pragma once
 
 #if ENABLE(INDEXED_DATABASE)
 
@@ -112,11 +111,17 @@ bool IDBKeyRangeData::decode(Decoder& decoder, IDBKeyRangeData& keyRange)
     if (keyRange.isNull)
         return true;
 
-    if (!decoder.decode(keyRange.upperKey))
+    std::optional<IDBKeyData> upperKey;
+    decoder >> upperKey;
+    if (!upperKey)
         return false;
-
-    if (!decoder.decode(keyRange.lowerKey))
+    keyRange.upperKey = WTFMove(*upperKey);
+    
+    std::optional<IDBKeyData> lowerKey;
+    decoder >> lowerKey;
+    if (!lowerKey)
         return false;
+    keyRange.lowerKey = WTFMove(*lowerKey);
 
     if (!decoder.decode(keyRange.upperOpen))
         return false;
@@ -130,4 +135,3 @@ bool IDBKeyRangeData::decode(Decoder& decoder, IDBKeyRangeData& keyRange)
 } // namespace WebCore
 
 #endif // ENABLE(INDEXED_DATABASE)
-#endif // IDBKeyRangeData_h

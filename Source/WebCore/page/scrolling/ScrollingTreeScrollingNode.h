@@ -28,9 +28,14 @@
 #if ENABLE(ASYNC_SCROLLING)
 
 #include "IntRect.h"
+#include "ScrollSnapOffsetsInfo.h"
 #include "ScrollTypes.h"
 #include "ScrollingCoordinator.h"
 #include "ScrollingTreeNode.h"
+
+#if PLATFORM(IOS)
+class ScrollingTreeScrollingNodeDelegate;
+#endif
 
 namespace WebCore {
 
@@ -38,11 +43,15 @@ class ScrollingTree;
 class ScrollingStateScrollingNode;
 
 class ScrollingTreeScrollingNode : public ScrollingTreeNode {
+#if PLATFORM(IOS)
+    friend class ScrollingTreeScrollingNodeDelegate;
+#endif
+
 public:
     virtual ~ScrollingTreeScrollingNode();
 
-    WEBCORE_EXPORT void updateBeforeChildren(const ScrollingStateNode&) override;
-    WEBCORE_EXPORT void updateAfterChildren(const ScrollingStateNode&) override;
+    WEBCORE_EXPORT void commitStateBeforeChildren(const ScrollingStateNode&) override;
+    WEBCORE_EXPORT void commitStateAfterChildren(const ScrollingStateNode&) override;
 
     WEBCORE_EXPORT void updateLayersAfterAncestorChange(const ScrollingTreeNode& changedNode, const FloatRect& fixedPositionRect, const FloatSize& cumulativeDelta) override;
 
@@ -56,8 +65,10 @@ public:
     virtual FloatPoint scrollPosition() const = 0;
 
 #if ENABLE(CSS_SCROLL_SNAP)
-    const Vector<float>& horizontalSnapOffsets() const { return m_horizontalSnapOffsets; }
-    const Vector<float>& verticalSnapOffsets() const { return m_verticalSnapOffsets; }
+    const Vector<float>& horizontalSnapOffsets() const { return m_snapOffsetsInfo.horizontalSnapOffsets; }
+    const Vector<float>& verticalSnapOffsets() const { return m_snapOffsetsInfo.verticalSnapOffsets; }
+    const Vector<ScrollOffsetRange<float>>& horizontalSnapOffsetRanges() const { return m_snapOffsetsInfo.horizontalSnapOffsetRanges; }
+    const Vector<ScrollOffsetRange<float>>& verticalSnapOffsetRanges() const { return m_snapOffsetsInfo.verticalSnapOffsetRanges; }
     unsigned currentHorizontalSnapPointIndex() const { return m_currentHorizontalSnapPointIndex; }
     unsigned currentVerticalSnapPointIndex() const { return m_currentVerticalSnapPointIndex; }
     void setCurrentHorizontalSnapPointIndex(unsigned index) { m_currentHorizontalSnapPointIndex = index; }
@@ -70,7 +81,7 @@ protected:
     WEBCORE_EXPORT virtual FloatPoint minimumScrollPosition() const;
     WEBCORE_EXPORT virtual FloatPoint maximumScrollPosition() const;
 
-    virtual void setScrollLayerPosition(const FloatPoint&) = 0;
+    virtual void setScrollLayerPosition(const FloatPoint&, const FloatRect& layoutViewport) = 0;
 
     FloatPoint lastCommittedScrollPosition() const { return m_lastCommittedScrollPosition; }
     const FloatSize& scrollableAreaSize() const { return m_scrollableAreaSize; }
@@ -92,6 +103,8 @@ protected:
 
     bool canHaveScrollbars() const { return m_scrollableAreaParameters.horizontalScrollbarMode != ScrollbarAlwaysOff || m_scrollableAreaParameters.verticalScrollbarMode != ScrollbarAlwaysOff; }
 
+    WEBCORE_EXPORT void dumpProperties(WTF::TextStream&, ScrollingStateTreeAsTextBehavior) const override;
+
 private:
     FloatSize m_scrollableAreaSize;
     FloatSize m_totalContentsSize;
@@ -100,8 +113,7 @@ private:
     FloatPoint m_lastCommittedScrollPosition;
     IntPoint m_scrollOrigin;
 #if ENABLE(CSS_SCROLL_SNAP)
-    Vector<float> m_horizontalSnapOffsets;
-    Vector<float> m_verticalSnapOffsets;
+    ScrollSnapOffsetsInfo<float> m_snapOffsetsInfo;
     unsigned m_currentHorizontalSnapPointIndex { 0 };
     unsigned m_currentVerticalSnapPointIndex { 0 };
 #endif

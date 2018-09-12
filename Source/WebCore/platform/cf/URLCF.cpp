@@ -47,11 +47,8 @@ URL::URL(CFURLRef url)
     // FIXME: Why is it OK to ignore base URL here?
     CString urlBytes;
     getURLBytes(url, urlBytes);
-    if (URLParser::enabled()) {
-        URLParser parser(urlBytes.data());
-        *this = parser.result();
-    } else
-        parse(urlBytes.data());
+    URLParser parser(urlBytes.data());
+    *this = parser.result();
 }
 
 #if !USE(FOUNDATION)
@@ -62,7 +59,12 @@ RetainPtr<CFURLRef> URL::createCFURL() const
     // which is clearly wrong.
     URLCharBuffer buffer;
     copyToBuffer(buffer);
-    return createCFURLFromBuffer(buffer.data(), buffer.size());
+    auto cfURL = createCFURLFromBuffer(buffer.data(), buffer.size());
+
+    if (protocolIsInHTTPFamily() && !isCFURLSameOrigin(cfURL.get(), *this))
+        return nullptr;
+
+    return cfURL;
 }
 #endif
 

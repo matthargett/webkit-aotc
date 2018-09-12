@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014, 2015 Apple Inc. All rights reserved.
+ * Copyright (C) 2014-2018 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -26,62 +26,24 @@
 #include "config.h"
 #include "StructureSet.h"
 
-#include "DFGAbstractValue.h"
 #include "TrackedReferences.h"
 #include <wtf/CommaPrinter.h>
 
 namespace JSC {
 
-#if ENABLE(DFG_JIT)
-
-void StructureSet::filter(const DFG::StructureAbstractValue& other)
+void StructureSet::markIfCheap(SlotVisitor& visitor) const
 {
-    genericFilter([&] (Structure* structure) -> bool { return other.contains(structure); });
+    for (Structure* structure : *this)
+        structure->markIfCheap(visitor);
 }
 
-void StructureSet::filter(SpeculatedType type)
+bool StructureSet::isStillAlive() const
 {
-    genericFilter(
-        [&] (Structure* structure) -> bool {
-            return type & speculationFromStructure(structure);
-        });
-}
-
-void StructureSet::filterArrayModes(ArrayModes arrayModes)
-{
-    genericFilter(
-        [&] (Structure* structure) -> bool {
-            return arrayModes & arrayModeFromStructure(structure);
-        });
-}
-
-void StructureSet::filter(const DFG::AbstractValue& other)
-{
-    filter(other.m_structure);
-    filter(other.m_type);
-    filterArrayModes(other.m_arrayModes);
-}
-
-#endif // ENABLE(DFG_JIT)
-
-SpeculatedType StructureSet::speculationFromStructures() const
-{
-    SpeculatedType result = SpecNone;
-    forEach(
-        [&] (Structure* structure) {
-            mergeSpeculation(result, speculationFromStructure(structure));
-        });
-    return result;
-}
-
-ArrayModes StructureSet::arrayModesFromStructures() const
-{
-    ArrayModes result = 0;
-    forEach(
-        [&] (Structure* structure) {
-            mergeArrayModes(result, asArrayModes(structure->indexingType()));
-        });
-    return result;
+    for (Structure* structure : *this) {
+        if (!Heap::isMarked(structure))
+            return false;
+    }
+    return true;
 }
 
 void StructureSet::dumpInContext(PrintStream& out, DumpContext* context) const
@@ -95,14 +57,6 @@ void StructureSet::dumpInContext(PrintStream& out, DumpContext* context) const
 void StructureSet::dump(PrintStream& out) const
 {
     dumpInContext(out, nullptr);
-}
-
-void StructureSet::validateReferences(const TrackedReferences& trackedReferences) const
-{
-    forEach(
-        [&] (Structure* structure) {
-            trackedReferences.check(structure);
-        });
 }
 
 } // namespace JSC

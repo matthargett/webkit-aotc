@@ -26,19 +26,18 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef CompositeAnimation_h
-#define CompositeAnimation_h
+#pragma once
 
+#include "CSSAnimationController.h"
 #include "ImplicitAnimation.h"
 #include "KeyframeAnimation.h"
 #include <wtf/HashMap.h>
-#include <wtf/Noncopyable.h>
 #include <wtf/text/AtomicString.h>
 
 namespace WebCore {
 
-class AnimationControllerPrivate;
-class AnimationController;
+class CSSAnimationControllerPrivate;
+class CSSAnimationController;
 class RenderElement;
 class RenderStyle;
 
@@ -47,22 +46,22 @@ class RenderStyle;
 class CompositeAnimation : public RefCounted<CompositeAnimation> {
     WTF_MAKE_FAST_ALLOCATED;
 public:
-    static Ref<CompositeAnimation> create(AnimationControllerPrivate& animationController)
+    static Ref<CompositeAnimation> create(CSSAnimationControllerPrivate& animationController)
     {
         return adoptRef(*new CompositeAnimation(animationController));
     };
 
     ~CompositeAnimation();
     
-    void clearRenderer();
+    void clearElement();
 
-    bool animate(RenderElement&, const RenderStyle* currentStyle, const RenderStyle& targetStyle, std::unique_ptr<RenderStyle>& blendedStyle);
+    AnimationUpdate animate(Element&, const RenderStyle* currentStyle, const RenderStyle& targetStyle);
     std::unique_ptr<RenderStyle> getAnimatedStyle() const;
     bool computeExtentOfTransformAnimation(LayoutRect&) const;
 
-    double timeToNextService() const;
+    std::optional<Seconds> timeToNextService() const;
     
-    AnimationControllerPrivate& animationController() const { return m_animationController; }
+    CSSAnimationControllerPrivate& animationController() const { return m_animationController; }
 
     void suspendAnimations();
     void resumeAnimations();
@@ -72,7 +71,7 @@ public:
 
     bool isAnimatingProperty(CSSPropertyID, bool acceleratedOnly, AnimationBase::RunningState) const;
 
-    PassRefPtr<KeyframeAnimation> getAnimationForProperty(CSSPropertyID) const;
+    KeyframeAnimation* animationForProperty(CSSPropertyID) const;
 
     void overrideImplicitAnimations(CSSPropertyID);
     void resumeOverriddenImplicitAnimations(CSSPropertyID);
@@ -85,25 +84,27 @@ public:
     bool hasScrollTriggeredAnimation() const { return m_hasScrollTriggeredAnimation; }
 #endif
 
-private:
-    CompositeAnimation(AnimationControllerPrivate&);
+    bool hasAnimationThatDependsOnLayout() const { return m_hasAnimationThatDependsOnLayout; }
 
-    void updateTransitions(RenderElement*, const RenderStyle* currentStyle, const RenderStyle* targetStyle);
-    void updateKeyframeAnimations(RenderElement*, const RenderStyle* currentStyle, const RenderStyle* targetStyle);
+private:
+    CompositeAnimation(CSSAnimationControllerPrivate&);
+
+    void updateTransitions(Element&, const RenderStyle* currentStyle, const RenderStyle& targetStyle);
+    void updateKeyframeAnimations(Element&, const RenderStyle* currentStyle, const RenderStyle& targetStyle);
     
     typedef HashMap<int, RefPtr<ImplicitAnimation>> CSSPropertyTransitionsMap;
     typedef HashMap<AtomicStringImpl*, RefPtr<KeyframeAnimation>> AnimationNameMap;
 
-    AnimationControllerPrivate& m_animationController;
-    CSSPropertyTransitionsMap m_transitions;
-    AnimationNameMap m_keyframeAnimations;
-    Vector<AtomicStringImpl*> m_keyframeAnimationOrderMap;
-    bool m_suspended;
+    bool m_suspended { false };
+    bool m_hasAnimationThatDependsOnLayout { false };
 #if ENABLE(CSS_ANIMATIONS_LEVEL_2)
     bool m_hasScrollTriggeredAnimation { false };
 #endif
+
+    CSSAnimationControllerPrivate& m_animationController;
+    CSSPropertyTransitionsMap m_transitions;
+    AnimationNameMap m_keyframeAnimations;
+    Vector<AtomicStringImpl*> m_keyframeAnimationOrderMap;
 };
 
 } // namespace WebCore
-
-#endif // CompositeAnimation_h

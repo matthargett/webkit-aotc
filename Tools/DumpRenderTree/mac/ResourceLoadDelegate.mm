@@ -172,7 +172,7 @@ BOOL isAllowedHost(NSString *host)
         }
     }
 
-    if (disallowedURLs && CFSetContainsValue(disallowedURLs, url))
+    if (disallowedURLs && CFSetContainsValue(disallowedURLs, (__bridge CFURLRef)url))
         return nil;
 
     NSMutableURLRequest *newRequest = [request mutableCopy];
@@ -182,9 +182,8 @@ BOOL isAllowedHost(NSString *host)
         [newRequest setValue:nil forHTTPHeaderField:nsHeader];
         [nsHeader release];
     }
-    const std::string& destination = gTestRunner->redirectionDestinationForURL([[url absoluteString] UTF8String]);
-    if (destination.length())
-        [newRequest setURL:[NSURL URLWithString:[NSString stringWithUTF8String:destination.data()]]];
+    if (auto* destination = gTestRunner->redirectionDestinationForURL([[url absoluteString] UTF8String]))
+        [newRequest setURL:[NSURL URLWithString:[NSString stringWithUTF8String:destination]]];
 
     return [newRequest autorelease];
 }
@@ -255,11 +254,6 @@ BOOL isAllowedHost(NSString *host)
 
 - (void)webView: (WebView *)wv plugInFailedWithError:(NSError *)error dataSource:(WebDataSource *)dataSource
 {
-#if !PLATFORM(IOS)
-    // The call to -display here simulates the "Plug-in not found" sheet that Safari shows.
-    // It is used for platform/mac/plugins/update-widget-from-style-recalc.html
-    [wv display];
-#endif
 }
 
 -(NSCachedURLResponse *) webView: (WebView *)wv resource:(id)identifier willCacheResponse:(NSCachedURLResponse *)response fromDataSource:(WebDataSource *)dataSource

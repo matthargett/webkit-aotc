@@ -24,8 +24,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef FloatPoint_h
-#define FloatPoint_h
+#pragma once
 
 #include "FloatSize.h"
 #include "IntPoint.h"
@@ -52,13 +51,16 @@ struct D2D_POINT_2F;
 typedef D2D_POINT_2F D2D1_POINT_2F;
 #endif
 
+namespace WTF {
+class TextStream;
+}
+
 namespace WebCore {
 
 class AffineTransform;
 class TransformationMatrix;
 class IntPoint;
 class IntSize;
-class TextStream;
 
 class FloatPoint {
 public:
@@ -69,47 +71,70 @@ public:
 
     static FloatPoint zero() { return FloatPoint(); }
 
-    static FloatPoint narrowPrecision(double x, double y);
+    WEBCORE_EXPORT static FloatPoint narrowPrecision(double x, double y);
 
     float x() const { return m_x; }
     float y() const { return m_y; }
 
     void setX(float x) { m_x = x; }
     void setY(float y) { m_y = y; }
+
     void set(float x, float y)
     {
         m_x = x;
         m_y = y;
     }
+
     void move(float dx, float dy)
     {
         m_x += dx;
         m_y += dy;
     }
+
     void move(const IntSize& a)
     {
         m_x += a.width();
         m_y += a.height();
     }
+
     void move(const FloatSize& a)
     {
         m_x += a.width();
         m_y += a.height();
     }
+
     void moveBy(const IntPoint& a)
     {
         m_x += a.x();
         m_y += a.y();
     }
+
     void moveBy(const FloatPoint& a)
     {
         m_x += a.x();
         m_y += a.y();
     }
-    void scale(float sx, float sy)
+
+    void scale(float scale)
     {
-        m_x *= sx;
-        m_y *= sy;
+        m_x *= scale;
+        m_y *= scale;
+    }
+
+    void scale(float scaleX, float scaleY)
+    {
+        m_x *= scaleX;
+        m_y *= scaleY;
+    }
+
+    FloatPoint scaled(float scale) const
+    {
+        return { m_x * scale, m_y * scale };
+    }
+
+    FloatPoint scaled(float scaleX, float scaleY) const
+    {
+        return { m_x * scaleX, m_y * scaleY };
     }
 
     WEBCORE_EXPORT void normalize();
@@ -121,6 +146,7 @@ public:
 
     float slopeAngleRadians() const;
     float length() const;
+
     float lengthSquared() const
     {
         return m_x * m_x + m_y * m_y;
@@ -271,8 +297,7 @@ inline bool areEssentiallyEqual(const FloatPoint& a, const FloatPoint& b)
     return WTF::areEssentiallyEqual(a.x(), b.x()) && WTF::areEssentiallyEqual(a.y(), b.y());
 }
 
-WEBCORE_EXPORT TextStream& operator<<(TextStream&, const FloatPoint&);
+WEBCORE_EXPORT WTF::TextStream& operator<<(WTF::TextStream&, const FloatPoint&);
 
 }
 
-#endif

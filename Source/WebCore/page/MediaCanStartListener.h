@@ -27,11 +27,13 @@
 
 namespace WebCore {
 
+class Document;
+
 class MediaCanStartListener {
 public:
-    virtual void mediaCanStart() = 0;
+    virtual void mediaCanStart(Document&) = 0;
 protected:
-    virtual ~MediaCanStartListener() { }
+    virtual ~MediaCanStartListener() = default;
 };
 
 } // namespace WebCore

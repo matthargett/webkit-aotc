@@ -24,6 +24,7 @@
  */
 
 .source-code.text-editor .CodeMirror-linewidget {
+    color: var(--text-color-active);
     overflow: initial;
     z-index: 3; /* overlap line content */
 }
@@ -36,46 +37,27 @@
     background-color: hsl(15, 100%, 90%);
 }
 
-.source-code.text-editor > .CodeMirror .issue-widget {
+.source-code.text-editor > .CodeMirror .thread-indicator {
+    background-color: hsla(99, 38%, 86%, 0.5);
+}
+
+.source-code.text-editor > .CodeMirror .line-indicator-widget {
     float: right;
     padding: 0 5px 1px 5px;
     border-bottom-left-radius: 5px;
     cursor: default;
 }
 
-.source-code.text-editor > .CodeMirror .issue-widget.inline {
+.source-code.text-editor > .CodeMirror .line-indicator-widget.inline {
     position: relative;
     top: -13px;
     height: 13px;
-    padding: 0px 5px 0 3px;
+    padding: 0 5px 0 8px;
     border-bottom-left-radius: 0;
+    -webkit-clip-path: polygon(0% 50%, 8px 100%, 100% 100%, 100% 0, 8px 0);
 }
 
-.source-code.text-editor > .CodeMirror .issue-widget > .arrow {
-    display: none;
-}
-
-.source-code.text-editor > .CodeMirror .issue-widget.inline > .arrow {
-    position: absolute;
-    left: -5px;
-    display: block;
-
-    top: 0px;
-    width: 0px;
-    height: 0px;
-
-    border-top: 6.5px solid transparent;
-    border-bottom: 6.5px solid transparent; 
-    border-right: 5.5px solid transparent;
-}
-
-@media (-webkit-min-device-pixel-ratio: 2) {
-    .source-code.text-editor > .CodeMirror .issue-widget.inline > .arrow {
-        left: -5.5px;
-    }
-}
-
-.source-code.text-editor > .CodeMirror .issue-widget > .icon {
+.source-code.text-editor > .CodeMirror .line-indicator-widget > .icon {
     height: 9px;
     width: 9px;
     padding-right: 12px;
@@ -83,6 +65,18 @@
     background-size: 9px 9px;
     background-repeat: no-repeat;
     background-position-y: 1px;
+}
+
+.source-code.text-editor > .CodeMirror .line-indicator-widget > .text {
+    font-family: -webkit-system-font, sans-serif;
+}
+
+.source-code.text-editor > .CodeMirror .line-indicator-widget.inline > .text {
+    display: inline-block;
+    max-width: 300px;
+    vertical-align: baseline;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .source-code.text-editor > .CodeMirror .issue-widget > .icon.icon-warning {
@@ -101,10 +95,6 @@
     background-color: hsl(43, 97%, 84%);
 }
 
-.source-code.text-editor > .CodeMirror .issue-widget.inline.warning > .arrow {
-    border-right-color: hsl(43, 97%, 84%);
-}
-
 .source-code.text-editor > .CodeMirror .issue-widget.error {
     background-color: hsl(15, 100%, 90%);
 }
@@ -113,20 +103,12 @@
     background-color: hsl(11, 100%, 80%);
 }
 
-.source-code.text-editor > .CodeMirror .issue-widget.inline.error > .arrow {
-    border-right-color: hsl(11, 100%, 80%);
+.source-code.text-editor > .CodeMirror .thread-widget {
+    background-color: hsl(90, 30%, 82%);
 }
 
-.source-code.text-editor > .CodeMirror .issue-widget > .text {
-    font-family: -apple-system, sans-serif;
-}
-
-.source-code.text-editor > .CodeMirror .issue-widget.inline > .text {
-    display: inline-block;
-    max-width: 300px;
-    vertical-align: baseline;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+.source-code.text-editor > .CodeMirror .thread-widget.inline {
+    background-color: hsl(90, 30%, 82%);
 }
 
 .popover .debugger-popover-content {
@@ -144,7 +126,7 @@
 }
 
 .popover .debugger-popover-content > .title {
-    font-family: -apple-system, sans-serif;
+    font-family: -webkit-system-font, sans-serif;
     font-weight: 500;
 
     padding: 2px 6px 4px 6px;
@@ -198,5 +180,11 @@
 @media (-webkit-min-device-pixel-ratio: 2) {
     .popover .debugger-popover-content > .body {
         border-width: 0.5px;
+    }
+}
+
+@media (prefers-dark-interface) {
+    .source-code.text-editor > .CodeMirror .thread-widget.inline {
+        background-color: hsl(99, 85%, 34%);
     }
 }

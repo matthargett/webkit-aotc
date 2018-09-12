@@ -26,10 +26,9 @@
 [
     Conditional=INDEXED_DATABASE,
     ImplementationLacksVTable,
-    EnabledAtRuntime=IndexedDB,
 ] interface IDBKeyRange {
-    [ImplementationReturnType=IDBKey] readonly attribute any lower;
-    [ImplementationReturnType=IDBKey] readonly attribute any upper;
+    readonly attribute [OverrideIDLType=IDLIDBKey] any lower;
+    readonly attribute [OverrideIDLType=IDLIDBKey] any upper;
     readonly attribute boolean lowerOpen;
     readonly attribute boolean upperOpen;
 
@@ -38,5 +37,5 @@
     [CallWith=ScriptState, MayThrowException] static IDBKeyRange upperBound(any upper, optional boolean open = false);
     [CallWith=ScriptState, MayThrowException] static IDBKeyRange bound(any lower, any upper, optional boolean lowerOpen = false, optional boolean upperOpen = false);
 
-    [CallWith=ScriptState, MayThrowException] boolean contains(any key);
+    [CallWith=ScriptState, MayThrowException] boolean includes(any key);
 };

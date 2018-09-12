@@ -17,8 +17,7 @@
     Boston, MA 02110-1301, USA.
 */
 
-#ifndef PointerEventsHitRules_h
-#define PointerEventsHitRules_h
+#pragma once
 
 #include "HitTestRequest.h"
 #include "RenderStyleConstants.h"
@@ -33,7 +32,7 @@ public:
         SVG_TEXT_HITTESTING
     };
 
-    PointerEventsHitRules(EHitTesting, const HitTestRequest&, EPointerEvents);
+    PointerEventsHitRules(EHitTesting, const HitTestRequest&, PointerEvents);
 
     bool requireVisible;
     bool requireFill;
@@ -42,8 +41,4 @@ public:
     bool canHitFill;  
 };
 
-}
-
-#endif
-
-// vim:ts=4:noet
+} // namespace WebCore

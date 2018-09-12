@@ -1,148 +1,256 @@
 
-// FIXME: ComponentBase should inherit from HTMLElement when custom elements API is available.
-class ComponentBase {
+class ComponentBase extends CommonComponentBase {
     constructor(name)
     {
-        this._element = document.createElement(name);
-        this._element.component = (function () { return this; }).bind(this);
-        this._shadow = this._constructShadowTree();
+        super();
+        this._componentName = name || ComponentBase._componentByClass.get(new.target);
+
+        const currentlyConstructed = ComponentBase._currentlyConstructedByInterface;
+        let element = currentlyConstructed.get(new.target);
+        if (!element) {
+            currentlyConstructed.set(new.target, this);
+            element = document.createElement(this._componentName);
+            currentlyConstructed.delete(new.target);
+        }
+        element.component = () => { return this };
+
+        this._element = element;
+        this._shadow = null;
+        this._actionCallbacks = new Map;
+        this._oldSizeToCheckForResize = null;
+
+        if (!ComponentBase.useNativeCustomElements)
+            element.addEventListener('DOMNodeInsertedIntoDocument', () => this.enqueueToRender());
+        if (!ComponentBase.useNativeCustomElements && new.target.enqueueToRenderOnResize)
+            ComponentBase._connectedComponentToRenderOnResize(this);
     }
 
     element() { return this._element; }
-    content() { return this._shadow; }
-    render() { }
-
-    renderReplace(element, content) { ComponentBase.renderReplace(element, content); }
-
-    static renderReplace(element, content)
+    content(id = null)
     {
-        element.innerHTML = '';
-        if (content)
-            ComponentBase._addContentToElement(element, content);
+        this._ensureShadowTree();
+        if (this._shadow && id != null)
+            return this._shadow.getElementById(id);
+        return this._shadow;
     }
 
-    _constructShadowTree()
+    part(id)
     {
-        var newTarget = this.__proto__.constructor;
-
-        var htmlTemplate = newTarget['htmlTemplate'];
-        var cssTemplate = newTarget['cssTemplate'];
-
-        if (!htmlTemplate && !cssTemplate)
+        this._ensureShadowTree();
+        if (!this._shadow)
             return null;
-
-        var shadow = null;
-        if ('attachShadow' in Element.prototype)
-            shadow = this._element.attachShadow({mode: 'closed'});
-        else if ('createShadowRoot' in Element.prototype) // Legacy Chromium API.
-            shadow = this._element.createShadowRoot();
-        else
-            shadow = this._element;
-
-        if (htmlTemplate) {
-            var template = document.createElement('template');
-            template.innerHTML = newTarget.htmlTemplate();
-            shadow.appendChild(template.content.cloneNode(true));
-            this._recursivelyReplaceUnknownElementsByComponents(shadow);
-        }
-
-        if (cssTemplate) {
-            var style = document.createElement('style');
-            style.textContent = newTarget.cssTemplate();
-            shadow.appendChild(style);
-        }
-
-        return shadow;
+        const part = this._shadow.getElementById(id);
+        if (!part)
+            return null;
+        return part.component();
     }
 
-    _recursivelyReplaceUnknownElementsByComponents(parent)
+    dispatchAction(actionName, ...args)
     {
-        if (!ComponentBase._map)
+        const callback = this._actionCallbacks.get(actionName);
+        if (callback)
+            return callback.apply(this, args);
+    }
+
+    listenToAction(actionName, callback)
+    {
+        this._actionCallbacks.set(actionName, callback);
+    }
+
+    render() { this._ensureShadowTree(); }
+
+    enqueueToRender()
+    {
+        Instrumentation.startMeasuringTime('ComponentBase', 'updateRendering');
+
+        if (!ComponentBase._componentsToRender) {
+            ComponentBase._componentsToRender = new Set;
+            requestAnimationFrame(() => ComponentBase.renderingTimerDidFire());
+        }
+        ComponentBase._componentsToRender.add(this);
+
+        Instrumentation.endMeasuringTime('ComponentBase', 'updateRendering');
+    }
+
+    static renderingTimerDidFire()
+    {
+        Instrumentation.startMeasuringTime('ComponentBase', 'renderingTimerDidFire');
+
+        const componentsToRender = ComponentBase._componentsToRender;
+        this._renderLoop();
+        if (ComponentBase._componentsToRenderOnResize) {
+            const resizedComponents = this._resizedComponents(ComponentBase._componentsToRenderOnResize);
+            if (resizedComponents.length) {
+                ComponentBase._componentsToRender = new Set(resizedComponents);
+                this._renderLoop();
+            }
+        }
+
+        Instrumentation.endMeasuringTime('ComponentBase', 'renderingTimerDidFire');
+    }
+
+    static _renderLoop()
+    {
+        const componentsToRender = ComponentBase._componentsToRender;
+        do {
+            const currentSet = [...componentsToRender];
+            componentsToRender.clear();
+            const resizeSet = ComponentBase._componentsToRenderOnResize;
+            for (let component of currentSet) {
+                Instrumentation.startMeasuringTime('ComponentBase', 'renderingTimerDidFire.render');
+                component.render();
+                if (resizeSet && resizeSet.has(component)) {
+                    const element = component.element();
+                    component._oldSizeToCheckForResize = {width: element.offsetWidth, height: element.offsetHeight};
+                }
+                Instrumentation.endMeasuringTime('ComponentBase', 'renderingTimerDidFire.render');
+            }
+        } while (componentsToRender.size);
+        ComponentBase._componentsToRender = null;
+    }
+
+    static _resizedComponents(componentSet)
+    {
+        if (!componentSet)
+            return [];
+
+        const resizedList = [];
+        for (let component of componentSet) {
+            const element = component.element();
+            const width = element.offsetWidth;
+            const height = element.offsetHeight;
+            const oldSize = component._oldSizeToCheckForResize;
+            if (oldSize && oldSize.width == width && oldSize.height == height)
+                continue;
+            resizedList.push(component);
+        }
+        return resizedList;
+    }
+
+    static _connectedComponentToRenderOnResize(component)
+    {
+        if (!ComponentBase._componentsToRenderOnResize) {
+            ComponentBase._componentsToRenderOnResize = new Set;
+            window.addEventListener('resize', () => {
+                const resized = this._resizedComponents(ComponentBase._componentsToRenderOnResize);
+                for (const component of resized)
+                    component.enqueueToRender();
+            });
+        }
+        ComponentBase._componentsToRenderOnResize.add(component);
+    }
+
+    static _disconnectedComponentToRenderOnResize(component)
+    {
+        ComponentBase._componentsToRenderOnResize.delete(component);
+    }
+
+    _ensureShadowTree()
+    {
+        if (this._shadow)
             return;
 
-        var nextSibling;
-        for (var child = parent.firstChild; child; child = child.nextSibling) {
-            if (child instanceof HTMLUnknownElement || child instanceof HTMLElement) {
-                var elementInterface = ComponentBase._map[child.localName];
-                if (elementInterface) {
-                    var component = new elementInterface();
-                    var newChild = component.element();
-                    parent.replaceChild(newChild, child);
-                    child = newChild;
-                }
+        const thisClass = this.__proto__.constructor;
+
+        let content;
+        let stylesheet;
+        if (!thisClass.hasOwnProperty('_parsed') || !thisClass._parsed) {
+            thisClass._parsed = true;
+
+            const contentTemplate = thisClass['contentTemplate'];
+            if (contentTemplate)
+                content = ComponentBase._constructNodeTreeFromTemplate(contentTemplate);
+            else if (thisClass.htmlTemplate) {
+                const templateElement = document.createElement('template');
+                templateElement.innerHTML = thisClass.htmlTemplate();
+                content = [templateElement.content];
             }
-            this._recursivelyReplaceUnknownElementsByComponents(child);
+
+            const styleTemplate = thisClass['styleTemplate'];
+            if (styleTemplate)
+                stylesheet = ComponentBase._constructStylesheetFromTemplate(styleTemplate);
+            else if (thisClass.cssTemplate)
+                stylesheet = thisClass.cssTemplate();
+
+            thisClass._parsedContent = content;
+            thisClass._parsedStylesheet = stylesheet;
+        } else {
+            content = thisClass._parsedContent;
+            stylesheet = thisClass._parsedStylesheet;
         }
+
+        if (!content && !stylesheet)
+            return;
+
+        const shadow = this._element.attachShadow({mode: 'closed'});
+
+        if (content) {
+            for (const node of content)
+                shadow.appendChild(document.importNode(node, true));
+            this._recursivelyUpgradeUnknownElements(shadow, (node) => {
+                return node instanceof Element ? ComponentBase._componentByName.get(node.localName) : null;
+            });
+        }
+
+        if (stylesheet) {
+            const style = document.createElement('style');
+            style.textContent = stylesheet;
+            shadow.appendChild(style);
+        }
+        this._shadow = shadow;
+        this.didConstructShadowTree();
     }
+
+    didConstructShadowTree() { }
 
     static defineElement(name, elementInterface)
     {
-        if (!ComponentBase._map)
-            ComponentBase._map = {};
-        ComponentBase._map[name] = elementInterface;
-    }
+        ComponentBase._componentByName.set(name, elementInterface);
+        ComponentBase._componentByClass.set(elementInterface, name);
 
-    static createElement(name, attributes, content)
-    {
-        var element = document.createElement(name);
-        if (!content && (attributes instanceof Array || attributes instanceof Node
-            || attributes instanceof ComponentBase || typeof(attributes) != 'object')) {
-            content = attributes;
-            attributes = {};
-        }
+        const enqueueToRenderOnResize = elementInterface.enqueueToRenderOnResize;
 
-        if (attributes) {
-            for (var name in attributes) {
-                if (name.startsWith('on'))
-                    element.addEventListener(name.substring(2), attributes[name]);
-                else
-                    element.setAttribute(name, attributes[name]);
+        if (!ComponentBase.useNativeCustomElements)
+            return;
+
+        class elementClass extends HTMLElement {
+            constructor()
+            {
+                super();
+
+                const currentlyConstructed = ComponentBase._currentlyConstructedByInterface;
+                const component = currentlyConstructed.get(elementInterface);
+                if (component)
+                    return; // ComponentBase's constructor will take care of the rest.
+
+                currentlyConstructed.set(elementInterface, this);
+                new elementInterface();
+                currentlyConstructed.delete(elementInterface);
+            }
+
+            connectedCallback()
+            {
+                this.component().enqueueToRender();
+                if (enqueueToRenderOnResize)
+                    ComponentBase._connectedComponentToRenderOnResize(this.component());
+            }
+
+            disconnectedCallback()
+            {
+                if (enqueueToRenderOnResize)
+                    ComponentBase._disconnectedComponentToRenderOnResize(this.component());
             }
         }
 
-        if (content)
-            ComponentBase._addContentToElement(element, content);
+        const nameDescriptor = Object.getOwnPropertyDescriptor(elementClass, 'name');
+        nameDescriptor.value = `${elementInterface.name}Element`;
+        Object.defineProperty(elementClass, 'name', nameDescriptor);
 
-        return element;
+        customElements.define(name, elementClass);
     }
 
-    static _addContentToElement(element, content)
-    {
-        if (content instanceof Array) {
-            for (var nestedChild of content)
-                this._addContentToElement(element, nestedChild);
-        } else if (content instanceof Node)
-            element.appendChild(content);
-         else if (content instanceof ComponentBase)
-            element.appendChild(content.element());
-        else
-            element.appendChild(document.createTextNode(content));
-    }
-
-    static createLink(content, titleOrCallback, callback, isExternal)
-    {
-        var title = titleOrCallback;
-        if (callback === undefined) {
-            title = content;
-            callback = titleOrCallback;
-        }
-
-        var attributes = {
-            href: '#',
-            title: title,
-        };
-
-        if (typeof(callback) === 'string')
-            attributes['href'] = callback;
-        else
-            attributes['onclick'] = ComponentBase.createActionHandler(callback);
-
-        if (isExternal)
-            attributes['target'] = '_blank';
-        return ComponentBase.createElement('a', attributes, content);
-    }
-
-    static createActionHandler(callback)
+    createEventHandler(callback) { return ComponentBase.createEventHandler(callback); }
+    static createEventHandler(callback)
     {
         return function (event) {
             event.preventDefault();
@@ -152,6 +260,13 @@ class ComponentBase {
     }
 }
 
-ComponentBase.css = Symbol();
-ComponentBase.html = Symbol();
-ComponentBase.map = {};
+CommonComponentBase._context = document;
+CommonComponentBase._isNode = (node) => node instanceof Node;
+CommonComponentBase._baseClass = ComponentBase;
+
+ComponentBase.useNativeCustomElements = !!window.customElements;
+ComponentBase._componentByName = new Map;
+ComponentBase._componentByClass = new Map;
+ComponentBase._currentlyConstructedByInterface = new Map;
+ComponentBase._componentsToRender = null;
+ComponentBase._componentsToRenderOnResize = null;

@@ -1,5 +1,6 @@
 /*
  * Copyright (C) Research In Motion Limited 2010. All rights reserved.
+ * Copyright (C) 2018 Apple Inc. All rights reserved.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -17,25 +18,23 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifndef SVGAnimatedNumberList_h
-#define SVGAnimatedNumberList_h
+#pragma once
 
 #include "SVGAnimatedListPropertyTearOff.h"
 #include "SVGAnimatedTypeAnimator.h"
+#include "SVGAttributeAccessor.h"
+#include "SVGNumber.h"
 #include "SVGNumberList.h"
 
 namespace WebCore {
 
-typedef SVGAnimatedListPropertyTearOff<SVGNumberList> SVGAnimatedNumberList;
-
-// Helper macros to declare/define a SVGAnimatedNumberList object
-#define DECLARE_ANIMATED_NUMBER_LIST(UpperProperty, LowerProperty) \
-DECLARE_ANIMATED_LIST_PROPERTY(SVGAnimatedNumberList, SVGNumberList, UpperProperty, LowerProperty)
-
-#define DEFINE_ANIMATED_NUMBER_LIST(OwnerType, DOMAttribute, UpperProperty, LowerProperty) \
-DEFINE_ANIMATED_PROPERTY(AnimatedNumberList, OwnerType, DOMAttribute, DOMAttribute.localName(), UpperProperty, LowerProperty)
-
 class SVGAnimationElement;
+
+using SVGAnimatedNumberList = SVGAnimatedListPropertyTearOff<SVGNumberListValues>;
+using SVGAnimatedNumberListAttribute = SVGAnimatedAttributeList<SVGAnimatedNumberList>;
+
+template<typename OwnerType>
+using SVGAnimatedNumberListAttributeAccessor = SVGAnimatedAttributeAccessor<OwnerType, SVGAnimatedNumberListAttribute, AnimatedNumberList>;
 
 class SVGAnimatedNumberListAnimator final : public SVGAnimatedTypeAnimator {
 public:
@@ -54,5 +53,3 @@ public:
 };
 
 } // namespace WebCore
-
-#endif

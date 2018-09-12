@@ -28,12 +28,12 @@
 
 #include "AnimationUtilities.h"
 #include "HashTools.h"
-#include "TextStream.h"
 #include <wtf/Assertions.h>
 #include <wtf/DecimalNumber.h>
 #include <wtf/HexNumber.h>
 #include <wtf/MathExtras.h>
 #include <wtf/text/StringBuilder.h>
+#include <wtf/text/TextStream.h>
 
 namespace WebCore {
 
@@ -49,9 +49,9 @@ const RGBA32 Color::transparent;
 static const RGBA32 lightenedBlack = 0xFF545454;
 static const RGBA32 darkenedWhite = 0xFFABABAB;
 
-static inline unsigned premultipliedChannel(unsigned c, unsigned a)
+static inline unsigned premultipliedChannel(unsigned c, unsigned a, bool ceiling = true)
 {
-    return fastDivideBy255(c * a + 254);
+    return fastDivideBy255(ceiling ? c * a + 254 : c * a);
 }
 
 static inline unsigned unpremultipliedChannel(unsigned c, unsigned a)
@@ -69,9 +69,9 @@ RGBA32 makeRGBA(int r, int g, int b, int a)
     return std::max(0, std::min(a, 255)) << 24 | std::max(0, std::min(r, 255)) << 16 | std::max(0, std::min(g, 255)) << 8 | std::max(0, std::min(b, 255));
 }
 
-RGBA32 makePremultipliedRGBA(int r, int g, int b, int a)
+RGBA32 makePremultipliedRGBA(int r, int g, int b, int a, bool ceiling)
 {
-    return makeRGBA(premultipliedChannel(r, a), premultipliedChannel(g, a), premultipliedChannel(b, a), a);
+    return makeRGBA(premultipliedChannel(r, a, ceiling), premultipliedChannel(g, a, ceiling), premultipliedChannel(b, a, ceiling), a);
 }
 
 RGBA32 makeUnPremultipliedRGBA(int r, int g, int b, int a)
@@ -100,23 +100,24 @@ RGBA32 colorWithOverrideAlpha(RGBA32 color, float overrideAlpha)
 static double calcHue(double temp1, double temp2, double hueVal)
 {
     if (hueVal < 0.0)
-        hueVal++;
-    else if (hueVal > 1.0)
-        hueVal--;
-    if (hueVal * 6.0 < 1.0)
-        return temp1 + (temp2 - temp1) * hueVal * 6.0;
-    if (hueVal * 2.0 < 1.0)
+        hueVal += 6.0;
+    else if (hueVal >= 6.0)
+        hueVal -= 6.0;
+    if (hueVal < 1.0)
+        return temp1 + (temp2 - temp1) * hueVal;
+    if (hueVal < 3.0)
         return temp2;
-    if (hueVal * 3.0 < 2.0)
-        return temp1 + (temp2 - temp1) * (2.0 / 3.0 - hueVal) * 6.0;
+    if (hueVal < 4.0)
+        return temp1 + (temp2 - temp1) * (4.0 - hueVal);
     return temp1;
 }
 
-// Explanation of this algorithm can be found in the CSS3 Color Module
-// specification at http://www.w3.org/TR/css3-color/#hsl-color with further
-// explanation available at http://en.wikipedia.org/wiki/HSL_color_space 
+// Explanation of this algorithm can be found in the CSS Color 4 Module
+// specification at https://drafts.csswg.org/css-color-4/#hsl-to-rgb with
+// further explanation available at http://en.wikipedia.org/wiki/HSL_color_space
 
-// all values are in the range of 0 to 1.0
+// Hue is in the range of 0 to 6.0, the remainder are in the range 0 to 1.0
+// FIXME: Use HSLToSRGB().
 RGBA32 makeRGBAFromHSLA(double hue, double saturation, double lightness, double alpha)
 {
     const double scaleFactor = nextafter(256.0, 0.0);
@@ -126,12 +127,12 @@ RGBA32 makeRGBAFromHSLA(double hue, double saturation, double lightness, double 
         return makeRGBA(greyValue, greyValue, greyValue, static_cast<int>(alpha * scaleFactor));
     }
 
-    double temp2 = lightness < 0.5 ? lightness * (1.0 + saturation) : lightness + saturation - lightness * saturation;
+    double temp2 = lightness <= 0.5 ? lightness * (1.0 + saturation) : lightness + saturation - lightness * saturation;
     double temp1 = 2.0 * lightness - temp2;
     
-    return makeRGBA(static_cast<int>(calcHue(temp1, temp2, hue + 1.0 / 3.0) * scaleFactor), 
+    return makeRGBA(static_cast<int>(calcHue(temp1, temp2, hue + 2.0) * scaleFactor), 
                     static_cast<int>(calcHue(temp1, temp2, hue) * scaleFactor),
-                    static_cast<int>(calcHue(temp1, temp2, hue - 1.0 / 3.0) * scaleFactor),
+                    static_cast<int>(calcHue(temp1, temp2, hue - 2.0) * scaleFactor),
                     static_cast<int>(alpha * scaleFactor));
 }
 
@@ -216,9 +217,19 @@ bool Color::parseHexColor(const StringView& name, RGBA32& rgb)
 
 int differenceSquared(const Color& c1, const Color& c2)
 {
-    int dR = c1.red() - c2.red();
-    int dG = c1.green() - c2.green();
-    int dB = c1.blue() - c2.blue();
+    // FIXME: This is assuming that the colors are in the same colorspace.
+    // FIXME: This should probably return a floating point number, but many of the call
+    // sites have picked comparison values based on feel. We'd need to break out
+    // our logarithm tables to change them :)
+    int c1Red = c1.isExtended() ? c1.asExtended().red() * 255 : c1.red();
+    int c1Green = c1.isExtended() ? c1.asExtended().green() * 255 : c1.green();
+    int c1Blue = c1.isExtended() ? c1.asExtended().blue() * 255 : c1.blue();
+    int c2Red = c2.isExtended() ? c2.asExtended().red() * 255 : c2.red();
+    int c2Green = c2.isExtended() ? c2.asExtended().green() * 255 : c2.green();
+    int c2Blue = c2.isExtended() ? c2.asExtended().blue() * 255 : c2.blue();
+    int dR = c1Red - c2Red;
+    int dG = c1Green - c2Green;
+    int dB = c1Blue - c2Blue;
     return dR * dR + dG * dG + dB * dB;
 }
 
@@ -297,12 +308,6 @@ Color::Color(float r, float g, float b, float a, ColorSpace colorSpace)
     ASSERT(isExtended());
 }
 
-Color::~Color()
-{
-    if (isExtended())
-        m_colorData.extendedColor->deref();
-}
-
 Color& Color::operator=(const Color& other)
 {
     if (*this == other)
@@ -323,6 +328,9 @@ Color& Color::operator=(Color&& other)
     if (*this == other)
         return *this;
 
+    if (isExtended())
+        m_colorData.extendedColor->deref();
+
     m_colorData = other.m_colorData;
     other.m_colorData.rgbaAndFlags = invalidRGBAColor;
 
@@ -334,7 +342,7 @@ String Color::serialized() const
     if (isExtended())
         return asExtended().cssText();
 
-    if (!hasAlpha()) {
+    if (isOpaque()) {
         StringBuilder builder;
         builder.reserveCapacity(7);
         builder.append('#');
@@ -354,7 +362,7 @@ String Color::cssText() const
 
     StringBuilder builder;
     builder.reserveCapacity(28);
-    bool colorHasAlpha = hasAlpha();
+    bool colorHasAlpha = !isOpaque();
     if (colorHasAlpha)
         builder.appendLiteral("rgba(");
     else
@@ -459,7 +467,7 @@ const int cAlphaIncrement = 17; // Increments in between.
 
 Color Color::blend(const Color& source) const
 {
-    if (!alpha() || !source.hasAlpha())
+    if (!isVisible() || source.isOpaque())
         return source;
 
     if (!source.alpha())
@@ -476,7 +484,7 @@ Color Color::blend(const Color& source) const
 Color Color::blendWithWhite() const
 {
     // If the color contains alpha already, we leave it alone.
-    if (hasAlpha())
+    if (!isOpaque())
         return *this;
 
     Color newColor;
@@ -492,7 +500,29 @@ Color Color::blendWithWhite() const
         if (r >= 0 && g >= 0 && b >= 0)
             break;
     }
+
+    if (isSemantic())
+        newColor.setIsSemantic();
     return newColor;
+}
+
+Color Color::colorWithAlphaMultipliedBy(float amount) const
+{
+    float newAlpha = amount * (isExtended() ? m_colorData.extendedColor->alpha() : static_cast<float>(alpha()) / 255);
+    return colorWithAlpha(newAlpha);
+}
+
+Color Color::colorWithAlpha(float alpha) const
+{
+    if (isExtended())
+        return Color { m_colorData.extendedColor->red(), m_colorData.extendedColor->green(), m_colorData.extendedColor->blue(), alpha, m_colorData.extendedColor->colorSpace() };
+
+    int newAlpha = alpha * 255;
+
+    Color result = { red(), green(), blue(), newAlpha };
+    if (isSemantic())
+        result.setIsSemantic();
+    return result;
 }
 
 void Color::getRGBA(float& r, float& g, float& b, float& a) const
@@ -511,6 +541,7 @@ void Color::getRGBA(double& r, double& g, double& b, double& a) const
     a = alpha() / 255.0;
 }
 
+// FIXME: Use sRGBToHSL().
 void Color::getHSL(double& hue, double& saturation, double& lightness) const
 {
     // http://en.wikipedia.org/wiki/HSL_color_space. This is a direct copy of
@@ -588,19 +619,21 @@ Color colorFromPremultipliedARGB(RGBA32 pixelColor)
 
 RGBA32 premultipliedARGBFromColor(const Color& color)
 {
-    unsigned pixelColor;
+    if (color.isOpaque()) {
+        if (color.isExtended())
+            return makeRGB(color.asExtended().red() * 255, color.asExtended().green() * 255, color.asExtended().blue() * 255);
+        return color.rgb();
+    }
 
-    unsigned alpha = color.alpha();
-    if (alpha < 255)
-        pixelColor = makePremultipliedRGBA(color.red(), color.green(), color.blue(), alpha);
-    else
-        pixelColor = color.rgb();
+    if (color.isExtended())
+        return makePremultipliedRGBA(color.asExtended().red() * 255, color.asExtended().green() * 255, color.asExtended().blue() * 255, color.asExtended().alpha() * 255);
 
-    return pixelColor;
+    return makePremultipliedRGBA(color.red(), color.green(), color.blue(), color.alpha());
 }
 
 Color blend(const Color& from, const Color& to, double progress, bool blendPremultiplied)
 {
+    // FIXME: ExtendedColor - needs to handle color spaces.
     // We need to preserve the state of the valid flag at the end of the animation
     if (progress == 1 && !to.isValid())
         return Color();
@@ -625,25 +658,36 @@ Color blend(const Color& from, const Color& to, double progress, bool blendPremu
         blend(from.alpha(), to.alpha(), progress));
 }
 
-TextStream& operator<<(TextStream& ts, const Color& color)
-{
-    return ts << color.nameForRenderTreeAsText();
-}
-
 void Color::tagAsValid()
 {
     m_colorData.rgbaAndFlags |= validRGBAColor;
-}
-
-bool Color::isExtended() const
-{
-    return !(m_colorData.rgbaAndFlags & invalidRGBAColor);
 }
 
 ExtendedColor& Color::asExtended() const
 {
     ASSERT(isExtended());
     return *m_colorData.extendedColor;
+}
+
+TextStream& operator<<(TextStream& ts, const Color& color)
+{
+    return ts << color.nameForRenderTreeAsText();
+}
+
+TextStream& operator<<(TextStream& ts, ColorSpace colorSpace)
+{
+    switch (colorSpace) {
+    case ColorSpaceSRGB:
+        ts << "sRGB";
+        break;
+    case ColorSpaceLinearRGB:
+        ts << "LinearRGB";
+        break;
+    case ColorSpaceDisplayP3:
+        ts << "DisplayP3";
+        break;
+    }
+    return ts;
 }
 
 } // namespace WebCore

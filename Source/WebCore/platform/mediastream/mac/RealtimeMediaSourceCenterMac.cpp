@@ -33,93 +33,113 @@
 #if ENABLE(MEDIA_STREAM)
 #include "RealtimeMediaSourceCenterMac.h"
 
+#include "AVAudioSessionCaptureDeviceManager.h"
 #include "AVCaptureDeviceManager.h"
+#include "AVVideoCaptureSource.h"
+#include "CoreAudioCaptureDeviceManager.h"
+#include "CoreAudioCaptureSource.h"
+#include "DisplayCaptureManagerCocoa.h"
+#include "Logging.h"
 #include "MediaStreamPrivate.h"
+#include "ScreenDisplayCaptureSourceMac.h"
 #include <wtf/MainThread.h>
 
 namespace WebCore {
 
-RealtimeMediaSourceCenter& RealtimeMediaSourceCenter::platformCenter()
+class VideoCaptureSourceFactoryMac final : public RealtimeMediaSource::VideoCaptureFactory
+{
+public:
+    CaptureSourceOrError createVideoCaptureSource(const CaptureDevice& device, const MediaConstraints* constraints) final
+    {
+        switch (device.type()) {
+        case CaptureDevice::DeviceType::Camera:
+            return AVVideoCaptureSource::create(device.persistentId(), constraints);
+            break;
+        case CaptureDevice::DeviceType::Screen:
+#if PLATFORM(MAC)
+            return ScreenDisplayCaptureSourceMac::create(device.persistentId(), constraints);
+            break;
+#endif
+        case CaptureDevice::DeviceType::Application:
+        case CaptureDevice::DeviceType::Window:
+        case CaptureDevice::DeviceType::Browser:
+        case CaptureDevice::DeviceType::Microphone:
+        case CaptureDevice::DeviceType::Unknown:
+            ASSERT_NOT_REACHED();
+            break;
+        }
+
+        return { };
+    }
+
+#if PLATFORM(IOS)
+private:
+    void setVideoCapturePageState(bool interrupted, bool pageMuted)
+    {
+        if (activeSource())
+            activeSource()->setInterrupted(interrupted, pageMuted);
+    }
+#endif
+};
+
+RealtimeMediaSource::VideoCaptureFactory& RealtimeMediaSourceCenterMac::videoCaptureSourceFactory()
+{
+    static NeverDestroyed<VideoCaptureSourceFactoryMac> factory;
+    return factory.get();
+}
+
+RealtimeMediaSource::AudioCaptureFactory& RealtimeMediaSourceCenterMac::audioCaptureSourceFactory()
+{
+    return RealtimeMediaSourceCenterMac::singleton().audioFactory();
+}
+
+RealtimeMediaSourceCenterMac& RealtimeMediaSourceCenterMac::singleton()
 {
     ASSERT(isMainThread());
     static NeverDestroyed<RealtimeMediaSourceCenterMac> center;
     return center;
 }
 
-RealtimeMediaSourceCenterMac::RealtimeMediaSourceCenterMac()
+RealtimeMediaSourceCenter& RealtimeMediaSourceCenter::platformCenter()
 {
-    m_supportedConstraints.setSupportsWidth(true);
-    m_supportedConstraints.setSupportsHeight(true);
-    m_supportedConstraints.setSupportsAspectRatio(true);
-    m_supportedConstraints.setSupportsFrameRate(true);
-    m_supportedConstraints.setSupportsFacingMode(true);
-    m_supportedConstraints.setSupportsVolume(true);
-    m_supportedConstraints.setSupportsSampleRate(false);
-    m_supportedConstraints.setSupportsSampleSize(false);
-    m_supportedConstraints.setSupportsEchoCancellation(false);
-    m_supportedConstraints.setSupportsDeviceId(true);
-    m_supportedConstraints.setSupportsGroupId(true);
+    return RealtimeMediaSourceCenterMac::singleton();
 }
 
-RealtimeMediaSourceCenterMac::~RealtimeMediaSourceCenterMac()
+RealtimeMediaSourceCenterMac::RealtimeMediaSourceCenterMac() = default;
+
+RealtimeMediaSourceCenterMac::~RealtimeMediaSourceCenterMac() = default;
+
+
+RealtimeMediaSource::AudioCaptureFactory& RealtimeMediaSourceCenterMac::audioFactory()
 {
+    if (m_audioFactoryOverride)
+        return *m_audioFactoryOverride;
+
+    return CoreAudioCaptureSource::factory();
 }
 
-void RealtimeMediaSourceCenterMac::validateRequestConstraints(ValidConstraintsHandler validHandler, InvalidConstraintsHandler invalidHandler, MediaConstraints& audioConstraints, MediaConstraints& videoConstraints)
+RealtimeMediaSource::VideoCaptureFactory& RealtimeMediaSourceCenterMac::videoFactory()
 {
-    Vector<RefPtr<RealtimeMediaSource>> audioSources;
-    Vector<RefPtr<RealtimeMediaSource>> videoSources;
-
-    if (audioConstraints.isValid()) {
-        String invalidConstraint;
-        AVCaptureDeviceManager::singleton().verifyConstraintsForMediaType(RealtimeMediaSource::Audio, audioConstraints, nullptr, invalidConstraint);
-        if (!invalidConstraint.isEmpty()) {
-            invalidHandler(invalidConstraint);
-            return;
-        }
-
-        audioSources = AVCaptureDeviceManager::singleton().bestSourcesForTypeAndConstraints(RealtimeMediaSource::Type::Audio, audioConstraints);
-    }
-
-    if (videoConstraints.isValid()) {
-        String invalidConstraint;
-        AVCaptureDeviceManager::singleton().verifyConstraintsForMediaType(RealtimeMediaSource::Video, videoConstraints, nullptr, invalidConstraint);
-        if (!invalidConstraint.isEmpty()) {
-            invalidHandler(invalidConstraint);
-            return;
-        }
-
-        videoSources = AVCaptureDeviceManager::singleton().bestSourcesForTypeAndConstraints(RealtimeMediaSource::Type::Video, videoConstraints);
-    }
-
-    validHandler(WTFMove(audioSources), WTFMove(videoSources));
+    return videoCaptureSourceFactory();
 }
 
-void RealtimeMediaSourceCenterMac::createMediaStream(NewMediaStreamHandler completionHandler, const String& audioDeviceID, const String& videoDeviceID)
+CaptureDeviceManager& RealtimeMediaSourceCenterMac::audioCaptureDeviceManager()
 {
-    Vector<RefPtr<RealtimeMediaSource>> audioSources;
-    Vector<RefPtr<RealtimeMediaSource>> videoSources;
-
-    if (!audioDeviceID.isEmpty()) {
-        auto audioSource = AVCaptureDeviceManager::singleton().sourceWithUID(audioDeviceID, RealtimeMediaSource::Audio, nullptr);
-        if (audioSource)
-            audioSources.append(WTFMove(audioSource));
-    }
-    if (!videoDeviceID.isEmpty()) {
-        auto videoSource = AVCaptureDeviceManager::singleton().sourceWithUID(videoDeviceID, RealtimeMediaSource::Video, nullptr);
-        if (videoSource)
-            videoSources.append(WTFMove(videoSource));
-    }
-
-    if (videoSources.isEmpty() && audioSources.isEmpty())
-        completionHandler(nullptr);
-    else
-        completionHandler(MediaStreamPrivate::create(audioSources, videoSources));
+#if PLATFORM(MAC)
+    return CoreAudioCaptureDeviceManager::singleton();
+#else
+    return AVAudioSessionCaptureDeviceManager::singleton();
+#endif
 }
 
-Vector<CaptureDevice> RealtimeMediaSourceCenterMac::getMediaStreamDevices()
+CaptureDeviceManager& RealtimeMediaSourceCenterMac::videoCaptureDeviceManager()
 {
-    return AVCaptureDeviceManager::singleton().getSourcesInfo();
+    return AVCaptureDeviceManager::singleton();
+}
+
+CaptureDeviceManager& RealtimeMediaSourceCenterMac::displayCaptureDeviceManager()
+{
+    return DisplayCaptureManagerCocoa::singleton();
 }
 
 } // namespace WebCore

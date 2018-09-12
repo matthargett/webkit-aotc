@@ -23,16 +23,14 @@
  */
 
 #include "config.h"
+#include "MediaStreamAudioDestinationNode.h"
 
 #if ENABLE(WEB_AUDIO) && ENABLE(MEDIA_STREAM)
-
-#include "MediaStreamAudioDestinationNode.h"
 
 #include "AudioContext.h"
 #include "AudioNodeInput.h"
 #include "MediaStream.h"
 #include "MediaStreamAudioSource.h"
-#include "RTCPeerConnectionHandler.h"
 #include <wtf/Locker.h>
 
 namespace WebCore {
@@ -44,22 +42,11 @@ Ref<MediaStreamAudioDestinationNode> MediaStreamAudioDestinationNode::create(Aud
 
 MediaStreamAudioDestinationNode::MediaStreamAudioDestinationNode(AudioContext& context, size_t numberOfChannels)
     : AudioBasicInspectorNode(context, context.sampleRate(), numberOfChannels)
-    , m_mixBus(AudioBus::create(numberOfChannels, ProcessingSizeInFrames))
+    , m_source(MediaStreamAudioSource::create(context.sampleRate()))
+    , m_stream(MediaStream::create(*context.scriptExecutionContext(), MediaStreamPrivate::create(m_source.copyRef())))
 {
     setNodeType(NodeTypeMediaStreamAudioDestination);
-
-    m_source = MediaStreamAudioSource::create();
-    Vector<RefPtr<RealtimeMediaSource>> audioSources(1, m_source);
-    m_stream = MediaStream::create(*context.scriptExecutionContext(), MediaStreamPrivate::create(WTFMove(audioSources), Vector<RefPtr<RealtimeMediaSource>>()));
-
-    m_source->setAudioFormat(numberOfChannels, context.sampleRate());
-
     initialize();
-}
-
-RealtimeMediaSource* MediaStreamAudioDestinationNode::mediaStreamSource()
-{
-    return m_source.get();
 }
 
 MediaStreamAudioDestinationNode::~MediaStreamAudioDestinationNode()
@@ -69,8 +56,7 @@ MediaStreamAudioDestinationNode::~MediaStreamAudioDestinationNode()
 
 void MediaStreamAudioDestinationNode::process(size_t numberOfFrames)
 {
-    m_mixBus->copyFrom(*input(0)->bus());
-    m_source->consumeAudio(m_mixBus.get(), numberOfFrames);
+    m_source->consumeAudio(*input(0)->bus(), numberOfFrames);
 }
 
 void MediaStreamAudioDestinationNode::reset()

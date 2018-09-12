@@ -59,6 +59,8 @@ public:
     virtual bool isRemoteScrollingTree() const { return false; }
     virtual bool isScrollingTreeIOS() const { return false; }
 
+    bool visualViewportEnabled() const { return m_visualViewportEnabled; }
+
     virtual EventResult tryToHandleWheelEvent(const PlatformWheelEvent&) = 0;
     WEBCORE_EXPORT bool shouldHandleWheelEventSynchronously(const PlatformWheelEvent&);
     
@@ -68,15 +70,15 @@ public:
     bool isScrollSnapInProgress();
 
     virtual void invalidate() { }
-    WEBCORE_EXPORT virtual void commitNewTreeState(std::unique_ptr<ScrollingStateTree>);
+    WEBCORE_EXPORT virtual void commitTreeState(std::unique_ptr<ScrollingStateTree>);
 
     void setMainFramePinState(bool pinnedToTheLeft, bool pinnedToTheRight, bool pinnedToTheTop, bool pinnedToTheBottom);
 
-    virtual PassRefPtr<ScrollingTreeNode> createScrollingTreeNode(ScrollingNodeType, ScrollingNodeID) = 0;
+    virtual Ref<ScrollingTreeNode> createScrollingTreeNode(ScrollingNodeType, ScrollingNodeID) = 0;
 
     // Called after a scrolling tree node has handled a scroll and updated its layers.
     // Updates FrameView/RenderLayer scrolling state and GraphicsLayers.
-    virtual void scrollingTreeNodeDidScroll(ScrollingNodeID, const FloatPoint& scrollPosition, SetOrSyncScrollingLayerPosition = SyncScrollingLayerPosition) = 0;
+    virtual void scrollingTreeNodeDidScroll(ScrollingNodeID, const FloatPoint& scrollPosition, const std::optional<FloatPoint>& layoutViewportOrigin, ScrollingLayerPositionAction = ScrollingLayerPositionAction::Sync) = 0;
 
     // Called for requested scroll position updates.
     virtual void scrollingTreeNodeRequestsScroll(ScrollingNodeID, const FloatPoint& /*scrollPosition*/, bool /*representsProgrammaticScroll*/) { }
@@ -87,9 +89,10 @@ public:
 
     // Delegated scrolling has scrolled a node. Update layer positions on descendant tree nodes,
     // and call scrollingTreeNodeDidScroll().
-    WEBCORE_EXPORT virtual void scrollPositionChangedViaDelegatedScrolling(ScrollingNodeID, const WebCore::FloatPoint& scrollPosition, bool inUserInteration);
+    WEBCORE_EXPORT virtual void scrollPositionChangedViaDelegatedScrolling(ScrollingNodeID, const WebCore::FloatPoint& scrollPosition, bool inUserInteraction);
 
-    WEBCORE_EXPORT virtual void currentSnapPointIndicesDidChange(ScrollingNodeID, unsigned horizontal, unsigned vertical) = 0;
+    virtual void reportSynchronousScrollingReasonsChanged(MonotonicTime, SynchronousScrollingReasons) { }
+    virtual void reportExposedUnfilledArea(MonotonicTime, unsigned /* unfilledArea */) { }
 
     FloatPoint mainFrameScrollPosition();
     
@@ -107,6 +110,10 @@ public:
     virtual void setActiveScrollSnapIndices(ScrollingNodeID, unsigned /*horizontalIndex*/, unsigned /*verticalIndex*/) { }
     virtual void deferTestsForReason(WheelEventTestTrigger::ScrollableAreaIdentifier, WheelEventTestTrigger::DeferTestTriggerReason) { }
     virtual void removeTestDeferralForReason(WheelEventTestTrigger::ScrollableAreaIdentifier, WheelEventTestTrigger::DeferTestTriggerReason) { }
+#endif
+
+#if PLATFORM(COCOA)
+    WEBCORE_EXPORT virtual void currentSnapPointIndicesDidChange(ScrollingNodeID, unsigned horizontal, unsigned vertical) = 0;
 #endif
 
     // Can be called from any thread. Will update what edges allow rubber-banding.
@@ -143,8 +150,12 @@ public:
         --m_fixedOrStickyNodeCount;
     }
     
+    WEBCORE_EXPORT String scrollingTreeAsText();
+    
 protected:
     void setMainFrameScrollPosition(FloatPoint);
+    void setVisualViewportEnabled(bool b) { m_visualViewportEnabled = b; }
+
     WEBCORE_EXPORT virtual void handleWheelEvent(const PlatformWheelEvent&);
 
 private:
@@ -182,6 +193,7 @@ private:
     bool m_mainFrameIsScrollSnapping { false };
     bool m_scrollingPerformanceLoggingEnabled { false };
     bool m_isHandlingProgrammaticScroll { false };
+    bool m_visualViewportEnabled { false };
 };
     
 } // namespace WebCore

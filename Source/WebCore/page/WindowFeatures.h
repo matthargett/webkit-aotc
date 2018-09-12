@@ -26,10 +26,10 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef WindowFeatures_h
-#define WindowFeatures_h
+#pragma once
 
-#include <functional>
+#include "DisabledAdaptations.h"
+#include <wtf/Function.h>
 #include <wtf/Optional.h>
 #include <wtf/Vector.h>
 #include <wtf/text/WTFString.h>
@@ -39,10 +39,10 @@ namespace WebCore {
 class FloatRect;
 
 struct WindowFeatures {
-    Optional<float> x;
-    Optional<float> y;
-    Optional<float> width;
-    Optional<float> height;
+    std::optional<float> x;
+    std::optional<float> y;
+    std::optional<float> width;
+    std::optional<float> height;
 
     bool menuBarVisible { true };
     bool statusBarVisible { true };
@@ -53,15 +53,16 @@ struct WindowFeatures {
 
     bool fullscreen { false };
     bool dialog { false };
+    bool noopener { false };
 
     Vector<String> additionalFeatures;
 };
 
 WindowFeatures parseWindowFeatures(StringView windowFeaturesString);
 WindowFeatures parseDialogFeatures(const String& dialogFeaturesString, const FloatRect& screenAvailableRect);
+OptionSet<DisabledAdaptations> parseDisabledAdaptations(const String&);
 
-void processFeaturesString(StringView features, std::function<void(StringView type, StringView value)> callback);
+enum class FeatureMode { Window, Viewport };
+void processFeaturesString(StringView features, FeatureMode, const WTF::Function<void(StringView type, StringView value)>& callback);
 
 } // namespace WebCore
-
-#endif // WindowFeatures_h

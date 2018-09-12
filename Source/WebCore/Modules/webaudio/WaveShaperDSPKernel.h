@@ -22,8 +22,7 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef WaveShaperDSPKernel_h
-#define WaveShaperDSPKernel_h
+#pragma once
 
 #include "AudioArray.h"
 #include "AudioDSPKernel.h"
@@ -34,11 +33,9 @@
 
 namespace WebCore {
 
-class WaveShaperProcessor;
-
 // WaveShaperDSPKernel is an AudioDSPKernel and is responsible for non-linear distortion on one channel.
 
-class WaveShaperDSPKernel : public AudioDSPKernel {
+class WaveShaperDSPKernel final : public AudioDSPKernel {
 public:
     explicit WaveShaperDSPKernel(WaveShaperProcessor*);
 
@@ -71,5 +68,3 @@ protected:
 };
 
 } // namespace WebCore
-
-#endif // WaveShaperDSPKernel_h

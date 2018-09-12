@@ -33,6 +33,7 @@
 #import <WebKit/DOM.h>
 #import <Carbon/Carbon.h>
 #import <wtf/RetainPtr.h>
+#import <wtf/mac/AppKitCompatibilityDeclarations.h>
 
 
 @interface ContextMenuCanCopyURLDelegate : NSObject <WebFrameLoadDelegate> {
@@ -61,7 +62,7 @@ static void contextMenuCopyLink(WebView* webView, int itemIndex)
     DOMHTMLAnchorElement *anchor = (DOMHTMLAnchorElement *)[[documentElement querySelectorAll:@"a"] item:itemIndex];
 
     NSWindow *window = [webView window];
-    NSEvent *event = [NSEvent mouseEventWithType:NSRightMouseDown
+    NSEvent *event = [NSEvent mouseEventWithType:NSEventTypeRightMouseDown
                                         location:NSMakePoint(anchor.offsetLeft + anchor.offsetWidth / 2, window.frame.size.height - (anchor.offsetTop + anchor.offsetHeight / 2))
                                    modifierFlags:0
                                        timestamp:GetCurrentEventTime()
@@ -85,11 +86,10 @@ static void contextMenuCopyLink(WebView* webView, int itemIndex)
     }
 }
 
-
-TEST(WebKit1, ContextMenuCanCopyURL)
+TEST(WebKitLegacy, ContextMenuCanCopyURL)
 {
     RetainPtr<WebView> webView = adoptNS([[WebView alloc] initWithFrame:NSMakeRect(0,0,800,600) frameName:nil groupName:nil]);
-    RetainPtr<NSWindow> window = adoptNS([[NSWindow alloc] initWithContentRect:NSMakeRect(100, 100, 800, 600) styleMask:NSBorderlessWindowMask backing:NSBackingStoreBuffered defer:YES]);
+    RetainPtr<NSWindow> window = adoptNS([[NSWindow alloc] initWithContentRect:NSMakeRect(100, 100, 800, 600) styleMask:NSWindowStyleMaskBorderless backing:NSBackingStoreBuffered defer:YES]);
     RetainPtr<ContextMenuCanCopyURLDelegate> delegate = adoptNS([[ContextMenuCanCopyURLDelegate alloc] init]);
 
     [window.get().contentView addSubview:webView.get()];
@@ -110,6 +110,20 @@ TEST(WebKit1, ContextMenuCanCopyURL)
     NSArray * titles = [WebURLsWithTitles titlesFromPasteboard: [NSPasteboard generalPasteboard]];
     EXPECT_WK_STREQ(@"http://xn--ls8h.la/", [[urls objectAtIndex:0] absoluteString]);
     EXPECT_WK_STREQ(@"http://💩.la", [titles objectAtIndex:0]);
+
+    contextMenuCopyLink(webView.get(), 2);
+
+    urls = [WebURLsWithTitles URLsFromPasteboard:[NSPasteboard generalPasteboard]];
+    titles = [WebURLsWithTitles titlesFromPasteboard:[NSPasteboard generalPasteboard]];
+    EXPECT_WK_STREQ(@"https://www.quirksmode.org/html5/videos/big_buck_bunny.mp4", [[urls objectAtIndex:0] absoluteString]);
+    EXPECT_WK_STREQ(@"big_buck_bunny.mp4", [titles objectAtIndex:0]);
+
+    contextMenuCopyLink(webView.get(), 3);
+
+    urls = [WebURLsWithTitles URLsFromPasteboard:[NSPasteboard generalPasteboard]];
+    titles = [WebURLsWithTitles titlesFromPasteboard:[NSPasteboard generalPasteboard]];
+    EXPECT_WK_STREQ(@"https://en.wikipedia.org/wiki/Gary_Busey/media/File:Texas_Wheelers_cast.JPG", [[urls objectAtIndex:0] absoluteString]);
+    EXPECT_WK_STREQ(@"File:Texas_Wheelers_cast.JPG", [titles objectAtIndex:0]);
 }
 
 } // namespace TestWebKitAPI

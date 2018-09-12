@@ -26,33 +26,33 @@
 #import "config.h"
 #import "RemoteCommandListenerIOS.h"
 
-#if PLATFORM(IOS)
+#if PLATFORM(IOS) && HAVE(MEDIA_PLAYER)
 
+#import <MediaPlayer/MPRemoteCommand.h>
 #import <MediaPlayer/MPRemoteCommandCenter.h>
 #import <MediaPlayer/MPRemoteCommandEvent.h>
-#import <MediaPlayer/MPRemoteCommand.h>
-#import <WebCore/SoftLinking.h>
+#import <wtf/SoftLinking.h>
 
-SOFT_LINK_FRAMEWORK(MediaPlayer)
+SOFT_LINK_FRAMEWORK_OPTIONAL(MediaPlayer)
 SOFT_LINK_CLASS(MediaPlayer, MPRemoteCommandCenter)
 SOFT_LINK_CLASS(MediaPlayer, MPSeekCommandEvent)
-#if __IPHONE_OS_VERSION_MAX_ALLOWED >= 90100
 SOFT_LINK_CLASS(MediaPlayer, MPChangePlaybackPositionCommandEvent)
-#endif
 
 namespace WebCore {
 
 std::unique_ptr<RemoteCommandListener> RemoteCommandListener::create(RemoteCommandListenerClient& client)
 {
+    if (!MediaPlayerLibrary())
+        return nullptr;
+
     return std::make_unique<RemoteCommandListenerIOS>(client);
 }
 
 RemoteCommandListenerIOS::RemoteCommandListenerIOS(RemoteCommandListenerClient& client)
     : RemoteCommandListener(client)
-    , m_weakPtrFactory(this)
 {
     MPRemoteCommandCenter *center = [getMPRemoteCommandCenterClass() sharedCommandCenter];
-    auto weakThis = createWeakPtr();
+    auto weakThis = makeWeakPtr(*this);
     
     m_pauseTarget = [[center pauseCommand] addTargetWithHandler:^(MPRemoteCommandEvent *) {
         callOnMainThread([weakThis] {
@@ -114,7 +114,6 @@ RemoteCommandListenerIOS::RemoteCommandListenerIOS(RemoteCommandListenerClient& 
         return MPRemoteCommandHandlerStatusSuccess;
     }];
 
-#if __IPHONE_OS_VERSION_MAX_ALLOWED >= 90100
     m_seekToTimeTarget = [[center changePlaybackPositionCommand] addTargetWithHandler:^(MPRemoteCommandEvent *event) {
         ASSERT([event isKindOfClass:getMPChangePlaybackPositionCommandEventClass()]);
 
@@ -132,7 +131,6 @@ RemoteCommandListenerIOS::RemoteCommandListenerIOS(RemoteCommandListenerClient& 
 
         return MPRemoteCommandHandlerStatusSuccess;
     }];
-#endif
 }
 
 RemoteCommandListenerIOS::~RemoteCommandListenerIOS()
@@ -143,18 +141,14 @@ RemoteCommandListenerIOS::~RemoteCommandListenerIOS()
     [[center togglePlayPauseCommand] removeTarget:m_togglePlayPauseTarget.get()];
     [[center seekForwardCommand] removeTarget:m_seekForwardTarget.get()];
     [[center seekBackwardCommand] removeTarget:m_seekBackwardTarget.get()];
-#if __IPHONE_OS_VERSION_MAX_ALLOWED >= 90100
     [[center changePlaybackPositionCommand] removeTarget:m_seekToTimeTarget.get()];
-#endif
 }
 
 void RemoteCommandListenerIOS::updateSupportedCommands()
 {
-#if __IPHONE_OS_VERSION_MAX_ALLOWED >= 90100
     [[[getMPRemoteCommandCenterClass() sharedCommandCenter] changePlaybackPositionCommand] setEnabled:!!client().supportsSeeking()];
-#endif
 }
 
 }
 
-#endif
+#endif // PLATFORM(IOS) && HAVE(MEDIA_PLAYER)

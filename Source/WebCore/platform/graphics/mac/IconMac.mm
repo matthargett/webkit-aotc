@@ -21,14 +21,14 @@
 #import "config.h"
 #import "Icon.h"
 
-#if !PLATFORM(IOS)
+#if PLATFORM(MAC)
 
 #import "GraphicsContext.h"
 #import "IntRect.h"
 #import "LocalCurrentGraphicsContext.h"
 #import "UTIUtilities.h"
 #import <wtf/RefPtr.h>
-#include <wtf/text/WTFString.h>
+#import <wtf/text/WTFString.h>
 
 namespace WebCore {
 
@@ -98,12 +98,9 @@ void Icon::paint(GraphicsContext& context, const FloatRect& rect)
 
     LocalCurrentGraphicsContext localCurrentGC(context);
 
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
-    [m_nsImage drawInRect:rect fromRect:NSMakeRect(0, 0, [m_nsImage size].width, [m_nsImage size].height) operation:NSCompositeSourceOver fraction:1.0f];
-#pragma clang diagnostic pop
+    [m_nsImage drawInRect:rect fromRect:NSMakeRect(0, 0, [m_nsImage size].width, [m_nsImage size].height) operation:NSCompositingOperationSourceOver fraction:1.0f];
 }
 
 }
 
-#endif // !PLATFORM(IOS)
+#endif // PLATFORM(MAC)

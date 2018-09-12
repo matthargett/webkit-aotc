@@ -29,10 +29,8 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef AsyncFileStream_h
-#define AsyncFileStream_h
+#pragma once
 
-#include <functional>
 #include <wtf/Forward.h>
 #include <wtf/Function.h>
 
@@ -49,20 +47,15 @@ public:
 
     void getSize(const String& path, double expectedModificationTime);
     void openForRead(const String& path, long long offset, long long length);
-    void openForWrite(const String& path);
     void close();
     void read(char* buffer, int length);
-    void write(const URL& blobURL, long long position, int length);
-    void truncate(long long position);
 
 private:
     void start();
-    void perform(Function<std::function<void(FileStreamClient&)>(FileStream&)>&&);
+    void perform(WTF::Function<WTF::Function<void(FileStreamClient&)>(FileStream&)>&&);
 
     struct Internals;
     std::unique_ptr<Internals> m_internals;
 };
 
 } // namespace WebCore
-
-#endif // AsyncFileStream_h

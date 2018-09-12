@@ -20,11 +20,9 @@
     Boston, MA 02110-1301, USA.
 */
 
-#ifndef CachedSVGDocument_h
-#define CachedSVGDocument_h
+#pragma once
 
 #include "CachedResource.h"
-#include "CachedResourceHandle.h"
 #include "SVGDocument.h"
 #include "TextResourceDecoder.h"
 
@@ -32,7 +30,7 @@ namespace WebCore {
 
 class CachedSVGDocument final : public CachedResource {
 public:
-    explicit CachedSVGDocument(CachedResourceRequest&&, SessionID);
+    explicit CachedSVGDocument(CachedResourceRequest&&, PAL::SessionID);
     virtual ~CachedSVGDocument();
 
     SVGDocument* document() const { return m_document.get(); }
@@ -50,6 +48,4 @@ private:
 
 } // namespace WebCore
 
-SPECIALIZE_TYPE_TRAITS_CACHED_RESOURCE(CachedSVGDocument, CachedResource::SVGDocumentResource)
-
-#endif // CachedSVGDocument_h
+SPECIALIZE_TYPE_TRAITS_CACHED_RESOURCE(CachedSVGDocument, CachedResource::Type::SVGDocumentResource)

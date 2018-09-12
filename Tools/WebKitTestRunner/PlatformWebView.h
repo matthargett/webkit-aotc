@@ -27,15 +27,16 @@
 #define PlatformWebView_h
 
 #include "TestOptions.h"
-#include <WebKit/WKRetainPtr.h>
 
 #if PLATFORM(COCOA) && !defined(BUILDING_GTK__)
 #include <WebKit/WKFoundation.h>
+#include <wtf/RetainPtr.h>
 OBJC_CLASS NSView;
 OBJC_CLASS UIView;
 OBJC_CLASS TestRunnerWKWebView;
 OBJC_CLASS WKWebViewConfiguration;
 OBJC_CLASS WebKitTestRunnerWindow;
+typedef struct CGImage *CGImageRef;
 
 #if WK_API_ENABLED
 typedef TestRunnerWKWebView *PlatformWKView;
@@ -43,13 +44,19 @@ typedef TestRunnerWKWebView *PlatformWKView;
 typedef NSView *PlatformWKView;
 #endif
 typedef WebKitTestRunnerWindow *PlatformWindow;
+typedef RetainPtr<CGImageRef> PlatformImage;
 #elif defined(BUILDING_GTK__)
 typedef struct _GtkWidget GtkWidget;
 typedef WKViewRef PlatformWKView;
 typedef GtkWidget* PlatformWindow;
-#elif PLATFORM(EFL)
-typedef Evas_Object* PlatformWKView;
-typedef Ecore_Evas* PlatformWindow;
+typedef cairo_surface_t *PlatformImage;
+#elif PLATFORM(WPE)
+namespace WPEToolingBackends {
+class HeadlessViewBackend;
+}
+typedef WKViewRef PlatformWKView;
+typedef WPEToolingBackends::HeadlessViewBackend* PlatformWindow;
+typedef cairo_surface_t* PlatformImage;
 #endif
 
 namespace WTR {
@@ -67,11 +74,17 @@ public:
     PlatformWKView platformView() { return m_view; }
     PlatformWindow platformWindow() { return m_window; }
     static PlatformWindow keyWindow();
-    void resizeTo(unsigned width, unsigned height);
+
+    enum class WebViewSizingMode {
+        Default,
+        HeightRespectsStatusBar
+    };
+
+    void resizeTo(unsigned width, unsigned height, WebViewSizingMode = WebViewSizingMode::Default);
     void focus();
 
     WKRect windowFrame();
-    void setWindowFrame(WKRect);
+    void setWindowFrame(WKRect, WebViewSizingMode = WebViewSizingMode::Default);
 
     void didInitializeClients();
     
@@ -81,9 +94,15 @@ public:
     void setWindowIsKey(bool);
     bool windowIsKey() const { return m_windowIsKey; }
 
-    bool viewSupportsOptions(const TestOptions&) const;
+    bool drawsBackground() const;
+    void setDrawsBackground(bool);
 
-    WKRetainPtr<WKImageRef> windowSnapshotImage();
+    void removeFromWindow();
+    void addToWindow();
+
+    bool viewSupportsOptions(const TestOptions& options) const { return !options.runSingly && m_options.hasSameInitializationOptions(options); }
+
+    PlatformImage windowSnapshotImage();
     const TestOptions& options() const { return m_options; }
 
     void changeWindowScaleIfNeeded(float newScale);
@@ -100,9 +119,8 @@ private:
     PlatformWindow m_window;
     bool m_windowIsKey;
     const TestOptions m_options;
-
-#if PLATFORM(EFL)
-    bool m_usingFixedLayout;
+#if PLATFORM(GTK)
+    GtkWidget* m_otherWindow { nullptr };
 #endif
 };
 

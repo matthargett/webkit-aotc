@@ -27,9 +27,9 @@
 #include "HTMLResourcePreloader.h"
 
 #include "CachedResourceLoader.h"
+#include "CrossOriginAccessControl.h"
 #include "Document.h"
 
-#include "MediaList.h"
 #include "MediaQueryEvaluator.h"
 #include "RenderView.h"
 
@@ -43,9 +43,24 @@ URL PreloadRequest::completeURL(Document& document)
 CachedResourceRequest PreloadRequest::resourceRequest(Document& document)
 {
     ASSERT(isMainThread());
-    CachedResourceRequest request(completeURL(document), CachedResourceLoader::defaultCachedResourceOptions());
+
+    bool skipContentSecurityPolicyCheck = false;
+    if (m_resourceType == CachedResource::Type::Script)
+        skipContentSecurityPolicyCheck = document.contentSecurityPolicy()->allowScriptWithNonce(m_nonceAttribute);
+    else if (m_resourceType == CachedResource::Type::CSSStyleSheet)
+        skipContentSecurityPolicyCheck = document.contentSecurityPolicy()->allowStyleWithNonce(m_nonceAttribute);
+
+    ResourceLoaderOptions options = CachedResourceLoader::defaultCachedResourceOptions();
+    if (skipContentSecurityPolicyCheck)
+        options.contentSecurityPolicyImposition = ContentSecurityPolicyImposition::SkipPolicyCheck;
+
+    String crossOriginMode = m_crossOriginMode;
+    if (m_moduleScript == ModuleScript::Yes) {
+        if (crossOriginMode.isNull())
+            crossOriginMode = "omit"_s;
+    }
+    auto request = createPotentialAccessControlRequest(completeURL(document), document, crossOriginMode, WTFMove(options));
     request.setInitiator(m_initiator);
-    request.setAsPotentiallyCrossOrigin(m_crossOriginMode, document);
     return request;
 }
 
@@ -55,17 +70,11 @@ void HTMLResourcePreloader::preload(PreloadRequestStream requests)
         preload(WTFMove(request));
 }
 
-static bool mediaAttributeMatches(Document& document, const RenderStyle* renderStyle, const String& attributeValue)
-{
-    auto mediaQueries = MediaQuerySet::createAllowingDescriptionSyntax(attributeValue);
-    return MediaQueryEvaluator { "screen", document, renderStyle }.evaluate(mediaQueries.get());
-}
-
 void HTMLResourcePreloader::preload(std::unique_ptr<PreloadRequest> preload)
 {
     ASSERT(m_document.frame());
     ASSERT(m_document.renderView());
-    if (!preload->media().isEmpty() && !mediaAttributeMatches(m_document, &m_document.renderView()->style(), preload->media()))
+    if (!preload->media().isEmpty() && !MediaQueryEvaluator::mediaAttributeMatches(m_document, preload->media()))
         return;
 
     m_document.cachedResourceLoader().preload(preload->resourceType(), preload->resourceRequest(m_document));

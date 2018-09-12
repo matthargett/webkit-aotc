@@ -307,6 +307,18 @@ public:
             m_index = m_bitVector->findBit(m_index + 1, true);
             return *this;
         }
+
+        iterator operator++(int)
+        {
+            iterator result = *this;
+            ++(*this);
+            return result;
+        }
+
+        bool isAtEnd() const
+        {
+            return m_index >= m_bitVector->size();
+        }
         
         bool operator==(const iterator& other) const
         {
@@ -470,7 +482,6 @@ template<> struct DefaultHash<BitVector> {
     typedef BitVectorHash Hash;
 };
 
-template<typename T> struct HashTraits;
 template<> struct HashTraits<BitVector> : public CustomHashTraits<BitVector> { };
 
 } // namespace WTF

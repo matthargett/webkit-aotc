@@ -28,11 +28,11 @@
 
 [
     NoInterfaceObject,
-    Conditional=READABLE_STREAM_API,
+    Conditional=STREAMS_API,
     SkipVTableValidation
 ] interface ReadableStreamSource {
-    [Custom] Promise start(ReadableStreamDefaultController controller);
-    [Custom] Promise pull(ReadableStreamDefaultController controller);
+    [Custom] Promise<void> start(ReadableStreamDefaultController controller);
+    [Custom] Promise<void> pull(ReadableStreamDefaultController controller);
     void cancel(any reason);
 
     // Place holder to keep the controller linked to the source.

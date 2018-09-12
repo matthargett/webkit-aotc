@@ -23,8 +23,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
  */
 
-#ifndef HTMLInterchange_h
-#define HTMLInterchange_h
+#pragma once
 
 #include <wtf/Forward.h>
 
@@ -37,11 +36,10 @@ class Text;
 #define ApplePasteAsQuotation     "Apple-paste-as-quotation"
 #define AppleStyleSpanClass       "Apple-style-span"
 #define AppleTabSpanClass         "Apple-tab-span"
+#define WebKitMSOListQuirksStyle  "WebKit-mso-list-quirks-style"
 
 enum EAnnotateForInterchange { DoNotAnnotateForInterchange, AnnotateForInterchange };
 
 String convertHTMLTextToInterchangeFormat(const String&, const Text*);
 
-}
-
-#endif
+} // namespace WebCore

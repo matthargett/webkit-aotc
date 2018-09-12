@@ -27,12 +27,10 @@
 #include "config.h"
 #include "TransitionEvent.h"
 
-#include "EventNames.h"
-
 namespace WebCore {
 
 TransitionEvent::TransitionEvent(const AtomicString& type, const String& propertyName, double elapsedTime, const String& pseudoElement)
-    : Event(type, true, true)
+    : Event(type, CanBubble::Yes, IsCancelable::Yes)
     , m_propertyName(propertyName)
     , m_elapsedTime(elapsedTime)
     , m_pseudoElement(pseudoElement)
@@ -47,9 +45,7 @@ TransitionEvent::TransitionEvent(const AtomicString& type, const Init& initializ
 {
 }
 
-TransitionEvent::~TransitionEvent()
-{
-}
+TransitionEvent::~TransitionEvent() = default;
 
 const String& TransitionEvent::propertyName() const
 {

@@ -108,8 +108,7 @@ enum ScrollGranularity : uint8_t {
     ScrollByLine,
     ScrollByPage,
     ScrollByDocument,
-    ScrollByPixel,
-    ScrollByPrecisePixel
+    ScrollByPixel
 };
 
 enum ScrollElasticity {
@@ -123,6 +122,8 @@ enum ScrollbarOrientation { HorizontalScrollbar, VerticalScrollbar };
 enum ScrollbarMode { ScrollbarAuto, ScrollbarAlwaysOff, ScrollbarAlwaysOn };
 
 enum ScrollbarControlSize { RegularScrollbar, SmallScrollbar };
+
+enum class ScrollbarExpansionState { Regular, Expanded };
 
 enum class ScrollEventAxis { Horizontal, Vertical };
 
@@ -173,6 +174,11 @@ enum ScrollPinningBehavior {
     DoNotPin,
     PinToTop,
     PinToBottom
+};
+
+enum class ScrollClamping {
+    Unclamped,
+    Clamped
 };
 
 enum ScrollBehaviorForFixedElements {

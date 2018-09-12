@@ -23,18 +23,25 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef CSSLineBoxContainValue_h
-#define CSSLineBoxContainValue_h
+#pragma once
 
 #include "CSSValue.h"
-#include <wtf/RefPtr.h>
+#include <wtf/Ref.h>
 
 namespace WebCore {
 
 class CSSPrimitiveValue;
 
-enum LineBoxContainFlags { LineBoxContainNone = 0x0, LineBoxContainBlock = 0x1, LineBoxContainInline = 0x2, LineBoxContainFont = 0x4, LineBoxContainGlyphs = 0x8,
-                           LineBoxContainReplaced = 0x10, LineBoxContainInlineBox = 0x20, LineBoxContainInitialLetter = 0x40 };
+enum LineBoxContainFlags {
+    LineBoxContainNone = 0x0,
+    LineBoxContainBlock = 0x1,
+    LineBoxContainInline = 0x2,
+    LineBoxContainFont = 0x4,
+    LineBoxContainGlyphs = 0x8,
+    LineBoxContainReplaced = 0x10,
+    LineBoxContainInlineBox = 0x20,
+    LineBoxContainInitialLetter = 0x40
+};
 typedef unsigned LineBoxContain;
 
 // Used for text-CSSLineBoxContain and box-CSSLineBoxContain
@@ -58,5 +65,3 @@ private:
 } // namespace WebCore
 
 SPECIALIZE_TYPE_TRAITS_CSS_VALUE(CSSLineBoxContainValue, isLineBoxContainValue())
-
-#endif // CSSLineBoxContainValue_h

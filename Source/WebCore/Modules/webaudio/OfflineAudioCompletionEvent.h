@@ -22,8 +22,7 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef OfflineAudioCompletionEvent_h
-#define OfflineAudioCompletionEvent_h
+#pragma once
 
 #include "AudioBuffer.h"
 #include "Event.h"
@@ -31,9 +30,7 @@
 
 namespace WebCore {
 
-class AudioBuffer;
-    
-class OfflineAudioCompletionEvent : public Event {
+class OfflineAudioCompletionEvent final : public Event {
 public:
     static Ref<OfflineAudioCompletionEvent> create(RefPtr<AudioBuffer>&& renderedBuffer);
     
@@ -50,5 +47,3 @@ private:
 };
 
 } // namespace WebCore
-
-#endif // OfflineAudioCompletionEvent_h

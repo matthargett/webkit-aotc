@@ -28,8 +28,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef StorageUsageCallback_h
-#define StorageUsageCallback_h
+#pragma once
 
 #if ENABLE(QUOTA)
 
@@ -39,12 +38,10 @@ namespace WebCore {
 
 class StorageUsageCallback : public RefCounted<StorageUsageCallback> {
 public:
-    virtual ~StorageUsageCallback() { }
+    virtual ~StorageUsageCallback() = default;
     virtual bool handleEvent(unsigned long long currentUsageInBytes, unsigned long long currentQuotaInBytes) = 0;
 };
 
-} // namespace
+} // namespace WebCore
 
 #endif // ENABLE(QUOTA)
-
-#endif // StorageUsageCallback_h

@@ -32,7 +32,7 @@ function of(/* items... */)
 {
     "use strict";
     let len = arguments.length;
-    let constructFunction = this.@allocateTypedArray;
+    let constructFunction = @getByIdDirectPrivate(this, "allocateTypedArray");
     if (constructFunction === @undefined)
         @throwTypeError("TypedArray.of requires its this argument to subclass a TypedArray constructor");
 
@@ -48,7 +48,7 @@ function from(items /* [ , mapfn [ , thisArg ] ] */)
 {
     "use strict";
 
-    let mapFn = arguments[1];
+    let mapFn = @argument(1);
 
     let thisArg;
 
@@ -56,12 +56,10 @@ function from(items /* [ , mapfn [ , thisArg ] ] */)
         if (typeof mapFn !== "function")
             @throwTypeError("TypedArray.from requires that the second argument, when provided, be a function");
 
-        if (arguments.length > 2)
-            thisArg = arguments[2];
+        thisArg = @argument(2);
     }
 
-    if (items == null)
-        @throwTypeError("TypedArray.from requires an array-like object - not null or undefined");
+    let arrayLike = @toObject(items, "TypedArray.from requires an array-like object - not null or undefined");
 
     let iteratorMethod = items.@iteratorSymbol;
     if (iteratorMethod != null) {
@@ -87,7 +85,7 @@ function from(items /* [ , mapfn [ , thisArg ] ] */)
             k++;
         }
 
-        let constructFunction = this.@allocateTypedArray;
+        let constructFunction = @getByIdDirectPrivate(this, "allocateTypedArray");
         if (constructFunction === @undefined)
             @throwTypeError("TypedArray.from requires its this argument subclass a TypedArray constructor");
 
@@ -100,10 +98,9 @@ function from(items /* [ , mapfn [ , thisArg ] ] */)
         return result;
     }
 
-    let arrayLike = @Object(items);
     let arrayLikeLength = @toLength(arrayLike.length);
 
-    let constructFunction = this.@allocateTypedArray;
+    let constructFunction = @getByIdDirectPrivate(this, "allocateTypedArray");
     if (constructFunction === @undefined)
         @throwTypeError("this does not subclass a TypedArray constructor");
 

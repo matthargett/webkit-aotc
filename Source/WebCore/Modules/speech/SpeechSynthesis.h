@@ -23,12 +23,10 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef SpeechSynthesis_h
-#define SpeechSynthesis_h
+#pragma once
 
 #if ENABLE(SPEECH_SYNTHESIS)
 
-#include "PlatformExportMacros.h"
 #include "PlatformSpeechSynthesisUtterance.h"
 #include "PlatformSpeechSynthesizer.h"
 #include "SpeechSynthesisUtterance.h"
@@ -99,5 +97,3 @@ private:
 } // namespace WebCore
 
 #endif // ENABLE(SPEECH_SYNTHESIS)
-
-#endif // SpeechSynthesisEvent_h

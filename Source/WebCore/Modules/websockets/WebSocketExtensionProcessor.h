@@ -28,10 +28,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef WebSocketExtensionProcessor_h
-#define WebSocketExtensionProcessor_h
-
-#if ENABLE(WEB_SOCKETS)
+#pragma once
 
 #include <wtf/HashMap.h>
 #include <wtf/text/WTFString.h>
@@ -40,7 +37,7 @@ namespace WebCore {
 
 class WebSocketExtensionProcessor {
 public:
-    virtual ~WebSocketExtensionProcessor() { }
+    virtual ~WebSocketExtensionProcessor() = default;
 
     String extensionToken() const { return m_extensionToken; }
 
@@ -67,8 +64,4 @@ private:
     String m_extensionToken;
 };
 
-}
-
-#endif // ENABLE(WEB_SOCKETS)
-
-#endif // WebSocketExtensionProcessor_h
+} // namespace WebCore

@@ -45,7 +45,7 @@ typedef struct objc_object* PlatformUIElement;
 #include <oleacc.h>
 
 typedef COMPtr<IAccessible> PlatformUIElement;
-#elif HAVE(ACCESSIBILITY) && (PLATFORM(GTK) || PLATFORM(EFL))
+#elif HAVE(ACCESSIBILITY) && PLATFORM(GTK)
 #include "AccessibilityNotificationHandlerAtk.h"
 #include <atk/atk.h>
 typedef AtkObject* PlatformUIElement;
@@ -152,6 +152,7 @@ public:
     AccessibilityUIElement selectedChildAtIndex(unsigned) const;
     void setSelectedChildAtIndex(unsigned) const;
     void removeSelectionAtIndex(unsigned) const;
+    void clearSelectedChildren() const;
     
     bool isExpanded() const;
     bool isChecked() const;
@@ -159,6 +160,8 @@ public:
     bool isOffScreen() const;
     bool isCollapsed() const;
     bool isIgnored() const;
+    bool isSingleLine() const;
+    bool isMultiLine() const;
     bool isIndeterminate() const;
     bool hasPopup() const;
     int hierarchicalLevel() const;
@@ -170,7 +173,7 @@ public:
     JSStringRef classList() const;
 
     // CSS3-speech properties.
-    JSStringRef speak();
+    JSStringRef speakAs();
     
     // Table-specific attributes
     JSStringRef attributesOfColumnHeaders();
@@ -229,9 +232,10 @@ public:
     
     bool hasContainedByFieldsetTrait();
     AccessibilityUIElement fieldsetAncestorElement();
+    JSStringRef attributedStringForElement();
 #endif
 
-#if PLATFORM(GTK) || PLATFORM(EFL)
+#if PLATFORM(GTK)
     // Text-specific
     JSStringRef characterAtOffset(int offset);
     JSStringRef wordAtOffset(int offset);
@@ -275,6 +279,8 @@ public:
     bool setSelectedVisibleTextRange(AccessibilityTextMarkerRange*);
     
     JSStringRef stringForTextMarkerRange(AccessibilityTextMarkerRange*);
+    JSStringRef attributedStringForTextMarkerRange(AccessibilityTextMarkerRange*);
+    JSStringRef attributedStringForTextMarkerRangeWithOptions(AccessibilityTextMarkerRange*, bool includeSpellCheck);
     int textMarkerRangeLength(AccessibilityTextMarkerRange*);
     bool attributedStringForTextMarkerRangeContainsAttribute(JSStringRef, AccessibilityTextMarkerRange*);
     int indexForTextMarker(AccessibilityTextMarker*);
@@ -303,6 +309,8 @@ public:
     bool isTextArea() const;
     bool isSearchField() const;
     
+    AccessibilityTextMarkerRange textMarkerRangeMatchesTextNearMarkers(JSStringRef, AccessibilityTextMarker*, AccessibilityTextMarker*);
+    
 #endif // PLATFORM(IOS)
 
 #if PLATFORM(MAC) && !PLATFORM(IOS)
@@ -323,7 +331,7 @@ private:
     NotificationHandler m_notificationHandler;
 #endif
 
-#if HAVE(ACCESSIBILITY) && (PLATFORM(GTK) || PLATFORM(EFL))
+#if HAVE(ACCESSIBILITY) && PLATFORM(GTK)
     RefPtr<AccessibilityNotificationHandler> m_notificationHandler;
 #endif
 };

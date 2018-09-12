@@ -30,6 +30,7 @@
 #import "ScriptController.h"
 
 #import "BridgeJSC.h"
+#import "CommonVM.h"
 #import "DOMWindow.h"
 #import "Frame.h"
 #import "FrameLoader.h"
@@ -41,7 +42,7 @@
 #import "runtime_root.h"
 #import <JavaScriptCore/APICast.h>
 #import <JavaScriptCore/JSContextInternal.h>
-#import <runtime/JSLock.h>
+#import <JavaScriptCore/JSLock.h>
 
 #if ENABLE(NETSCAPE_PLUGIN_API)
 #import "c_instance.h"
@@ -52,7 +53,7 @@
 @interface NSObject (WebPlugin)
 - (id)objectForWebScript;
 - (NPObject *)createPluginScriptableObject;
-- (PassRefPtr<JSC::Bindings::Instance>)createPluginBindingsInstance:(PassRefPtr<JSC::Bindings::RootObject>)rootObject;
+- (RefPtr<JSC::Bindings::Instance>)createPluginBindingsInstance:(Ref<JSC::Bindings::RootObject>&&)rootObject;
 @end
 
 using namespace JSC::Bindings;
@@ -65,7 +66,7 @@ RefPtr<JSC::Bindings::Instance> ScriptController::createScriptInstanceForWidget(
     if (!widgetView)
         return nullptr;
 
-    auto rootObject = createRootObject(widgetView);
+    auto rootObject = createRootObject((__bridge void*)widgetView);
 
     if ([widgetView respondsToSelector:@selector(createPluginBindingsInstance:)])
         return [widgetView createPluginBindingsInstance:WTFMove(rootObject)];
@@ -100,9 +101,9 @@ WebScriptObject *ScriptController::windowScriptObject()
         return nil;
 
     if (!m_windowScriptObject) {
-        JSC::JSLockHolder lock(JSDOMWindowBase::commonVM());
+        JSC::JSLockHolder lock(commonVM());
         JSC::Bindings::RootObject* root = bindingRootObject();
-        m_windowScriptObject = [WebScriptObject scriptObjectForJSObject:toRef(windowShell(pluginWorld())) originRootObject:root rootObject:root];
+        m_windowScriptObject = [WebScriptObject scriptObjectForJSObject:toRef(&jsWindowProxy(pluginWorld())) originRootObject:root rootObject:root];
     }
 
     return m_windowScriptObject.get();

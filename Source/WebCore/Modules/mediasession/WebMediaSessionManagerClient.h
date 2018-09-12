@@ -23,8 +23,7 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef WebMediaSessionManagerClient_h
-#define WebMediaSessionManagerClient_h
+#pragma once
 
 #if ENABLE(WIRELESS_PLAYBACK_TARGET)
 
@@ -34,11 +33,9 @@
 
 namespace WebCore {
 
-class MediaPlaybackTarget;
-
 class WebMediaSessionManagerClient {
 public:
-    virtual ~WebMediaSessionManagerClient() { }
+    virtual ~WebMediaSessionManagerClient() = default;
 
     virtual void setPlaybackTarget(uint64_t, Ref<MediaPlaybackTarget>&&) = 0;
     virtual void externalOutputDeviceAvailableDidChange(uint64_t, bool) = 0;
@@ -48,5 +45,3 @@ public:
 } // namespace WebCore
 
 #endif // ENABLE(WIRELESS_PLAYBACK_TARGET)
-
-#endif // WebMediaSessionManagerClient_h

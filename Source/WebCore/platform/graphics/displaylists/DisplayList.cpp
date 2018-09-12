@@ -28,8 +28,8 @@
 
 #include "DisplayListItems.h"
 #include "Logging.h"
-#include "TextStream.h"
 #include <wtf/StdLibExtras.h>
+#include <wtf/text/TextStream.h>
 
 namespace WebCore {
 namespace DisplayList {
@@ -38,7 +38,7 @@ namespace DisplayList {
 WTF::CString DisplayList::description() const
 {
     TextStream ts;
-    ts << *this;
+    ts << this;
     return ts.release().utf8();
 }
 
@@ -87,7 +87,7 @@ bool DisplayList::shouldDumpForFlags(AsTextFlags flags, const Item& item)
 
 String DisplayList::asText(AsTextFlags flags) const
 {
-    TextStream stream;
+    TextStream stream(TextStream::LineMode::MultipleLine, TextStream::Formatting::SVGStyleRect);
     for (auto& item : m_list) {
         if (!shouldDumpForFlags(flags, item))
             continue;

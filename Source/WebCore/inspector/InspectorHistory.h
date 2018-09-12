@@ -30,48 +30,46 @@
 
 #pragma once
 
-#include "ExceptionCode.h"
+#include "ExceptionOr.h"
 #include <wtf/Vector.h>
-#include <wtf/text/WTFString.h>
 
 namespace WebCore {
 
 class InspectorHistory final {
-    WTF_MAKE_NONCOPYABLE(InspectorHistory); WTF_MAKE_FAST_ALLOCATED;
+    WTF_MAKE_NONCOPYABLE(InspectorHistory);
+    WTF_MAKE_FAST_ALLOCATED;
 public:
     class Action {
         WTF_MAKE_FAST_ALLOCATED;
     public:
-        Action(const String& name);
-        virtual ~Action();
-        virtual String toString();
+        virtual ~Action() = default;
 
-        virtual String mergeId();
-        virtual void merge(std::unique_ptr<Action>);
+        virtual String mergeId() { return emptyString(); }
+        virtual void merge(std::unique_ptr<Action>) { };
 
-        virtual bool perform(ExceptionCode&) = 0;
+        virtual ExceptionOr<void> perform() = 0;
 
-        virtual bool undo(ExceptionCode&) = 0;
-        virtual bool redo(ExceptionCode&) = 0;
+        virtual ExceptionOr<void> undo() = 0;
+        virtual ExceptionOr<void> redo() = 0;
 
-        virtual bool isUndoableStateMark();
+        virtual bool isUndoableStateMark() { return false; }
+
     private:
         String m_name;
     };
 
-    InspectorHistory();
-    ~InspectorHistory();
+    InspectorHistory() = default;
 
-    bool perform(std::unique_ptr<Action>, ExceptionCode&);
+    ExceptionOr<void> perform(std::unique_ptr<Action>);
     void markUndoableState();
 
-    bool undo(ExceptionCode&);
-    bool redo(ExceptionCode&);
+    ExceptionOr<void> undo();
+    ExceptionOr<void> redo();
     void reset();
 
 private:
     Vector<std::unique_ptr<Action>> m_history;
-    size_t m_afterLastActionIndex;
+    size_t m_afterLastActionIndex { 0 };
 };
 
 } // namespace WebCore

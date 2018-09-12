@@ -22,19 +22,15 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef AudioDestinationNode_h
-#define AudioDestinationNode_h
+#pragma once
 
-#include "AudioBuffer.h"
 #include "AudioBus.h"
 #include "AudioIOCallback.h"
 #include "AudioNode.h"
-#include "AudioSourceProvider.h"
 #include <wtf/Function.h>
 
 namespace WebCore {
 
-class AudioBus;
 class AudioContext;
 
 class AudioDestinationNode : public AudioNode, public AudioIOCallback {
@@ -84,5 +80,3 @@ protected:
 };
 
 } // namespace WebCore
-
-#endif // AudioDestinationNode_h

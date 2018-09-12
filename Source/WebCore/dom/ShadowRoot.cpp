@@ -30,15 +30,18 @@
 
 #include "CSSStyleSheet.h"
 #include "ElementTraversal.h"
-#include "ExceptionCode.h"
+#include "HTMLSlotElement.h"
 #include "RenderElement.h"
 #include "RuntimeEnabledFeatures.h"
 #include "SlotAssignment.h"
 #include "StyleResolver.h"
 #include "StyleScope.h"
 #include "markup.h"
+#include <wtf/IsoMallocInlines.h>
 
 namespace WebCore {
+
+WTF_MAKE_ISO_ALLOCATED_IMPL(ShadowRoot);
 
 struct SameSizeAsShadowRoot : public DocumentFragment, public TreeScope {
     unsigned countersAndFlags[1];
@@ -70,32 +73,53 @@ ShadowRoot::ShadowRoot(Document& document, std::unique_ptr<SlotAssignment>&& slo
 
 ShadowRoot::~ShadowRoot()
 {
+    if (isConnected())
+        document().didRemoveInDocumentShadowRoot(*this);
+
     // We cannot let ContainerNode destructor call willBeDeletedFrom()
     // for this ShadowRoot instance because TreeScope destructor
     // clears Node::m_treeScope thus ContainerNode is no longer able
     // to access it Document reference after that.
     willBeDeletedFrom(document());
 
+    ASSERT(!m_hasBegunDeletingDetachedChildren);
+    m_hasBegunDeletingDetachedChildren = true;
+
     // We must remove all of our children first before the TreeScope destructor
-    // runs so we don't go through TreeScopeAdopter for each child with a
+    // runs so we don't go through Node::setTreeScopeRecursively for each child with a
     // destructed tree scope in each descendant.
     removeDetachedChildren();
 }
 
-Node::InsertionNotificationRequest ShadowRoot::insertedInto(ContainerNode& insertionPoint)
+Node::InsertedIntoAncestorResult ShadowRoot::insertedIntoAncestor(InsertionType insertionType, ContainerNode& parentOfInsertedTree)
 {
-    bool wasInDocument = inDocument();
-    DocumentFragment::insertedInto(insertionPoint);
-    if (insertionPoint.inDocument() && !wasInDocument)
+    DocumentFragment::insertedIntoAncestor(insertionType, parentOfInsertedTree);
+    if (insertionType.connectedToDocument)
         document().didInsertInDocumentShadowRoot(*this);
-    return InsertionDone;
+    return InsertedIntoAncestorResult::Done;
 }
 
-void ShadowRoot::removedFrom(ContainerNode& insertionPoint)
+void ShadowRoot::removedFromAncestor(RemovalType removalType, ContainerNode& oldParentOfRemovedTree)
 {
-    DocumentFragment::removedFrom(insertionPoint);
-    if (insertionPoint.inDocument() && !inDocument())
+    DocumentFragment::removedFromAncestor(removalType, oldParentOfRemovedTree);
+    if (removalType.disconnectedFromDocument)
         document().didRemoveInDocumentShadowRoot(*this);
+}
+
+void ShadowRoot::moveShadowRootToNewParentScope(TreeScope& newScope, Document& newDocument)
+{
+    setParentTreeScope(newScope);
+    moveShadowRootToNewDocument(newDocument);
+}
+
+void ShadowRoot::moveShadowRootToNewDocument(Document& newDocument)
+{
+    setDocumentScope(newDocument);
+    RELEASE_ASSERT_WITH_SECURITY_IMPLICATION(!parentTreeScope() || &parentTreeScope()->documentScope() == &newDocument);
+
+    // Style scopes are document specific.
+    m_styleScope = std::make_unique<Style::Scope>(*this);
+    RELEASE_ASSERT_WITH_SECURITY_IMPLICATION(&m_styleScope->document() == &newDocument);
 }
 
 Style::Scope& ShadowRoot::styleScope()
@@ -110,8 +134,6 @@ String ShadowRoot::innerHTML() const
 
 ExceptionOr<void> ShadowRoot::setInnerHTML(const String& markup)
 {
-    if (isOrphan())
-        return Exception { INVALID_ACCESS_ERR };
     auto fragment = createFragmentForInnerOuterHTML(*host(), markup, AllowScriptingContent);
     if (fragment.hasException())
         return fragment.releaseException();
@@ -160,17 +182,31 @@ HTMLSlotElement* ShadowRoot::findAssignedSlot(const Node& node)
     return m_slotAssignment->findAssignedSlot(node, *this);
 }
 
+void ShadowRoot::renameSlotElement(HTMLSlotElement& slot, const AtomicString& oldName, const AtomicString& newName)
+{
+    ASSERT(m_slotAssignment);
+    return m_slotAssignment->renameSlotElement(slot, oldName, newName, *this);
+}
+
 void ShadowRoot::addSlotElementByName(const AtomicString& name, HTMLSlotElement& slot)
 {
+    ASSERT(&slot.rootNode() == this);
     if (!m_slotAssignment)
         m_slotAssignment = std::make_unique<SlotAssignment>();
 
     return m_slotAssignment->addSlotElementByName(name, slot, *this);
 }
 
-void ShadowRoot::removeSlotElementByName(const AtomicString& name, HTMLSlotElement& slot)
+void ShadowRoot::removeSlotElementByName(const AtomicString& name, HTMLSlotElement& slot, ContainerNode& oldParentOfRemovedTree)
 {
-    return m_slotAssignment->removeSlotElementByName(name, slot, *this);
+    ASSERT(m_slotAssignment);
+    return m_slotAssignment->removeSlotElementByName(name, slot, &oldParentOfRemovedTree, *this);
+}
+
+void ShadowRoot::slotFallbackDidChange(HTMLSlotElement& slot)
+{
+    ASSERT(&slot.rootNode() == this);
+    return m_slotAssignment->slotFallbackDidChange(slot, *this);
 }
 
 const Vector<Node*>* ShadowRoot::assignedNodesForSlot(const HTMLSlotElement& slot)
@@ -180,5 +216,14 @@ const Vector<Node*>* ShadowRoot::assignedNodesForSlot(const HTMLSlotElement& slo
     return m_slotAssignment->assignedNodesForSlot(slot, *this);
 }
 
+Vector<ShadowRoot*> assignedShadowRootsIfSlotted(const Node& node)
+{
+    Vector<ShadowRoot*> result;
+    for (auto* slot = node.assignedSlot(); slot; slot = slot->assignedSlot()) {
+        ASSERT(slot->containingShadowRoot());
+        result.append(slot->containingShadowRoot());
+    }
+    return result;
+}
 
 }

@@ -22,8 +22,7 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef DynamicsCompressorNode_h
-#define DynamicsCompressorNode_h
+#pragma once
 
 #include "AudioNode.h"
 #include "AudioParam.h"
@@ -33,7 +32,7 @@ namespace WebCore {
 
 class DynamicsCompressor;
 
-class DynamicsCompressorNode : public AudioNode {
+class DynamicsCompressorNode final : public AudioNode {
 public:
     static Ref<DynamicsCompressorNode> create(AudioContext& context, float sampleRate)
     {
@@ -74,5 +73,3 @@ private:
 };
 
 } // namespace WebCore
-
-#endif // DynamicsCompressorNode_h

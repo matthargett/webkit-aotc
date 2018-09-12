@@ -27,12 +27,10 @@
  * SUCH DAMAGE.
  */
 
-#ifndef BasicShapes_h
-#define BasicShapes_h
+#pragma once
 
 #include "Length.h"
 #include "LengthSize.h"
-#include "RenderStyleConstants.h"
 #include "WindRule.h"
 #include <wtf/RefCounted.h>
 #include <wtf/RefPtr.h>
@@ -48,7 +46,7 @@ class SVGPathByteStream;
 
 class BasicShape : public RefCounted<BasicShape> {
 public:
-    virtual ~BasicShape() { }
+    virtual ~BasicShape() = default;
 
     enum Type {
         BasicShapePolygonType,
@@ -61,7 +59,7 @@ public:
     virtual Type type() const = 0;
 
     virtual const Path& path(const FloatRect&) = 0;
-    virtual WindRule windRule() const { return RULE_NONZERO; }
+    virtual WindRule windRule() const { return WindRule::NonZero; }
 
     virtual bool canBlend(const BasicShape&) const = 0;
     virtual Ref<BasicShape> blend(const BasicShape& from, double) const = 0;
@@ -262,7 +260,7 @@ private:
 
     bool operator==(const BasicShape&) const override;
 
-    WindRule m_windRule { RULE_NONZERO };
+    WindRule m_windRule { WindRule::NonZero };
     Vector<Length> m_values;
 };
 
@@ -291,7 +289,7 @@ private:
     bool operator==(const BasicShape&) const override;
 
     std::unique_ptr<SVGPathByteStream> m_byteStream;
-    WindRule m_windRule { RULE_NONZERO };
+    WindRule m_windRule { WindRule::NonZero };
 };
 
 class BasicShapeInset final : public BasicShape {
@@ -353,5 +351,3 @@ SPECIALIZE_TYPE_TRAITS_BASIC_SHAPE(BasicShapeEllipse, BasicShape::BasicShapeElli
 SPECIALIZE_TYPE_TRAITS_BASIC_SHAPE(BasicShapePolygon, BasicShape::BasicShapePolygonType)
 SPECIALIZE_TYPE_TRAITS_BASIC_SHAPE(BasicShapePath, BasicShape::BasicShapePathType)
 SPECIALIZE_TYPE_TRAITS_BASIC_SHAPE(BasicShapeInset, BasicShape::BasicShapeInsetType)
-
-#endif // BasicShapes_h

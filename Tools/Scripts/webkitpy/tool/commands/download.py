@@ -1,5 +1,5 @@
 # Copyright (c) 2009, 2011 Google Inc. All rights reserved.
-# Copyright (c) 2009 Apple Inc. All rights reserved.
+# Copyright (c) 2009, 2017-2018 Apple Inc. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are
@@ -33,6 +33,7 @@ from webkitpy.tool import steps
 
 from webkitpy.common.checkout.changelog import ChangeLog
 from webkitpy.common.config import urls
+from webkitpy.common.net.bugzilla import Bugzilla
 from webkitpy.common.system.executive import ScriptError
 from webkitpy.tool.commands.abstractsequencedcommand import AbstractSequencedCommand
 from webkitpy.tool.commands.stepsequence import StepSequence
@@ -87,6 +88,14 @@ class BuildAndTest(AbstractSequencedCommand):
     ]
 
 
+class CheckPatchRelevance(AbstractSequencedCommand):
+    name = "check-patch-relevance"
+    help_text = "Check if this patch needs to be tested"
+    steps = [
+        steps.CheckPatchRelevance,
+    ]
+
+
 class Land(AbstractSequencedCommand):
     name = "land"
     help_text = "Land the current working directory diff and updates the associated bug if any"
@@ -119,6 +128,7 @@ class LandCowhand(AbstractSequencedCommand):
     name = "land-cowhand"
     help_text = "Prepares a ChangeLog and lands the current working directory diff."
     steps = [
+        steps.SortXcodeProjectFiles,
         steps.PrepareChangeLog,
         steps.EditChangeLog,
         steps.CheckStyle,
@@ -191,8 +201,8 @@ class AbstractPatchSequencingCommand(AbstractPatchProcessingCommand):
     def _prepare_to_process(self, options, args, tool):
         try:
             self.state = self._prepare_state(options, args, tool)
-        except ScriptError, e:
-            _log.error(e.message_with_output())
+        except ScriptError as e:
+            _log.error(e.message_with_output(output_limit=5000))
             self._exit(e.exit_code or 2)
         self._prepare_sequence.run_and_handle_errors(tool, options, self.state)
 
@@ -208,20 +218,35 @@ class AbstractPatchSequencingCommand(AbstractPatchProcessingCommand):
 
 class ProcessAttachmentsMixin(object):
     def _fetch_list_of_patches_to_process(self, options, args, tool):
-        return map(lambda patch_id: tool.bugs.fetch_attachment(patch_id), args)
+        patches = []
+        for patch_id in args:
+            try:
+                patch = tool.bugs.fetch_attachment(patch_id, throw_on_access_error=True)
+            except Bugzilla.AccessError as e:
+                if e.error_code == Bugzilla.AccessError.NOT_PERMITTED:
+                    patch = tool.status_server.fetch_attachment(patch_id)
+            if patch:
+                patches.append(patch)
+        return patches
 
 
 class ProcessBugsMixin(object):
     def _fetch_list_of_patches_to_process(self, options, args, tool):
         all_patches = []
         for bug_id in args:
-            patches = tool.bugs.fetch_bug(bug_id).reviewed_patches()
+            bug = tool.bugs.fetch_bug(bug_id)
+            if not bug:
+                continue
+            patches = bug.reviewed_patches()
             _log.info("%s found on bug %s." % (pluralize(len(patches), "reviewed patch"), bug_id))
             all_patches += patches
         if not all_patches:
             _log.info("No reviewed patches found, looking for unreviewed patches.")
             for bug_id in args:
-                patches = tool.bugs.fetch_bug(bug_id).patches()
+                bug = tool.bugs.fetch_bug(bug_id)
+                if not bug:
+                    continue
+                patches = bug.patches()
                 _log.info("%s found on bug %s." % (pluralize(len(patches), "patch"), bug_id))
                 all_patches += patches
         return all_patches

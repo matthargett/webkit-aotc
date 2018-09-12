@@ -26,11 +26,12 @@
 #import "config.h"
 #import "TestRunner.h"
 
+#import "ActivateFonts.h"
 #import "InjectedBundle.h"
 #import <JavaScriptCore/JSStringRefCF.h>
 
 #if !PLATFORM(IOS)
-#import <WebCore/SoftLinking.h>
+#import <wtf/SoftLinking.h>
 
 SOFT_LINK_STAGED_FRAMEWORK(WebInspectorUI, PrivateFrameworks, A)
 #endif
@@ -47,7 +48,7 @@ void TestRunner::invalidateWaitToDumpWatchdogTimer()
         return;
 
     CFRunLoopTimerInvalidate(m_waitToDumpWatchdogTimer.get());
-    m_waitToDumpWatchdogTimer = 0;
+    m_waitToDumpWatchdogTimer = nullptr;
 }
 
 static void waitUntilDoneWatchdogTimerFired(CFRunLoopTimerRef timer, void* info)
@@ -60,7 +61,7 @@ void TestRunner::initializeWaitToDumpWatchdogTimerIfNeeded()
     if (m_waitToDumpWatchdogTimer)
         return;
 
-    CFTimeInterval interval = m_timeout / 1000.0;
+    CFTimeInterval interval = m_timeout.seconds();
     m_waitToDumpWatchdogTimer = adoptCF(CFRunLoopTimerCreate(kCFAllocatorDefault, CFAbsoluteTimeGetCurrent() + interval, 0, 0, 0, WTR::waitUntilDoneWatchdogTimerFired, NULL));
     CFRunLoopAddTimer(CFRunLoopGetCurrent(), m_waitToDumpWatchdogTimer.get(), kCFRunLoopCommonModes);
 }
@@ -89,6 +90,11 @@ JSRetainPtr<JSStringRef> TestRunner::inspectorTestStubURL()
     CFStringRef urlString = CFURLGetString(url.get());
     return adopt(JSStringCreateWithCFString(urlString));
 #endif
+}
+
+void TestRunner::installFakeHelvetica(JSStringRef configuration)
+{
+    WTR::installFakeHelvetica(toWK(configuration).get());
 }
 
 } // namespace WTR

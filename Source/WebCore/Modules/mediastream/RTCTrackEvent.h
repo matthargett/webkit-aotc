@@ -28,8 +28,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef RTCTrackEvent_h
-#define RTCTrackEvent_h
+#pragma once
 
 #if ENABLE(WEB_RTC)
 
@@ -47,7 +46,7 @@ typedef Vector<RefPtr<MediaStream>> MediaStreamArray;
 
 class RTCTrackEvent : public Event {
 public:
-    static Ref<RTCTrackEvent> create(const AtomicString& type, bool canBubble, bool cancelable, RefPtr<RTCRtpReceiver>&&, RefPtr<MediaStreamTrack>&&, MediaStreamArray&&, RefPtr<RTCRtpTransceiver>&&);
+    static Ref<RTCTrackEvent> create(const AtomicString& type, CanBubble, IsCancelable, RefPtr<RTCRtpReceiver>&&, RefPtr<MediaStreamTrack>&&, MediaStreamArray&&, RefPtr<RTCRtpTransceiver>&&);
 
     struct Init : EventInit {
         RefPtr<RTCRtpReceiver> receiver;
@@ -65,7 +64,7 @@ public:
     virtual EventInterface eventInterface() const { return RTCTrackEventInterfaceType; }
 
 private:
-    RTCTrackEvent(const AtomicString& type, bool canBubble, bool cancelable, RefPtr<RTCRtpReceiver>&&, RefPtr<MediaStreamTrack>&&, MediaStreamArray&&, RefPtr<RTCRtpTransceiver>&&);
+    RTCTrackEvent(const AtomicString& type, CanBubble, IsCancelable, RefPtr<RTCRtpReceiver>&&, RefPtr<MediaStreamTrack>&&, MediaStreamArray&&, RefPtr<RTCRtpTransceiver>&&);
     RTCTrackEvent(const AtomicString& type, const Init&, IsTrusted);
 
     RefPtr<RTCRtpReceiver> m_receiver;
@@ -77,5 +76,3 @@ private:
 } // namespace WebCore
 
 #endif // ENABLE(WEB_RTC)
-
-#endif // RTCTrackEvent_h

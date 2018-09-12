@@ -37,20 +37,24 @@ class URL;
 
 class File final : public Blob {
 public:
+    struct PropertyBag : BlobPropertyBag {
+        std::optional<int64_t> lastModified;
+    };
+
     static Ref<File> create(const String& path)
     {
         return adoptRef(*new File(path));
     }
 
     // Create a File using the 'new File' constructor.
-    static Ref<File> create(Vector<BlobPart> blobParts, const String& filename, const String& contentType, int64_t lastModified)
+    static Ref<File> create(Vector<BlobPartVariant>&& blobPartVariants, const String& filename, const PropertyBag& propertyBag)
     {
-        return adoptRef(*new File(WTFMove(blobParts), filename, contentType, lastModified));
+        return adoptRef(*new File(WTFMove(blobPartVariants), filename, propertyBag));
     }
 
-    static Ref<File> deserialize(const String& path, const URL& srcURL, const String& type, const String& name)
+    static Ref<File> deserialize(const String& path, const URL& srcURL, const String& type, const String& name, const std::optional<int64_t>& lastModified = std::nullopt)
     {
-        return adoptRef(*new File(deserializationContructor, path, srcURL, type, name));
+        return adoptRef(*new File(deserializationContructor, path, srcURL, type, name, lastModified));
     }
 
     // Create a file with a name exposed to the author (via File.name and associated DOM properties) that differs from the one provided in the path.
@@ -61,11 +65,26 @@ public:
         return adoptRef(*new File(path, nameOverride));
     }
 
+    static Ref<File> create(const Blob& blob, const String& name)
+    {
+        return adoptRef(*new File(blob, name));
+    }
+
+    static Ref<File> create(const File& file, const String& name)
+    {
+        return adoptRef(*new File(file, name));
+    }
+
+    static Ref<File> createWithRelativePath(const String& path, const String& relativePath);
+
     bool isFile() const override { return true; }
 
     const String& path() const { return m_path; }
+    const String& relativePath() const { return m_relativePath; }
+    void setRelativePath(const String& relativePath) { m_relativePath = relativePath; }
     const String& name() const { return m_name; }
-    WEBCORE_EXPORT double lastModified() const;
+    WEBCORE_EXPORT int64_t lastModified() const; // Number of milliseconds since Epoch.
+    const std::optional<int64_t>& lastModifiedOverride() const { return m_lastModifiedDateOverride; } // Number of milliseconds since Epoch.
 
     static String contentTypeForFile(const String& path);
 
@@ -73,12 +92,16 @@ public:
     static bool shouldReplaceFile(const String& path);
 #endif
 
+    bool isDirectory() const;
+
 private:
     WEBCORE_EXPORT explicit File(const String& path);
     File(const String& path, const String& nameOverride);
-    File(Vector<BlobPart>&& blobParts, const String& filename, const String& contentType, int64_t lastModified);
+    File(Vector<BlobPartVariant>&& blobPartVariants, const String& filename, const PropertyBag&);
+    File(const Blob&, const String& name);
+    File(const File&, const String& name);
 
-    File(DeserializationContructor, const String& path, const URL& srcURL, const String& type, const String& name);
+    File(DeserializationContructor, const String& path, const URL& srcURL, const String& type, const String& name, const std::optional<int64_t>& lastModified);
 
     static void computeNameAndContentType(const String& path, const String& nameOverride, String& effectiveName, String& effectiveContentType);
 #if ENABLE(FILE_REPLACEMENT)
@@ -86,9 +109,11 @@ private:
 #endif
 
     String m_path;
+    String m_relativePath;
     String m_name;
 
-    Optional<int64_t> m_overrideLastModifiedDate;
+    std::optional<int64_t> m_lastModifiedDateOverride;
+    mutable std::optional<bool> m_isDirectory;
 };
 
 } // namespace WebCore

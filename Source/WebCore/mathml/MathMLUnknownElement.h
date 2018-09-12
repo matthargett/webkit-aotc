@@ -23,14 +23,16 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef MathMLUnknownElement_h
-#define MathMLUnknownElement_h
+#pragma once
+
+#if ENABLE(MATHML)
 
 #include "MathMLElement.h"
 
 namespace WebCore {
 
 class MathMLUnknownElement final : public MathMLElement {
+    WTF_MAKE_ISO_ALLOCATED(MathMLUnknownElement);
 public:
     static Ref<MathMLUnknownElement> create(const QualifiedName& tagName, Document& document)
     {
@@ -48,4 +50,4 @@ private:
 
 } // namespace WebCore
 
-#endif // MathMLUnknownElement_h
+#endif // ENABLE(MATHML)

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008 Apple Inc. All Rights Reserved.
+ * Copyright (C) 2008-2018 Apple Inc. All Rights Reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -26,15 +26,26 @@
 #include "config.h"
 #include "EventLoop.h"
 
+#include <wtf/ProcessPrivilege.h>
+
+#if PLATFORM(MAC)
+
 namespace WebCore {
 
 void EventLoop::cycle()
 {
+#if ENABLE(WEBPROCESS_NSRUNLOOP)
+    if (![NSApp isRunning]) {
+        [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.05]];
+        return;
+    }
+    ASSERT(hasProcessPrivilege(ProcessPrivilege::CanCommunicateWithWindowServer));
+#endif
     [NSApp setWindowsNeedUpdate:YES];
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
-    [NSApp sendEvent:[NSApp nextEventMatchingMask:NSAnyEventMask untilDate:[NSDate dateWithTimeIntervalSinceNow:0.05] inMode:NSDefaultRunLoopMode dequeue:YES]];
-#pragma clang diagnostic pop
+    if (NSEvent *event = [NSApp nextEventMatchingMask:NSEventMaskAny untilDate:[NSDate dateWithTimeIntervalSinceNow:0.05] inMode:NSDefaultRunLoopMode dequeue:YES])
+        [NSApp sendEvent:event];
 }
 
 } // namespace WebCore
+
+#endif // PLATFORM(MAC)

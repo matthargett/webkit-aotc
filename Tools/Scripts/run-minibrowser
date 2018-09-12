@@ -1,4 +1,4 @@
-#!/usr/bin/perl -w
+#!/usr/bin/env perl
 
 # Copyright (C) 2005, 2007, 2013 Apple Inc. All rights reserved.
 # Copyright (C) 2007 Staikos Computing Services, Inc.  <info@staikos.net>
@@ -37,13 +37,16 @@ use FindBin;
 use lib $FindBin::Bin;
 use webkitdirs;
 
+my $launcherName;
 my $launcherPath;
 my @jhbuildWrapper;
 
 prohibitUnknownPort();
 setConfiguration();
 
-if (isGtk() || isEfl()) {
+if (isGtk() || isWPE()) {
+    runInFlatpakIfAvalaible("/app/webkit/Tools/Scripts/run-minibrowser");
+
     # Check to see that all the frameworks are built.
     checkFrameworks();
 
@@ -52,7 +55,7 @@ if (isGtk() || isEfl()) {
     @jhbuildWrapper = wrapperPrefixIfNeeded();
     print "Starting MiniBrowser.\n";
     exec @jhbuildWrapper, $launcherPath, @ARGV or die;
-} elsif (isAppleMacWebKit()) {
+} elsif (isAppleCocoaWebKit()) {
     printHelpAndExitForRunAndDebugWebKitAppIfNeeded();
     exit exitStatus(runMiniBrowser());
 } else {

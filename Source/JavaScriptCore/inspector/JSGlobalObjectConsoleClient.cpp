@@ -62,7 +62,7 @@ JSGlobalObjectConsoleClient::JSGlobalObjectConsoleClient(InspectorConsoleAgent* 
 {
 }
 
-void JSGlobalObjectConsoleClient::messageWithTypeAndLevel(MessageType type, MessageLevel level, JSC::ExecState* exec, RefPtr<ScriptArguments>&& arguments)
+void JSGlobalObjectConsoleClient::messageWithTypeAndLevel(MessageType type, MessageLevel level, JSC::ExecState* exec, Ref<ScriptArguments>&& arguments)
 {
     if (JSGlobalObjectConsoleClient::logToSystemConsole())
         ConsoleClient::printConsoleMessageWithArguments(MessageSource::ConsoleAPI, type, level, exec, arguments.copyRef());
@@ -72,9 +72,9 @@ void JSGlobalObjectConsoleClient::messageWithTypeAndLevel(MessageType type, Mess
     m_consoleAgent->addMessageToConsole(std::make_unique<ConsoleMessage>(MessageSource::ConsoleAPI, type, level, message, WTFMove(arguments), exec));
 }
 
-void JSGlobalObjectConsoleClient::count(ExecState* exec, RefPtr<ScriptArguments>&& arguments)
+void JSGlobalObjectConsoleClient::count(ExecState* exec, Ref<ScriptArguments>&& arguments)
 {
-    m_consoleAgent->count(exec, arguments);
+    m_consoleAgent->count(exec, WTFMove(arguments));
 }
 
 void JSGlobalObjectConsoleClient::profile(JSC::ExecState*, const String& title)
@@ -87,7 +87,7 @@ void JSGlobalObjectConsoleClient::profile(JSC::ExecState*, const String& title)
         for (auto& existingTitle : m_profiles) {
             if (existingTitle == title) {
                 // FIXME: Send an enum to the frontend for localization?
-                String warning = title.isEmpty() ? ASCIILiteral("Unnamed Profile already exists") : makeString("Profile \"", title, "\" already exists");
+                String warning = title.isEmpty() ? "Unnamed Profile already exists"_s : makeString("Profile \"", title, "\" already exists");
                 m_consoleAgent->addMessageToConsole(std::make_unique<ConsoleMessage>(MessageSource::ConsoleAPI, MessageType::Profile, MessageLevel::Warning, warning));
                 return;
             }
@@ -115,7 +115,7 @@ void JSGlobalObjectConsoleClient::profileEnd(JSC::ExecState*, const String& titl
     }
 
     // FIXME: Send an enum to the frontend for localization?
-    String warning = title.isEmpty() ? ASCIILiteral("No profiles exist") : makeString("Profile \"", title, "\" does not exist");
+    String warning = title.isEmpty() ? "No profiles exist"_s : makeString("Profile \"", title, "\" does not exist");
     m_consoleAgent->addMessageToConsole(std::make_unique<ConsoleMessage>(MessageSource::ConsoleAPI, MessageType::ProfileEnd, MessageLevel::Warning, warning));
 }
 
@@ -156,20 +156,22 @@ void JSGlobalObjectConsoleClient::time(ExecState*, const String& title)
 
 void JSGlobalObjectConsoleClient::timeEnd(ExecState* exec, const String& title)
 {
-    RefPtr<ScriptCallStack> callStack(createScriptCallStackForConsole(exec, 1));
-    m_consoleAgent->stopTiming(title, WTFMove(callStack));
+    m_consoleAgent->stopTiming(title, createScriptCallStackForConsole(exec, 1));
 }
 
-void JSGlobalObjectConsoleClient::timeStamp(ExecState*, RefPtr<ScriptArguments>&&)
+void JSGlobalObjectConsoleClient::timeStamp(ExecState*, Ref<ScriptArguments>&&)
 {
     // FIXME: JSContext inspection needs a timeline.
-    warnUnimplemented(ASCIILiteral("console.timeStamp"));
+    warnUnimplemented("console.timeStamp"_s);
 }
+
+void JSGlobalObjectConsoleClient::record(ExecState*, Ref<ScriptArguments>&&) { }
+void JSGlobalObjectConsoleClient::recordEnd(ExecState*, Ref<ScriptArguments>&&) { }
 
 void JSGlobalObjectConsoleClient::warnUnimplemented(const String& method)
 {
     String message = method + " is currently ignored in JavaScript context inspection.";
-    m_consoleAgent->addMessageToConsole(std::make_unique<ConsoleMessage>(MessageSource::ConsoleAPI, MessageType::Log, MessageLevel::Warning, message, nullptr, nullptr));
+    m_consoleAgent->addMessageToConsole(std::make_unique<ConsoleMessage>(MessageSource::ConsoleAPI, MessageType::Log, MessageLevel::Warning, message));
 }
 
 } // namespace Inspector

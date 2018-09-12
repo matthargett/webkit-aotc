@@ -23,7 +23,8 @@
 #include "Microtasks.h"
 
 #include <wtf/MainThread.h>
-#include <wtf/TemporaryChange.h>
+#include <wtf/NeverDestroyed.h>
+#include <wtf/SetForScope.h>
 
 namespace WebCore {
 
@@ -37,9 +38,7 @@ MicrotaskQueue::MicrotaskQueue()
 {
 }
 
-MicrotaskQueue::~MicrotaskQueue()
-{
-}
+MicrotaskQueue::~MicrotaskQueue() = default;
 
 MicrotaskQueue& MicrotaskQueue::mainThreadQueue()
 {
@@ -48,14 +47,22 @@ MicrotaskQueue& MicrotaskQueue::mainThreadQueue()
     return queue;
 }
 
+MicrotaskQueue& MicrotaskQueue::contextQueue(ScriptExecutionContext& context)
+{
+    // While main thread has many ScriptExecutionContexts, WorkerGlobalScope and worker thread have
+    // one on one correspondence. The lifetime of MicrotaskQueue is aligned to this semantics.
+    // While main thread MicrotaskQueue is persistently held, worker's MicrotaskQueue is held by
+    // WorkerGlobalScope.
+    if (isMainThread())
+        return mainThreadQueue();
+    return downcast<WorkerGlobalScope>(context).microtaskQueue();
+}
+
 void MicrotaskQueue::append(std::unique_ptr<Microtask>&& task)
 {
-    if (m_performingMicrotaskCheckpoint)
-        m_tasksAppendedDuringMicrotaskCheckpoint.append(WTFMove(task));
-    else
-        m_microtaskQueue.append(WTFMove(task));
+    m_microtaskQueue.append(WTFMove(task));
 
-    m_timer.startOneShot(0);
+    m_timer.startOneShot(0_s);
 }
 
 void MicrotaskQueue::remove(const Microtask& task)
@@ -63,12 +70,6 @@ void MicrotaskQueue::remove(const Microtask& task)
     for (size_t i = 0; i < m_microtaskQueue.size(); ++i) {
         if (m_microtaskQueue[i].get() == &task) {
             m_microtaskQueue.remove(i);
-            return;
-        }
-    }
-    for (size_t i = 0; i < m_tasksAppendedDuringMicrotaskCheckpoint.size(); ++i) {
-        if (m_tasksAppendedDuringMicrotaskCheckpoint[i].get() == &task) {
-            m_tasksAppendedDuringMicrotaskCheckpoint.remove(i);
             return;
         }
     }
@@ -84,23 +85,24 @@ void MicrotaskQueue::performMicrotaskCheckpoint()
     if (m_performingMicrotaskCheckpoint)
         return;
 
-    TemporaryChange<bool> change(m_performingMicrotaskCheckpoint, true);
+    SetForScope<bool> change(m_performingMicrotaskCheckpoint, true);
 
-    Vector<std::unique_ptr<Microtask>> queue = WTFMove(m_microtaskQueue);
-    for (auto& task : queue) {
-        auto result = task->run();
-        switch (result) {
-        case Microtask::Result::Done:
-            break;
-        case Microtask::Result::KeepInQueue:
-            m_microtaskQueue.append(WTFMove(task));
-            break;
+    Vector<std::unique_ptr<Microtask>> toKeep;
+    while (!m_microtaskQueue.isEmpty()) {
+        Vector<std::unique_ptr<Microtask>> queue = WTFMove(m_microtaskQueue);
+        for (auto& task : queue) {
+            auto result = task->run();
+            switch (result) {
+            case Microtask::Result::Done:
+                break;
+            case Microtask::Result::KeepInQueue:
+                toKeep.append(WTFMove(task));
+                break;
+            }
         }
     }
 
-    for (auto& task : m_tasksAppendedDuringMicrotaskCheckpoint)
-        m_microtaskQueue.append(WTFMove(task));
-    m_tasksAppendedDuringMicrotaskCheckpoint.clear();
+    m_microtaskQueue = WTFMove(toKeep);
 }
 
 } // namespace WebCore

@@ -23,8 +23,7 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef IDBGetResult_h
-#define IDBGetResult_h
+#pragma once
 
 #if ENABLE(INDEXED_DATABASE)
 
@@ -132,11 +131,17 @@ void IDBGetResult::encode(Encoder& encoder) const
 template<class Decoder>
 bool IDBGetResult::decode(Decoder& decoder, IDBGetResult& result)
 {
-    if (!decoder.decode(result.m_keyData))
+    std::optional<IDBKeyData> keyData;
+    decoder >> keyData;
+    if (!keyData)
         return false;
+    result.m_keyData = WTFMove(*keyData);
 
-    if (!decoder.decode(result.m_primaryKeyData))
+    std::optional<IDBKeyData> primaryKeyData;
+    decoder >> primaryKeyData;
+    if (!primaryKeyData)
         return false;
+    result.m_primaryKeyData = WTFMove(*primaryKeyData);
 
     if (!decoder.decode(result.m_keyPath))
         return false;
@@ -144,8 +149,11 @@ bool IDBGetResult::decode(Decoder& decoder, IDBGetResult& result)
     if (!decoder.decode(result.m_isDefined))
         return false;
 
-    if (!decoder.decode(result.m_value))
+    std::optional<IDBValue> value;
+    decoder >> value;
+    if (!value)
         return false;
+    result.m_value = WTFMove(*value);
 
     return true;
 }
@@ -153,4 +161,3 @@ bool IDBGetResult::decode(Decoder& decoder, IDBGetResult& result)
 } // namespace WebCore
 
 #endif // ENABLE(INDEXED_DATABASE)
-#endif // IDBGetResult_h

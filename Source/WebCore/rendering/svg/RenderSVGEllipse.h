@@ -24,14 +24,14 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef RenderSVGEllipse_h
-#define RenderSVGEllipse_h
+#pragma once
 
 #include "RenderSVGShape.h"
 
 namespace WebCore {
 
 class RenderSVGEllipse final : public RenderSVGShape {
+    WTF_MAKE_ISO_ALLOCATED(RenderSVGEllipse);
 public:
     RenderSVGEllipse(SVGGraphicsElement&, RenderStyle&&);
     virtual ~RenderSVGEllipse();
@@ -44,7 +44,7 @@ private:
     bool isRenderingDisabled() const override;
     void fillShape(GraphicsContext&) const override;
     void strokeShape(GraphicsContext&) const override;
-    bool shapeDependentStrokeContains(const FloatPoint&) override;
+    bool shapeDependentStrokeContains(const FloatPoint&, PointCoordinateSpace = GlobalCoordinateSpace) override;
     bool shapeDependentFillContains(const FloatPoint&, const WindRule) const override;
     void calculateRadiiAndCenter();
 
@@ -54,6 +54,4 @@ private:
     bool m_usePathFallback;
 };
 
-}
-
-#endif
+} // namespace WebCore

@@ -26,15 +26,16 @@
 #include "stdafx.h"
 #include "PageLoadTestClient.h"
 
-#include "MiniBrowser.h"
+#include "WebKitLegacyBrowserWindow.h"
 #include <WebCore/PlatformExportMacros.h>
+#include <cmath>
 #include <wtf/Assertions.h>
 #include <wtf/FilePrintStream.h>
-#include <cmath>
+#include <wtf/ProcessID.h>
 
 static const CFTimeInterval waitForNewResourceLoadDuration = 0.1;
 
-PageLoadTestClient::PageLoadTestClient(MiniBrowser* host, bool pageLoadTesting)
+PageLoadTestClient::PageLoadTestClient(WebKitLegacyBrowserWindow* host, bool pageLoadTesting)
     : m_host(host)
     , m_repetitions(pageLoadTesting ? 20 : 1)
     , m_waitForLoadToReallyEnd(this, &PageLoadTestClient::endPageLoad)
@@ -187,22 +188,12 @@ void PageLoadTestClient::dumpRunStatistics()
 
     char filenameSuffix[maxPathLength + 1];
 
-#if PLATFORM(WIN)
-    DWORD pid = GetCurrentProcessId();
-    _snprintf(filenameSuffix, sizeof(filenameSuffix), ".%d.txt", pid);
-#else
-    long pid = getpid();
-    snprintf(filenameSuffix, sizeof(filenameSuffix), ".%d.txt", pid);
-#endif
+    snprintf(filenameSuffix, sizeof(filenameSuffix), ".%d.txt", getCurrentProcessID());
 
     const char* filename = "webkit_performance_log";
     char actualFilename[maxPathLength + 1];
 
-#if PLATFORM(WIN)
-    _snprintf(actualFilename, sizeof(actualFilename), "%s%s", filename, filenameSuffix);
-#else
     snprintf(actualFilename, sizeof(actualFilename), "%s%s", filename, filenameSuffix);
-#endif
 
     std::unique_ptr<WTF::FilePrintStream> file = WTF::FilePrintStream::open(actualFilename, "w");
     if (!file) {

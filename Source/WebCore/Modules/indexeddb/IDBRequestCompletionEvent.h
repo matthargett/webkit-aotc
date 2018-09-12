@@ -23,8 +23,7 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef IDBRequestCompletionEvent_h
-#define IDBRequestCompletionEvent_h
+#pragma once
 
 #if ENABLE(INDEXED_DATABASE)
 
@@ -35,19 +34,17 @@ namespace WebCore {
 
 class IDBRequestCompletionEvent : public Event {
 public:
-    static Ref<Event> create(const AtomicString& type, bool canBubble, bool cancelable, IDBRequest& request)
+    static Ref<Event> create(const AtomicString& type, CanBubble canBubble, IsCancelable cancelable, IDBRequest& request)
     {
         return adoptRef(*new IDBRequestCompletionEvent(type, canBubble, cancelable, request));
     }
 
 private:
-    IDBRequestCompletionEvent(const AtomicString& type, bool canBubble, bool cancelable, IDBRequest&);
+    IDBRequestCompletionEvent(const AtomicString& type, CanBubble, IsCancelable, IDBRequest&);
 
     Ref<IDBRequest> m_request;
 };
 
-
 } // namespace WebCore
 
 #endif // ENABLE(INDEXED_DATABASE)
-#endif // IDBRequestCompletionEvent_h

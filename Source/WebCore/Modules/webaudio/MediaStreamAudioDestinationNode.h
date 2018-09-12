@@ -22,8 +22,7 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef MediaStreamAudioDestinationNode_h
-#define MediaStreamAudioDestinationNode_h
+#pragma once
 
 #if ENABLE(WEB_AUDIO) && ENABLE(MEDIA_STREAM)
 
@@ -36,36 +35,31 @@ namespace WebCore {
 class AudioContext;
 class MediaStreamAudioSource;
 
-class MediaStreamAudioDestinationNode : public AudioBasicInspectorNode {
+class MediaStreamAudioDestinationNode final : public AudioBasicInspectorNode {
 public:
     static Ref<MediaStreamAudioDestinationNode> create(AudioContext&, size_t numberOfChannels);
 
     virtual ~MediaStreamAudioDestinationNode();
 
-    MediaStream* stream() { return m_stream.get(); }
+    MediaStream& stream() { return m_stream.get(); }
 
     // AudioNode.
-    void process(size_t framesToProcess) override;
-    void reset() override;
+    void process(size_t framesToProcess) final;
+    void reset() final;
     
-    RealtimeMediaSource* mediaStreamSource();
-
 private:
     MediaStreamAudioDestinationNode(AudioContext&, size_t numberOfChannels);
 
-    double tailTime() const override { return 0; }
-    double latencyTime() const override { return 0; }
+    double tailTime() const final { return 0; }
+    double latencyTime() const final { return 0; }
 
     // As an audio source, we will never propagate silence.
-    bool propagatesSilence() const override { return false; }
+    bool propagatesSilence() const final { return false; }
 
-    RefPtr<MediaStream> m_stream;
-    RefPtr<MediaStreamAudioSource> m_source;
-    RefPtr<AudioBus> m_mixBus;
+    Ref<MediaStreamAudioSource> m_source;
+    Ref<MediaStream> m_stream;
 };
 
 } // namespace WebCore
 
 #endif // ENABLE(WEB_AUDIO) && ENABLE(MEDIA_STREAM)
-
-#endif // MediaStreamAudioDestinationNode_h

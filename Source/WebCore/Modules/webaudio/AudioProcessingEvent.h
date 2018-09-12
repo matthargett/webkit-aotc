@@ -22,8 +22,7 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef AudioProcessingEvent_h
-#define AudioProcessingEvent_h
+#pragma once
 
 #include "AudioBuffer.h"
 #include "Event.h"
@@ -33,7 +32,7 @@ namespace WebCore {
 
 class AudioBuffer;
     
-class AudioProcessingEvent : public Event {
+class AudioProcessingEvent final : public Event {
 public:
     static Ref<AudioProcessingEvent> create(RefPtr<AudioBuffer>&& inputBuffer, RefPtr<AudioBuffer>&& outputBuffer, double playbackTime)
     {
@@ -63,5 +62,3 @@ private:
 };
 
 } // namespace WebCore
-
-#endif // AudioProcessingEvent_h

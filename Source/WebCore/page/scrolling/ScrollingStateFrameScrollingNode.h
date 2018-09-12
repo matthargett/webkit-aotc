@@ -39,7 +39,7 @@ class Scrollbar;
 
 class ScrollingStateFrameScrollingNode final : public ScrollingStateScrollingNode {
 public:
-    static Ref<ScrollingStateFrameScrollingNode> create(ScrollingStateTree&, ScrollingNodeID);
+    static Ref<ScrollingStateFrameScrollingNode> create(ScrollingStateTree&, ScrollingNodeType, ScrollingNodeID);
 
     Ref<ScrollingStateNode> clone(ScrollingStateTree&) override;
 
@@ -61,6 +61,10 @@ public:
         BehaviorForFixedElements,
         TopContentInset,
         FixedElementsLayoutRelativeToFrame,
+        VisualViewportEnabled,
+        LayoutViewport,
+        MinLayoutViewportOrigin,
+        MaxLayoutViewportOrigin,
     };
 
     float frameScaleFactor() const { return m_frameScaleFactor; }
@@ -75,6 +79,15 @@ public:
     ScrollBehaviorForFixedElements scrollBehaviorForFixedElements() const { return m_behaviorForFixed; }
     WEBCORE_EXPORT void setScrollBehaviorForFixedElements(ScrollBehaviorForFixedElements);
 
+    FloatRect layoutViewport() const { return m_layoutViewport; };
+    WEBCORE_EXPORT void setLayoutViewport(const FloatRect&);
+
+    FloatPoint minLayoutViewportOrigin() const { return m_minLayoutViewportOrigin; }
+    WEBCORE_EXPORT void setMinLayoutViewportOrigin(const FloatPoint&);
+
+    FloatPoint maxLayoutViewportOrigin() const { return m_maxLayoutViewportOrigin; }
+    WEBCORE_EXPORT void setMaxLayoutViewportOrigin(const FloatPoint&);
+
     int headerHeight() const { return m_headerHeight; }
     WEBCORE_EXPORT void setHeaderHeight(int);
 
@@ -83,9 +96,6 @@ public:
 
     float topContentInset() const { return m_topContentInset; }
     WEBCORE_EXPORT void setTopContentInset(float);
-
-    const LayerRepresentation& scrolledContentsLayer() const { return m_scrolledContentsLayer; }
-    WEBCORE_EXPORT void setScrolledContentsLayer(const LayerRepresentation&);
 
     // This is a layer moved in the opposite direction to scrolling, for example for background-attachment:fixed
     const LayerRepresentation& counterScrollingLayer() const { return m_counterScrollingLayer; }
@@ -112,21 +122,23 @@ public:
     bool fixedElementsLayoutRelativeToFrame() const { return m_fixedElementsLayoutRelativeToFrame; }
     WEBCORE_EXPORT void setFixedElementsLayoutRelativeToFrame(bool);
 
+    bool visualViewportEnabled() const { return m_visualViewportEnabled; };
+    WEBCORE_EXPORT void setVisualViewportEnabled(bool);
+
 #if PLATFORM(MAC)
     NSScrollerImp *verticalScrollerImp() const { return m_verticalScrollerImp.get(); }
     NSScrollerImp *horizontalScrollerImp() const { return m_horizontalScrollerImp.get(); }
 #endif
     void setScrollerImpsFromScrollbars(Scrollbar* verticalScrollbar, Scrollbar* horizontalScrollbar);
 
-    void dumpProperties(TextStream&, int indent, ScrollingStateTreeAsTextBehavior) const override;
+    void dumpProperties(WTF::TextStream&, ScrollingStateTreeAsTextBehavior) const override;
 
 private:
-    ScrollingStateFrameScrollingNode(ScrollingStateTree&, ScrollingNodeID);
+    ScrollingStateFrameScrollingNode(ScrollingStateTree&, ScrollingNodeType, ScrollingNodeID);
     ScrollingStateFrameScrollingNode(const ScrollingStateFrameScrollingNode&, ScrollingStateTree&);
 
     LayerRepresentation m_counterScrollingLayer;
     LayerRepresentation m_insetClipLayer;
-    LayerRepresentation m_scrolledContentsLayer;
     LayerRepresentation m_contentShadowLayer;
     LayerRepresentation m_headerLayer;
     LayerRepresentation m_footerLayer;
@@ -138,6 +150,11 @@ private:
 
     EventTrackingRegions m_eventTrackingRegions;
     FloatPoint m_requestedScrollPosition;
+
+    FloatRect m_layoutViewport;
+    FloatPoint m_minLayoutViewportOrigin;
+    FloatPoint m_maxLayoutViewportOrigin;
+
     float m_frameScaleFactor { 1 };
     float m_topContentInset { 0 };
     int m_headerHeight { 0 };
@@ -146,6 +163,7 @@ private:
     ScrollBehaviorForFixedElements m_behaviorForFixed { StickToDocumentBounds };
     bool m_requestedScrollPositionRepresentsProgrammaticScroll { false };
     bool m_fixedElementsLayoutRelativeToFrame { false };
+    bool m_visualViewportEnabled { false };
 };
 
 } // namespace WebCore

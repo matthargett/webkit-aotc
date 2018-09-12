@@ -26,8 +26,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef KeyframeAnimation_h
-#define KeyframeAnimation_h
+#pragma once
 
 #include "AnimationBase.h"
 #include "Document.h"
@@ -35,17 +34,18 @@
 
 namespace WebCore {
 
+class FilterOperations;
 class RenderStyle;
 
 // A KeyframeAnimation tracks the state of an explicit animation for a single RenderElement.
 class KeyframeAnimation final : public AnimationBase {
 public:
-    static Ref<KeyframeAnimation> create(const Animation& animation, RenderElement* renderer, CompositeAnimation* compositeAnimation, const RenderStyle* unanimatedStyle)
+    static Ref<KeyframeAnimation> create(const Animation& animation, Element& element, CompositeAnimation& compositeAnimation, const RenderStyle& unanimatedStyle)
     {
-        return adoptRef(*new KeyframeAnimation(animation, renderer, compositeAnimation, unanimatedStyle));
+        return adoptRef(*new KeyframeAnimation(animation, element, compositeAnimation, unanimatedStyle));
     }
 
-    bool animate(CompositeAnimation*, RenderElement*, const RenderStyle* currentStyle, const RenderStyle* targetStyle, std::unique_ptr<RenderStyle>& animatedStyle, bool& didBlendStyle) override;
+    bool animate(CompositeAnimation&, const RenderStyle& targetStyle, std::unique_ptr<RenderStyle>& animatedStyle, bool& didBlendStyle);
     void getAnimatedStyle(std::unique_ptr<RenderStyle>&) override;
 
     bool computeExtentOfTransformAnimation(LayoutRect&) const override;
@@ -57,11 +57,12 @@ public:
     bool hasAnimationForProperty(CSSPropertyID) const;
 
     bool triggersStackingContext() const { return m_triggersStackingContext; }
-    
-    void setUnanimatedStyle(std::unique_ptr<RenderStyle> style) { m_unanimatedStyle = WTFMove(style); }
-    RenderStyle* unanimatedStyle() const { return m_unanimatedStyle.get(); }
+    bool dependsOnLayout() const { return m_dependsOnLayout; }
 
-    double timeToNextService() override;
+    void setUnanimatedStyle(std::unique_ptr<RenderStyle> style) { m_unanimatedStyle = WTFMove(style); }
+    const RenderStyle& unanimatedStyle() const override { return *m_unanimatedStyle; }
+
+    std::optional<Seconds> timeToNextService() override;
 
 protected:
     void onAnimationStart(double elapsedTime) override;
@@ -69,7 +70,7 @@ protected:
     void onAnimationEnd(double elapsedTime) override;
     bool startAnimation(double timeOffset) override;
     void pauseAnimation(double timeOffset) override;
-    void endAnimation() override;
+    void endAnimation(bool fillingForwards = false) override;
 
     void overrideAnimations() override;
     void resumeOverriddenAnimations() override;
@@ -84,15 +85,18 @@ protected:
     bool computeExtentOfAnimationForMatchingTransformLists(const FloatRect& rendererBox, LayoutRect&) const;
 
     void computeStackingContextImpact();
+    void computeLayoutDependency();
     void resolveKeyframeStyles();
     void validateTransformFunctionList();
     void checkForMatchingFilterFunctionLists();
 #if ENABLE(FILTERS_LEVEL_2)
     void checkForMatchingBackdropFilterFunctionLists();
 #endif
+    void checkForMatchingColorFilterFunctionLists();
+    bool checkForMatchingFilterFunctionLists(CSSPropertyID, const std::function<const FilterOperations& (const RenderStyle&)>&) const;
 
 private:
-    KeyframeAnimation(const Animation&, RenderElement*, CompositeAnimation*, const RenderStyle* unanimatedStyle);
+    KeyframeAnimation(const Animation&, Element&, CompositeAnimation&, const RenderStyle& unanimatedStyle);
     virtual ~KeyframeAnimation();
     
     // Get the styles for the given property surrounding the current animation time and the progress between them.
@@ -103,8 +107,7 @@ private:
 
     bool m_startEventDispatched { false };
     bool m_triggersStackingContext { false };
+    bool m_dependsOnLayout { false };
 };
 
 } // namespace WebCore
-
-#endif // KeyframeAnimation_h

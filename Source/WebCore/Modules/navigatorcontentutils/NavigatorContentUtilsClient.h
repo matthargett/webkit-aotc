@@ -23,8 +23,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
  */
 
-#ifndef NavigatorContentUtilsClient_h
-#define NavigatorContentUtilsClient_h
+#pragma once
 
 #if ENABLE(NAVIGATOR_CONTENT_UTILS)
 
@@ -37,7 +36,7 @@ class Page;
 
 class NavigatorContentUtilsClient {
 public:
-    virtual ~NavigatorContentUtilsClient() { }
+    virtual ~NavigatorContentUtilsClient() = default;
     virtual void registerProtocolHandler(const String& scheme, const URL& baseURL, const URL&, const String& title) = 0;
 
 #if ENABLE(CUSTOM_SCHEME_HANDLER)
@@ -54,7 +53,6 @@ public:
 
 void provideNavigatorContentUtilsTo(Page*, std::unique_ptr<NavigatorContentUtilsClient>);
 
-}
+} // namespace WebCore
 
 #endif // ENABLE(NAVIGATOR_CONTENT_UTILS)
-#endif // NavigatorContentUtilsClient_h

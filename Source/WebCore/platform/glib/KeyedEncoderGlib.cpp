@@ -65,6 +65,11 @@ void KeyedEncoderGlib::encodeUInt32(const String& key, uint32_t value)
 {
     g_variant_builder_add(m_variantBuilderStack.last(), "{sv}", key.utf8().data(), g_variant_new_uint32(value));
 }
+    
+void KeyedEncoderGlib::encodeUInt64(const String& key, uint64_t value)
+{
+    g_variant_builder_add(m_variantBuilderStack.last(), "{sv}", key.utf8().data(), g_variant_new_uint64(value));
+}
 
 void KeyedEncoderGlib::encodeInt32(const String& key, int32_t value)
 {
@@ -127,7 +132,7 @@ void KeyedEncoderGlib::endArray()
     m_arrayStack.removeLast();
 }
 
-PassRefPtr<SharedBuffer> KeyedEncoderGlib::finishEncoding()
+RefPtr<SharedBuffer> KeyedEncoderGlib::finishEncoding()
 {
     g_assert(m_variantBuilderStack.last() == &m_variantBuilder);
     GRefPtr<GVariant> variant = g_variant_builder_end(&m_variantBuilder);

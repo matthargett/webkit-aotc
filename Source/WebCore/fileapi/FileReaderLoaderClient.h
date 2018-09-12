@@ -28,14 +28,13 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef FileReaderLoaderClient_h
-#define FileReaderLoaderClient_h
+#pragma once
 
 namespace WebCore {
 
 class FileReaderLoaderClient {
 public:
-    virtual ~FileReaderLoaderClient() {}
+    virtual ~FileReaderLoaderClient() = default;
 
     virtual void didStartLoading() = 0;
     virtual void didReceiveData() = 0;
@@ -44,5 +43,3 @@ public:
 };
 
 } // namespace WebCore
-
-#endif // FileReaderLoaderClient_h

@@ -29,16 +29,12 @@
 #if USE(CG)
 
 #include "Color.h"
-#include "CoreGraphicsSPI.h"
 #include "FloatRect.h"
 #include "GeometryUtilities.h"
 #include "GraphicsContextCG.h"
 #include "IntSize.h"
 #include "SubimageCacheWithTimer.h"
-
-#if PLATFORM(WIN)
-#include <WebKitSystemInterface/WebKitSystemInterface.h>
-#endif
+#include <pal/spi/cg/CoreGraphicsSPI.h>
 
 namespace WebCore {
 
@@ -73,16 +69,6 @@ Color nativeImageSinglePixelSolidColor(const NativeImagePtr& image)
     return Color(pixel[0] * 255 / pixel[3], pixel[1] * 255 / pixel[3], pixel[2] * 255 / pixel[3], pixel[3]);
 }
 
-float subsamplingScale(GraphicsContext& context, const FloatRect& destRect, const FloatRect& srcRect)
-{
-    // Never use subsampled images for drawing into PDF contexts.
-    if (wkCGContextIsPDFContext(context.platformContext()))
-        return 1;
-
-    CGRect transformedDestinationRect = CGRectApplyAffineTransform(destRect, CGContextGetCTM(context.platformContext()));
-    return std::min<float>(1, std::max(transformedDestinationRect.size.width / srcRect.width(), transformedDestinationRect.size.height / srcRect.height()));
-}
-
 void drawNativeImage(const NativeImagePtr& image, GraphicsContext& context, const FloatRect& destRect, const FloatRect& srcRect, const IntSize& srcSize, CompositeOperator op, BlendMode mode, const ImageOrientation& orientation)
 {
     // Subsampling may have given us an image that is smaller than size().
@@ -100,7 +86,7 @@ void clearNativeImageSubimages(const NativeImagePtr& image)
 {
 #if CACHE_SUBIMAGES
     if (image)
-        subimageCache().clearImage(image.get());
+        SubimageCacheWithTimer::clearImage(image.get());
 #endif
 }
 

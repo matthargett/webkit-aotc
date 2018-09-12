@@ -27,8 +27,12 @@
 #include "Document.h"
 #include "HTMLHeadElement.h"
 #include "HTMLNames.h"
+#include "RuntimeEnabledFeatures.h"
+#include <wtf/IsoMallocInlines.h>
 
 namespace WebCore {
+
+WTF_MAKE_ISO_ALLOCATED_IMPL(HTMLMetaElement);
 
 using namespace HTMLNames;
 
@@ -36,6 +40,11 @@ inline HTMLMetaElement::HTMLMetaElement(const QualifiedName& tagName, Document& 
     : HTMLElement(tagName, document)
 {
     ASSERT(hasTagName(metaTag));
+}
+
+Ref<HTMLMetaElement> HTMLMetaElement::create(Document& document)
+{
+    return adoptRef(*new HTMLMetaElement(metaTag, document));
 }
 
 Ref<HTMLMetaElement> HTMLMetaElement::create(const QualifiedName& tagName, Document& document)
@@ -55,18 +64,23 @@ void HTMLMetaElement::parseAttribute(const QualifiedName& name, const AtomicStri
         HTMLElement::parseAttribute(name, value);
 }
 
-Node::InsertionNotificationRequest HTMLMetaElement::insertedInto(ContainerNode& insertionPoint)
+Node::InsertedIntoAncestorResult HTMLMetaElement::insertedIntoAncestor(InsertionType insertionType, ContainerNode& parentOfInsertedTree)
 {
-    HTMLElement::insertedInto(insertionPoint);
-    if (insertionPoint.inDocument())
-        process();
-    return InsertionDone;
+    HTMLElement::insertedIntoAncestor(insertionType, parentOfInsertedTree);
+    if (insertionType.connectedToDocument)
+        return InsertedIntoAncestorResult::NeedsPostInsertionCallback;
+    return InsertedIntoAncestorResult::Done;
+}
+
+void HTMLMetaElement::didFinishInsertingNode()
+{
+    process();
 }
 
 void HTMLMetaElement::process()
 {
     // Changing a meta tag while it's not in the tree shouldn't have any effect on the document.
-    if (!inDocument())
+    if (!isConnected())
         return;
 
     const AtomicString& contentValue = attributeWithoutSynchronization(contentAttr);
@@ -75,6 +89,8 @@ void HTMLMetaElement::process()
 
     if (equalLettersIgnoringASCIICase(name(), "viewport"))
         document().processViewport(contentValue, ViewportArguments::ViewportMeta);
+    else if (RuntimeEnabledFeatures::sharedFeatures().disabledAdaptationsMetaTagEnabled() && equalLettersIgnoringASCIICase(name(), "disabled-adaptations"))
+        document().processDisabledAdaptations(contentValue);
 #if PLATFORM(IOS)
     else if (equalLettersIgnoringASCIICase(name(), "format-detection"))
         document().processFormatDetection(contentValue);
@@ -82,7 +98,7 @@ void HTMLMetaElement::process()
         document().processWebAppOrientations();
 #endif
     else if (equalLettersIgnoringASCIICase(name(), "referrer"))
-        document().processReferrerPolicy(contentValue);
+        document().processReferrerPolicy(contentValue, ReferrerPolicySource::MetaTag);
 
     const AtomicString& httpEquivValue = attributeWithoutSynchronization(http_equivAttr);
     if (!httpEquivValue.isNull())

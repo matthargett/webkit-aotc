@@ -23,8 +23,7 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef IDBDatabaseInfo_h
-#define IDBDatabaseInfo_h
+#pragma once
 
 #if ENABLE(INDEXED_DATABASE)
 
@@ -48,7 +47,7 @@ public:
     uint64_t version() const { return m_version; }
 
     bool hasObjectStore(const String& name) const;
-    IDBObjectStoreInfo createNewObjectStore(const String& name, Optional<IDBKeyPath>&&, bool autoIncrement);
+    IDBObjectStoreInfo createNewObjectStore(const String& name, std::optional<IDBKeyPath>&&, bool autoIncrement);
     void addExistingObjectStore(const IDBObjectStoreInfo&);
     IDBObjectStoreInfo* infoForExistingObjectStore(uint64_t objectStoreIdentifier);
     IDBObjectStoreInfo* infoForExistingObjectStore(const String& objectStoreName);
@@ -110,4 +109,3 @@ bool IDBDatabaseInfo::decode(Decoder& decoder, IDBDatabaseInfo& info)
 } // namespace WebCore
 
 #endif // ENABLE(INDEXED_DATABASE)
-#endif // IDBDatabaseInfo_h

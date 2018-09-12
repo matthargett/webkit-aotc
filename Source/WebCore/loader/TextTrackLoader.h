@@ -23,8 +23,7 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef TextTrackLoader_h
-#define TextTrackLoader_h
+#pragma once
 
 #if ENABLE(VIDEO_TRACK)
 
@@ -43,7 +42,7 @@ class ScriptExecutionContext;
 
 class TextTrackLoaderClient {
 public:
-    virtual ~TextTrackLoaderClient() { }
+    virtual ~TextTrackLoaderClient() = default;
     
     virtual void newCuesAvailable(TextTrackLoader*) = 0;
     virtual void cueLoadingCompleted(TextTrackLoader*, bool loadingFailed) = 0;
@@ -90,5 +89,4 @@ private:
 
 } // namespace WebCore
 
-#endif
-#endif
+#endif // ENABLE(VIDEO_TRACK)

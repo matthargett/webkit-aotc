@@ -27,58 +27,26 @@
 
 #if ENABLE(WEBASSEMBLY)
 
-#include "WasmMemory.h"
+#include "WasmFormat.h"
 #include "WasmOps.h"
 #include "WasmParser.h"
+#include <wtf/Optional.h>
 #include <wtf/Vector.h>
 
 namespace JSC { namespace Wasm {
 
-class ModuleParser : public Parser {
+class ModuleParser : public Parser<void> {
 public:
-
-    static const unsigned magicNumber = 0xc;
-
-    ModuleParser(const uint8_t* sourceBuffer, size_t sourceLength)
+    ModuleParser(const uint8_t* sourceBuffer, size_t sourceLength, ModuleInformation& info)
         : Parser(sourceBuffer, sourceLength)
-    {
-    }
-    ModuleParser(const Vector<uint8_t>& sourceBuffer)
-        : Parser(sourceBuffer.data(), sourceBuffer.size())
+        , m_info(info)
     {
     }
 
-    bool WARN_UNUSED_RETURN parse();
-    bool WARN_UNUSED_RETURN failed() const { return m_failed; }
-    const String& errorMessage() const
-    {
-        RELEASE_ASSERT(failed());
-        return m_errorMessage;
-    }
-
-    const Vector<FunctionInformation>& functionInformation() const
-    {
-        RELEASE_ASSERT(!failed());
-        return m_functions;
-    }
-    std::unique_ptr<Memory>& memory()
-    {
-        RELEASE_ASSERT(!failed());
-        return m_memory;
-    }
+    Result WARN_UNUSED_RETURN parse();
 
 private:
-    bool WARN_UNUSED_RETURN parseMemory();
-    bool WARN_UNUSED_RETURN parseFunctionTypes();
-    bool WARN_UNUSED_RETURN parseFunctionSignatures();
-    bool WARN_UNUSED_RETURN parseFunctionDefinitions();
-    bool WARN_UNUSED_RETURN parseFunctionDefinition(uint32_t number);
-
-    Vector<FunctionInformation> m_functions;
-    Vector<Signature> m_signatures;
-    std::unique_ptr<Memory> m_memory;
-    bool m_failed { true };
-    String m_errorMessage;
+    Ref<ModuleInformation> m_info;
 };
 
 } } // namespace JSC::Wasm

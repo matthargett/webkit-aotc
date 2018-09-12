@@ -30,16 +30,14 @@
 #import "GraphicsLayerCA.h"
 #import "PlatformCALayer.h"
 #import <QuartzCore/QuartzCore.h>
+#import <pal/spi/cocoa/QuartzCoreSPI.h>
+#import <wtf/SetForScope.h>
 
 #if PLATFORM(IOS)
 #import "WKGraphics.h"
 #import "WAKWindow.h"
 #import "WebCoreThread.h"
 #endif
-
-@interface CALayer(WebCoreCALayerPrivate)
-- (void)reloadValueForKeyPath:(NSString *)keyPath;
-@end
 
 using namespace WebCore;
 
@@ -53,16 +51,24 @@ using namespace WebCore;
 
 - (void)drawInContext:(CGContextRef)context
 {
-    PlatformCALayer* layer = PlatformCALayer::platformCALayer(self);
+    PlatformCALayer* layer = PlatformCALayer::platformCALayer((__bridge void*)self);
     if (layer) {
         PlatformCALayer::RepaintRectList rectsToPaint = PlatformCALayer::collectRectsToPaint(context, layer);
-        PlatformCALayer::drawLayerContents(context, layer, rectsToPaint);
+        PlatformCALayer::drawLayerContents(context, layer, rectsToPaint, self.isRenderingInContext ? GraphicsLayerPaintSnapshotting : GraphicsLayerPaintNormal);
     }
 }
 
 @end // implementation WebLayer
 
 @implementation WebSimpleLayer
+
+@synthesize isRenderingInContext = _isRenderingInContext;
+
+- (void)renderInContext:(CGContextRef)context
+{
+    SetForScope<BOOL> change(_isRenderingInContext, YES);
+    [super renderInContext:context];
+}
 
 - (id<CAAction>)actionForKey:(NSString *)key
 {
@@ -75,14 +81,14 @@ using namespace WebCore;
 
 - (void)setNeedsDisplay
 {
-    PlatformCALayer* layer = PlatformCALayer::platformCALayer(self);
+    PlatformCALayer* layer = PlatformCALayer::platformCALayer((__bridge void*)self);
     if (layer && layer->owner() && layer->owner()->platformCALayerDrawsContent())
         [super setNeedsDisplay];
 }
 
 - (void)setNeedsDisplayInRect:(CGRect)dirtyRect
 {
-    PlatformCALayer* platformLayer = PlatformCALayer::platformCALayer(self);
+    PlatformCALayer* platformLayer = PlatformCALayer::platformCALayer((__bridge void*)self);
     if (!platformLayer) {
         [super setNeedsDisplayInRect:dirtyRect];
         return;
@@ -109,7 +115,7 @@ using namespace WebCore;
 #endif
     ASSERT(isMainThread());
     [super display];
-    PlatformCALayer* layer = PlatformCALayer::platformCALayer(self);
+    PlatformCALayer* layer = PlatformCALayer::platformCALayer((__bridge void*)self);
     if (layer && layer->owner())
         layer->owner()->platformCALayerLayerDidDisplay(layer);
 }
@@ -121,14 +127,14 @@ using namespace WebCore;
         WebThreadLock();
 #endif
     ASSERT(isMainThread());
-    PlatformCALayer* layer = PlatformCALayer::platformCALayer(self);
+    PlatformCALayer* layer = PlatformCALayer::platformCALayer((__bridge void*)self);
     if (layer && layer->owner()) {
         GraphicsContext graphicsContext(context);
         graphicsContext.setIsCALayerContext(true);
         graphicsContext.setIsAcceleratedContext(layer->acceleratesDrawing());
 
         FloatRect clipBounds = CGContextGetClipBoundingBox(context);
-        layer->owner()->platformCALayerPaintContents(layer, graphicsContext, clipBounds);
+        layer->owner()->platformCALayerPaintContents(layer, graphicsContext, clipBounds, self.isRenderingInContext ? GraphicsLayerPaintSnapshotting : GraphicsLayerPaintNormal);
     }
 }
 
@@ -167,6 +173,11 @@ using namespace WebCore;
 
     if ([[self sublayers] count] == 0)
         [curDesc appendString:@"\n"];
+
+    if (CALayer *mask = [self mask]) {
+        [curDesc appendString:@"mask: "];
+        [curDesc appendString:[mask _descriptionWithPrefix:sublayerPrefix]];
+    }
 
     return curDesc;
 }

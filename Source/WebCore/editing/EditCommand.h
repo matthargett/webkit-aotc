@@ -23,8 +23,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
  */
 
-#ifndef EditCommand_h
-#define EditCommand_h
+#pragma once
 
 #include "AXTextStateChangeIntent.h"
 #include "EditAction.h"
@@ -57,13 +56,12 @@ public:
     virtual bool isInsertTextCommand() const { return false; }    
     virtual bool isSimpleEditCommand() const { return false; }
     virtual bool isCompositeEditCommand() const { return false; }
-    virtual bool isEditCommandComposition() const { return false; }
     bool isTopLevelCommand() const { return !m_parent; }
 
     virtual void doApply() = 0;
 
 protected:
-    explicit EditCommand(Document&, EditAction = EditActionUnspecified);
+    explicit EditCommand(Document&, EditAction = EditAction::Unspecified);
     EditCommand(Document&, const VisibleSelection&, const VisibleSelection&);
 
     const Frame& frame() const;
@@ -84,7 +82,7 @@ private:
     VisibleSelection m_startingSelection;
     VisibleSelection m_endingSelection;
     CompositeEditCommand* m_parent { nullptr };
-    EditAction m_editingAction { EditActionUnspecified };
+    EditAction m_editingAction { EditAction::Unspecified };
 };
 
 enum ShouldAssumeContentIsAlwaysEditable {
@@ -102,7 +100,7 @@ public:
 #endif
 
 protected:
-    explicit SimpleEditCommand(Document&, EditAction = EditActionUnspecified);
+    explicit SimpleEditCommand(Document&, EditAction = EditAction::Unspecified);
 
 #ifndef NDEBUG
     void addNodeAndDescendants(Node*, HashSet<Node*>&);
@@ -120,5 +118,3 @@ inline SimpleEditCommand* toSimpleEditCommand(EditCommand* command)
 }
 
 } // namespace WebCore
-
-#endif // EditCommand_h

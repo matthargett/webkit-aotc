@@ -99,7 +99,8 @@ class FakeServerProcess(server_process.ServerProcess):
 
 class TestServerProcess(unittest.TestCase):
     def test_basic(self):
-        cmd = [sys.executable, '-c', 'import sys; import time; time.sleep(0.02); print "stdout"; sys.stdout.flush(); print >>sys.stderr, "stderr"']
+        # Give -u switch to force stdout and stderr to be unbuffered for Windows
+        cmd = [sys.executable, '-uc', 'import sys; print "stdout"; print >>sys.stderr, "stderr"; sys.stdin.readline();']
         host = SystemHost()
         factory = PortFactory(host)
         port = factory.get()
@@ -107,10 +108,7 @@ class TestServerProcess(unittest.TestCase):
         proc = server_process.ServerProcess(port, 'python', cmd)
         proc.write('')
 
-        if sys.platform.startswith('win'):
-            self.assertEqual(proc.poll(), 0)
-        else:
-            self.assertEqual(proc.poll(), None)
+        self.assertEqual(proc.poll(), None)
         self.assertFalse(proc.has_crashed())
 
         # check that doing a read after an expired deadline returns
@@ -118,15 +116,81 @@ class TestServerProcess(unittest.TestCase):
         line = proc.read_stdout_line(now - 1)
         self.assertEqual(line, None)
 
-        # FIXME: This part appears to be flaky. line should always be non-None.
-        # FIXME: https://bugs.webkit.org/show_bug.cgi?id=88280
         line = proc.read_stdout_line(now + 1.0)
-        if line:
-            self.assertEqual(line.strip(), "stdout")
+        self.assertEqual(line.strip(), "stdout")
 
         line = proc.read_stderr_line(now + 1.0)
-        if line:
-            self.assertEqual(line.strip(), "stderr")
+        self.assertEqual(line.strip(), "stderr")
+
+        proc.write('End\n')
+        time.sleep(0.1)  # Give process a moment to close.
+        self.assertEqual(proc.poll(), 0)
+
+        proc.stop(0)
+
+    def test_read_after_process_exits(self):
+        cmd = [sys.executable, '-c', 'import sys; print "stdout"; print >>sys.stderr, "stderr";']
+        host = SystemHost()
+        factory = PortFactory(host)
+        port = factory.get()
+        now = time.time()
+        proc = server_process.ServerProcess(port, 'python', cmd)
+        proc.write('')
+        time.sleep(0.1)  # Give process a moment to close.
+
+        line = proc.read_stdout_line(now + 1.0)
+        self.assertEqual(line.strip(), "stdout")
+
+        line = proc.read_stderr_line(now + 1.0)
+        self.assertEqual(line.strip(), "stderr")
+
+        proc.stop(0)
+
+    def test_process_crashing(self):
+        # Give -u switch to force stdout to be unbuffered for Windows
+        cmd = [sys.executable, '-uc', 'import sys; print "stdout 1"; print "stdout 2"; print "stdout 3"; sys.stdin.readline(); sys.exit(1);']
+        host = SystemHost()
+        factory = PortFactory(host)
+        port = factory.get()
+        now = time.time()
+        proc = server_process.ServerProcess(port, 'python', cmd)
+        proc.write('')
+
+        line = proc.read_stdout_line(now + 1.0)
+        self.assertEqual(line.strip(), 'stdout 1')
+
+        proc.write('End\n')
+        time.sleep(0.1)  # Give process a moment to close.
+
+        line = proc.read_stdout_line(now + 1.0)
+        self.assertEqual(line.strip(), 'stdout 2')
+
+        self.assertEqual(True, proc.has_crashed())
+
+        line = proc.read_stdout_line(now + 1.0)
+        self.assertEqual(line, None)
+
+        proc.stop(0)
+
+    def test_process_crashing_no_data(self):
+        cmd = [sys.executable, '-c',
+               'import sys; sys.stdin.readline(); sys.exit(1);']
+        host = SystemHost()
+        factory = PortFactory(host)
+        port = factory.get()
+        now = time.time()
+        proc = server_process.ServerProcess(port, 'python', cmd)
+        proc.write('')
+
+        self.assertEqual(False, proc.has_crashed())
+
+        proc.write('End\n')
+        time.sleep(0.1)  # Give process a moment to close.
+
+        line = proc.read_stdout_line(now + 1.0)
+        self.assertEqual(line, None)
+
+        self.assertEqual(True, proc.has_crashed())
 
         proc.stop(0)
 

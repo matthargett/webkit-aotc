@@ -32,9 +32,8 @@
 #import "InbandTextTrackPrivateAVF.h"
 #import "Logging.h"
 #import "MediaPlayerPrivateAVFoundationObjC.h"
-#import "SoftLinking.h"
-#import <AVFoundation/AVFoundation.h>
 #import <objc/runtime.h>
+#import <wtf/SoftLinking.h>
 
 SOFT_LINK_FRAMEWORK_OPTIONAL(AVFoundation)
 
@@ -42,10 +41,10 @@ SOFT_LINK_CLASS(AVFoundation, AVPlayerItem)
 SOFT_LINK_CLASS(AVFoundation, AVMetadataItem)
 #define AVMediaTypeClosedCaption getAVMediaTypeClosedCaption()
 
-SOFT_LINK_POINTER(AVFoundation, AVMediaTypeClosedCaption, NSString *)
-SOFT_LINK_POINTER(AVFoundation, AVMediaCharacteristicLegible, NSString *)
-SOFT_LINK_POINTER(AVFoundation, AVMetadataCommonKeyTitle, NSString *)
-SOFT_LINK_POINTER(AVFoundation, AVMetadataKeySpaceCommon, NSString *)
+SOFT_LINK_CONSTANT(AVFoundation, AVMediaTypeClosedCaption, NSString *)
+SOFT_LINK_CONSTANT(AVFoundation, AVMediaCharacteristicLegible, NSString *)
+SOFT_LINK_CONSTANT(AVFoundation, AVMetadataCommonKeyTitle, NSString *)
+SOFT_LINK_CONSTANT(AVFoundation, AVMetadataKeySpaceCommon, NSString *)
 
 #define AVPlayerItem getAVPlayerItemClass()
 #define AVMetadataItem getAVMetadataItemClass()
@@ -98,7 +97,7 @@ bool InbandTextTrackPrivateLegacyAVFObjC::isEasyToRead() const
 AtomicString InbandTextTrackPrivateLegacyAVFObjC::label() const
 {
     if (!m_playerItemTrack)
-        return emptyAtom;
+        return emptyAtom();
 
     NSString *title = 0;
 
@@ -113,13 +112,13 @@ AtomicString InbandTextTrackPrivateLegacyAVFObjC::label() const
             title = [[titles objectAtIndex:0] stringValue];
     }
 
-    return title ? AtomicString(title) : emptyAtom;
+    return title ? AtomicString(title) : emptyAtom();
 }
 
 AtomicString InbandTextTrackPrivateLegacyAVFObjC::language() const
 {
     if (!m_playerItemTrack)
-        return emptyAtom;
+        return emptyAtom();
 
     NSString *languageCode = [[m_playerItemTrack assetTrack] languageCode];
     RetainPtr<NSLocale> locale = adoptNS([[NSLocale alloc] initWithLocaleIdentifier:languageCode]);

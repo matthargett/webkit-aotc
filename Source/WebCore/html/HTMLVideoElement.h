@@ -36,7 +36,9 @@ class HTMLImageLoader;
 class RenderVideo;
 
 class HTMLVideoElement final : public HTMLMediaElement {
+    WTF_MAKE_ISO_ALLOCATED(HTMLVideoElement);
 public:
+    WEBCORE_EXPORT static Ref<HTMLVideoElement> create(Document&);
     static Ref<HTMLVideoElement> create(const QualifiedName&, Document&, bool createdByParser);
 
     WEBCORE_EXPORT unsigned videoWidth() const;
@@ -59,6 +61,10 @@ public:
     unsigned webkitDroppedFrameCount() const;
 #endif
 
+#if ENABLE(FULLSCREEN_API) && PLATFORM(IOS)
+    void webkitRequestFullscreen() override;
+#endif
+
     // Used by canvas to gain raw pixel access
     void paintCurrentFrameInContext(GraphicsContext&, const FloatRect&);
 
@@ -75,7 +81,7 @@ public:
 
 #if ENABLE(VIDEO_PRESENTATION_MODE)
     enum class VideoPresentationMode { Fullscreen, PictureInPicture, Inline };
-    bool webkitSupportsPresentationMode(VideoPresentationMode) const;
+    WEBCORE_EXPORT bool webkitSupportsPresentationMode(VideoPresentationMode) const;
     void webkitSetPresentationMode(VideoPresentationMode);
     VideoPresentationMode webkitPresentationMode() const;
     void setFullscreenMode(VideoFullscreenMode);
@@ -106,7 +112,7 @@ private:
 
     bool hasAvailableVideoFrame() const;
     void updateDisplayState() final;
-    void didMoveToNewDocument(Document* oldDocument) final;
+    void didMoveToNewDocument(Document& oldDocument, Document& newDocument) final;
     void setDisplayMode(DisplayMode) final;
 
     PlatformMediaSession::MediaType presentationType() const final { return PlatformMediaSession::Video; }

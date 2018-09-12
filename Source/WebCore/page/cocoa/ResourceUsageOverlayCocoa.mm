@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015 Apple Inc. All rights reserved.
+ * Copyright (C) 2015, 2017 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,6 +30,7 @@
 
 #include <CoreText/CoreText.h>
 
+#include "CommonVM.h"
 #include "JSDOMWindow.h"
 #include "PlatformCALayer.h"
 #include "ResourceUsageThread.h"
@@ -38,10 +39,10 @@
 #include <QuartzCore/CATransaction.h>
 #include <wtf/MainThread.h>
 #include <wtf/MathExtras.h>
+#include <wtf/MemoryFootprint.h>
 #include <wtf/NeverDestroyed.h>
 
-using namespace WebCore;
-
+using WebCore::ResourceUsageOverlay;
 @interface WebOverlayLayer : CALayer {
     ResourceUsageOverlay* m_overlay;
 }
@@ -88,11 +89,11 @@ public:
         return m_data[index];
     }
 
-    void forEach(std::function<void(T)> func) const
+    void forEach(const WTF::Function<void(T)>& apply) const
     {
         unsigned i = m_current;
         for (unsigned visited = 0; visited < size; ++visited) {
-            func(m_data[i]);
+            apply(m_data[i]);
             incrementIndex(i);
         }
     }
@@ -153,14 +154,15 @@ struct HistoricResourceUsageData {
     RingBuffer<size_t> totalExternalSize;
     RingBuffer<size_t> gcHeapSize;
     std::array<HistoricMemoryCategoryInfo, MemoryCategory::NumberOfCategories> categories;
-    double timeOfNextEdenCollection { 0 };
-    double timeOfNextFullCollection { 0 };
+    MonotonicTime timeOfNextEdenCollection { MonotonicTime::nan() };
+    MonotonicTime timeOfNextFullCollection { MonotonicTime::nan() };
 };
 
 HistoricResourceUsageData::HistoricResourceUsageData()
 {
     // VM tag categories.
     categories[MemoryCategory::JSJIT] = HistoricMemoryCategoryInfo(MemoryCategory::JSJIT, 0xFFFF60FF, "JS JIT");
+    categories[MemoryCategory::WebAssembly] = HistoricMemoryCategoryInfo(MemoryCategory::WebAssembly, 0xFF654FF0, "WebAssembly");
     categories[MemoryCategory::Images] = HistoricMemoryCategoryInfo(MemoryCategory::Images, 0xFFFFFF00, "Images");
     categories[MemoryCategory::Layers] = HistoricMemoryCategoryInfo(MemoryCategory::Layers, 0xFF00FFFF, "Layers");
     categories[MemoryCategory::LibcMalloc] = HistoricMemoryCategoryInfo(MemoryCategory::LibcMalloc, 0xFF00FF00, "libc malloc");
@@ -204,7 +206,7 @@ static void appendDataToHistory(const ResourceUsageData& data)
 
     // FIXME: Find a way to add this to ResourceUsageData and calculate it on the resource usage sampler thread.
     {
-        JSC::VM* vm = &JSDOMWindow::commonVM();
+        JSC::VM* vm = &commonVM();
         JSC::JSLockHolder lock(vm);
         historicData.gcHeapSize.append(vm->heap.size() - vm->heap.extraMemorySize());
     }
@@ -225,7 +227,7 @@ void ResourceUsageOverlay::platformInitialize()
     [m_layer.get() setBackgroundColor:adoptCF(createColor(0, 0, 0, 0.8)).get()];
     [m_layer.get() setBounds:CGRectMake(0, 0, normalWidth, normalHeight)];
 
-    overlay().layer().setContentsToPlatformLayer(m_layer.get(), GraphicsLayer::NoContentsLayer);
+    overlay().layer().setContentsToPlatformLayer(m_layer.get(), GraphicsLayer::ContentsLayerPurpose::None);
 
     ResourceUsageThread::addObserver(this, [this] (const ResourceUsageData& data) {
         appendDataToHistory(data);
@@ -432,11 +434,11 @@ static String formatByteNumber(size_t number)
     return String::format("%lu", number);
 }
 
-static String gcTimerString(double timerFireDate, double now)
+static String gcTimerString(MonotonicTime timerFireDate, MonotonicTime now)
 {
-    if (!timerFireDate)
-        return ASCIILiteral("[not scheduled]");
-    return String::format("%g", timerFireDate - now);
+    if (std::isnan(timerFireDate))
+        return "[not scheduled]"_s;
+    return String::format("%g", (timerFireDate - now).seconds());
 }
 
 void ResourceUsageOverlay::platformDraw(CGContextRef context)
@@ -456,7 +458,7 @@ void ResourceUsageOverlay::platformDraw(CGContextRef context)
 
     static CGColorRef colorForLabels = createColor(0.9, 0.9, 0.9, 1);
     showText(context, 10, 20, colorForLabels, String::format("        CPU: %g", data.cpu.last()));
-    showText(context, 10, 30, colorForLabels, "  Footprint: " + formatByteNumber(data.totalDirtySize.last()));
+    showText(context, 10, 30, colorForLabels, "  Footprint: " + formatByteNumber(memoryFootprint()));
     showText(context, 10, 40, colorForLabels, "   External: " + formatByteNumber(data.totalExternalSize.last()));
 
     float y = 55;
@@ -477,7 +479,7 @@ void ResourceUsageOverlay::platformDraw(CGContextRef context)
     }
     y -= 5;
 
-    double now = WTF::currentTime();
+    MonotonicTime now = MonotonicTime::now();
     showText(context, 10, y + 10, colorForLabels, String::format("    Eden GC: %s", gcTimerString(data.timeOfNextEdenCollection, now).ascii().data()));
     showText(context, 10, y + 20, colorForLabels, String::format("    Full GC: %s", gcTimerString(data.timeOfNextFullCollection, now).ascii().data()));
 

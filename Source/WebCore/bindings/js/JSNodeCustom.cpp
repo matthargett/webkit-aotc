@@ -32,7 +32,6 @@
 #include "Document.h"
 #include "DocumentFragment.h"
 #include "DocumentType.h"
-#include "ExceptionCode.h"
 #include "HTMLAudioElement.h"
 #include "HTMLCanvasElement.h"
 #include "HTMLElement.h"
@@ -66,15 +65,15 @@
 #include "StyledElement.h"
 #include "Text.h"
 
-using namespace JSC;
 
 namespace WebCore {
+using namespace JSC;
 
 using namespace HTMLNames;
 
-static inline bool isReachableFromDOM(Node* node, SlotVisitor& visitor)
+static inline bool isReachableFromDOM(Node* node, SlotVisitor& visitor, const char** reason)
 {
-    if (!node->inDocument()) {
+    if (!node->isConnected()) {
         if (is<Element>(*node)) {
             auto& element = downcast<Element>(*node);
 
@@ -84,125 +83,47 @@ static inline bool isReachableFromDOM(Node* node, SlotVisitor& visitor)
             // the element is destroyed, its load event will not fire.
             // FIXME: The DOM should manage this issue without the help of JavaScript wrappers.
             if (is<HTMLImageElement>(element)) {
-                if (downcast<HTMLImageElement>(element).hasPendingActivity())
+                if (downcast<HTMLImageElement>(element).hasPendingActivity()) {
+                    if (UNLIKELY(reason))
+                        *reason = "Image element with pending activity";
                     return true;
+                }
             }
 #if ENABLE(VIDEO)
             else if (is<HTMLAudioElement>(element)) {
-                if (!downcast<HTMLAudioElement>(element).paused())
+                if (!downcast<HTMLAudioElement>(element).paused()) {
+                    if (UNLIKELY(reason))
+                        *reason = "Audio element which is not paused";
                     return true;
+                }
             }
 #endif
         }
 
         // If a node is firing event listeners, its wrapper is observable because
         // its wrapper is responsible for marking those event listeners.
-        if (node->isFiringEventListeners())
+        if (node->isFiringEventListeners()) {
+            if (UNLIKELY(reason))
+                *reason = "Node which is firing event listeners";
             return true;
+        }
     }
+
+    if (UNLIKELY(reason))
+        *reason = "Connected node";
 
     return visitor.containsOpaqueRoot(root(node));
 }
 
-bool JSNodeOwner::isReachableFromOpaqueRoots(JSC::Handle<JSC::Unknown> handle, void*, SlotVisitor& visitor)
+bool JSNodeOwner::isReachableFromOpaqueRoots(JSC::Handle<JSC::Unknown> handle, void*, SlotVisitor& visitor, const char** reason)
 {
     JSNode* jsNode = jsCast<JSNode*>(handle.slot()->asCell());
-    return isReachableFromDOM(&jsNode->wrapped(), visitor);
-}
-
-JSValue JSNode::insertBefore(ExecState& state)
-{
-    VM& vm = state.vm();
-    auto scope = DECLARE_THROW_SCOPE(vm);
-
-    if (UNLIKELY(state.argumentCount() < 2))
-        return throwException(&state, scope, createNotEnoughArgumentsError(&state));
-
-    JSValue newChildValue = state.uncheckedArgument(0);
-    auto* newChild = JSNode::toWrapped(newChildValue);
-    if (UNLIKELY(!newChild))
-        return JSValue::decode(throwArgumentTypeError(state, scope, 0, "node", "Node", "insertBefore", "Node"));
-
-    ExceptionCode ec = 0;
-    if (UNLIKELY(!wrapped().insertBefore(*newChild, JSNode::toWrapped(state.uncheckedArgument(1)), ec))) {
-        setDOMException(&state, ec);
-        return jsUndefined();
-    }
-
-    ASSERT(!ec);
-    return newChildValue;
-}
-
-JSValue JSNode::replaceChild(ExecState& state)
-{
-    VM& vm = state.vm();
-    auto scope = DECLARE_THROW_SCOPE(vm);
-
-    if (UNLIKELY(state.argumentCount() < 2))
-        return throwException(&state, scope, createNotEnoughArgumentsError(&state));
-
-    auto* newChild = JSNode::toWrapped(state.uncheckedArgument(0));
-    JSValue oldChildValue = state.uncheckedArgument(1);
-    auto* oldChild = JSNode::toWrapped(oldChildValue);
-    if (UNLIKELY(!newChild || !oldChild)) {
-        if (!newChild)
-            return JSValue::decode(throwArgumentTypeError(state, scope, 0, "node", "Node", "replaceChild", "Node"));
-        return JSValue::decode(throwArgumentTypeError(state, scope, 1, "child", "Node", "replaceChild", "Node"));
-    }
-
-    ExceptionCode ec = 0;
-    if (UNLIKELY(!wrapped().replaceChild(*newChild, *oldChild, ec))) {
-        setDOMException(&state, ec);
-        return jsUndefined();
-    }
-
-    ASSERT(!ec);
-    return oldChildValue;
-}
-
-JSValue JSNode::removeChild(ExecState& state)
-{
-    VM& vm = state.vm();
-    auto scope = DECLARE_THROW_SCOPE(vm);
-
-    JSValue childValue = state.argument(0);
-    auto* child = JSNode::toWrapped(childValue);
-    if (UNLIKELY(!child))
-        return JSValue::decode(throwArgumentTypeError(state, scope, 0, "child", "Node", "removeChild", "Node"));
-
-    ExceptionCode ec = 0;
-    if (UNLIKELY(!wrapped().removeChild(*child, ec))) {
-        setDOMException(&state, ec);
-        return jsUndefined();
-    }
-
-    ASSERT(!ec);
-    return childValue;
-}
-
-JSValue JSNode::appendChild(ExecState& state)
-{
-    VM& vm = state.vm();
-    auto scope = DECLARE_THROW_SCOPE(vm);
-
-    JSValue newChildValue = state.argument(0);
-    auto newChild = JSNode::toWrapped(newChildValue);
-    if (UNLIKELY(!newChild))
-        return JSValue::decode(throwArgumentTypeError(state, scope, 0, "node", "Node", "appendChild", "Node"));
-
-    ExceptionCode ec = 0;
-    if (UNLIKELY(!wrapped().appendChild(*newChild, ec))) {
-        setDOMException(&state, ec);
-        return jsUndefined();
-    }
-
-    ASSERT(!ec);
-    return newChildValue;
+    return isReachableFromDOM(&jsNode->wrapped(), visitor, reason);
 }
 
 JSScope* JSNode::pushEventHandlerScope(ExecState* exec, JSScope* node) const
 {
-    if (inherits(JSHTMLElement::info()))
+    if (inherits<JSHTMLElement>(exec->vm()))
         return jsCast<const JSHTMLElement*>(this)->pushEventHandlerScope(exec, node);
     return node;
 }
@@ -219,9 +140,9 @@ static ALWAYS_INLINE JSValue createWrapperInline(ExecState* exec, JSDOMGlobalObj
     JSDOMObject* wrapper;    
     switch (node->nodeType()) {
         case Node::ELEMENT_NODE:
-            if (is<HTMLElement>(node.get()))
+            if (is<HTMLElement>(node))
                 wrapper = createJSHTMLWrapper(globalObject, static_reference_cast<HTMLElement>(WTFMove(node)));
-            else if (is<SVGElement>(node.get()))
+            else if (is<SVGElement>(node))
                 wrapper = createJSSVGWrapper(globalObject, static_reference_cast<SVGElement>(WTFMove(node)));
             else
                 wrapper = createWrapper<Element>(globalObject, WTFMove(node));
@@ -273,7 +194,7 @@ JSValue toJSNewlyCreated(ExecState* exec, JSDOMGlobalObject* globalObject, Ref<N
 JSC::JSObject* getOutOfLineCachedWrapper(JSDOMGlobalObject* globalObject, Node& node)
 {
     ASSERT(!globalObject->world().isNormal());
-    return globalObject->world().m_wrappers.get(&node);
+    return globalObject->world().wrappers().get(&node);
 }
 
 void willCreatePossiblyOrphanedTreeByRemovalSlowCase(Node* root)

@@ -31,9 +31,16 @@
 #include "EventTarget.h"
 #include "MessagePort.h"
 #include "WorkerScriptLoaderClient.h"
-#include <runtime/RuntimeFlags.h>
+#include <JavaScriptCore/RuntimeFlags.h>
+#include <wtf/MonotonicTime.h>
 #include <wtf/Optional.h>
 #include <wtf/text/AtomicStringHash.h>
+
+namespace JSC {
+class ExecState;
+class JSObject;
+class JSValue;
+}
 
 namespace WebCore {
 
@@ -43,19 +50,24 @@ class WorkerScriptLoader;
 
 class Worker final : public AbstractWorker, public ActiveDOMObject, private WorkerScriptLoaderClient {
 public:
-    static ExceptionOr<Ref<Worker>> create(ScriptExecutionContext&, const String& url, JSC::RuntimeFlags);
+    struct Options {
+        String name;
+    };
+    static ExceptionOr<Ref<Worker>> create(ScriptExecutionContext&, JSC::RuntimeFlags, const String& url, const Options&);
     virtual ~Worker();
 
-    ExceptionOr<void> postMessage(RefPtr<SerializedScriptValue>&& message, Vector<RefPtr<MessagePort>>&&);
+    ExceptionOr<void> postMessage(JSC::ExecState&, JSC::JSValue message, Vector<JSC::Strong<JSC::JSObject>>&&);
 
     void terminate();
 
     bool hasPendingActivity() const final;
 
+    String identifier() const { return m_identifier; }
+
     ScriptExecutionContext* scriptExecutionContext() const final { return ActiveDOMObject::scriptExecutionContext(); }
 
 private:
-    explicit Worker(ScriptExecutionContext&, JSC::RuntimeFlags);
+    explicit Worker(ScriptExecutionContext&, JSC::RuntimeFlags, const Options&);
 
     EventTargetInterface eventTargetInterface() const final { return WorkerEventTargetInterfaceType; }
 
@@ -68,11 +80,14 @@ private:
     void stop() final;
     const char* activeDOMObjectName() const final;
 
-    friend void networkStateChanged(bool isOnLine);
+    static void networkStateChanged(bool isOnLine);
 
     RefPtr<WorkerScriptLoader> m_scriptLoader;
-    WorkerGlobalScopeProxy* m_contextProxy; // The proxy outlives the worker to perform thread shutdown.
-    Optional<ContentSecurityPolicyResponseHeaders> m_contentSecurityPolicyResponseHeaders;
+    String m_name;
+    String m_identifier;
+    WorkerGlobalScopeProxy& m_contextProxy; // The proxy outlives the worker to perform thread shutdown.
+    std::optional<ContentSecurityPolicyResponseHeaders> m_contentSecurityPolicyResponseHeaders;
+    MonotonicTime m_workerCreationTime;
     bool m_shouldBypassMainWorldContentSecurityPolicy { false };
     JSC::RuntimeFlags m_runtimeFlags;
 };

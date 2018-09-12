@@ -23,8 +23,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
  */
 
-#ifndef CachedSVGFont_h
-#define CachedSVGFont_h
+#pragma once
 
 #if ENABLE(SVG_FONTS)
 
@@ -36,14 +35,14 @@ class SVGFontFaceElement;
 
 class CachedSVGFont final : public CachedFont {
 public:
-    CachedSVGFont(CachedResourceRequest&&, SessionID);
+    CachedSVGFont(CachedResourceRequest&&, PAL::SessionID);
 
     bool ensureCustomFontData(const AtomicString& remoteURI) override;
 
-    RefPtr<Font> createFont(const FontDescription&, const AtomicString& remoteURI, bool syntheticBold, bool syntheticItalic, const FontFeatureSettings&, const FontVariantSettings&) override;
+    RefPtr<Font> createFont(const FontDescription&, const AtomicString& remoteURI, bool syntheticBold, bool syntheticItalic, const FontFeatureSettings&, const FontVariantSettings&, FontSelectionSpecifiedCapabilities) override;
 
 private:
-    FontPlatformData platformDataFromCustomData(const FontDescription&, bool bold, bool italic, const FontFeatureSettings&, const FontVariantSettings&);
+    FontPlatformData platformDataFromCustomData(const FontDescription&, bool bold, bool italic, const FontFeatureSettings&, const FontVariantSettings&, FontSelectionSpecifiedCapabilities);
 
     SVGFontElement* getSVGFontById(const String&) const;
 
@@ -55,10 +54,8 @@ private:
     SVGFontElement* m_externalSVGFontElement;
 };
 
-}
+} // namespace WebCore
 
-SPECIALIZE_TYPE_TRAITS_CACHED_RESOURCE(CachedSVGFont, CachedResource::SVGFontResource)
+SPECIALIZE_TYPE_TRAITS_CACHED_RESOURCE(CachedSVGFont, CachedResource::Type::SVGFontResource)
 
-#endif
-
-#endif
+#endif // ENABLE(SVG_FONTS)

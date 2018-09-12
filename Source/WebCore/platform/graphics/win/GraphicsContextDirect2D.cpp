@@ -27,7 +27,6 @@
 #include "GraphicsContext.h"
 
 #include "COMPtr.h"
-#include "CurrentTime.h"
 #include "DisplayListRecorder.h"
 #include "FloatRoundedRect.h"
 #include "GraphicsContextPlatformPrivateDirect2D.h"
@@ -41,9 +40,9 @@
 
 #pragma warning (disable : 4756)
 
-using namespace std;
 
 namespace WebCore {
+using namespace std;
 
 GraphicsContext::GraphicsContext(HDC hdc, bool hasAlpha)
 {
@@ -151,8 +150,29 @@ void GraphicsContext::platformDestroy()
 ID2D1RenderTarget* GraphicsContext::platformContext() const
 {
     ASSERT(!paintingDisabled());
-    ASSERT(m_data->renderTarget());
     return m_data->renderTarget();
+}
+
+ID2D1RenderTarget* GraphicsContextPlatformPrivate::renderTarget()
+{
+    if (!m_transparencyLayerStack.isEmpty())
+        return m_transparencyLayerStack.last().renderTarget.get();
+
+    return m_renderTarget.get();
+}
+
+void GraphicsContextPlatformPrivate::setAlpha(float alpha)
+{
+    ASSERT(m_transparencyLayerStack.isEmpty());
+    m_alpha = alpha;
+}
+
+float GraphicsContextPlatformPrivate::currentGlobalAlpha() const
+{
+    if (!m_transparencyLayerStack.isEmpty())
+        return m_transparencyLayerStack.last().opacity;
+
+    return m_alpha;
 }
 
 void GraphicsContext::savePlatformState()
@@ -246,9 +266,9 @@ void GraphicsContext::drawNativeImage(const COMPtr<ID2D1Bitmap>& image, const Fl
         context->SetTransform(ctm);
 }
 
-void GraphicsContext::releaseWindowsContext(HDC hdc, const IntRect& dstRect, bool supportAlphaBlend, bool mayCreateBitmap)
+void GraphicsContext::releaseWindowsContext(HDC hdc, const IntRect& dstRect, bool supportAlphaBlend)
 {
-    bool createdBitmap = mayCreateBitmap && (!m_data->m_hdc || isInTransparencyLayer());
+    bool createdBitmap = m_impl || !m_data->m_hdc || isInTransparencyLayer();
     if (!createdBitmap) {
         m_data->restore();
         return;
@@ -268,7 +288,21 @@ void GraphicsContext::releaseWindowsContext(HDC hdc, const IntRect& dstRect, boo
     HRESULT hr = platformContext()->CreateBitmap(pixelData.size(), pixelData.buffer(), pixelData.bytesPerRow(), &bitmapProperties, &bitmap);
     ASSERT(SUCCEEDED(hr));
 
-    platformContext()->DrawBitmap(bitmap.get(), dstRect);
+    D2DContextStateSaver stateSaver(*m_data);
+
+    // Note: The content in the HDC is inverted compared to Direct2D, so it needs to be flipped.
+    auto context = platformContext();
+
+    D2D1_MATRIX_3X2_F currentTransform;
+    context->GetTransform(&currentTransform);
+
+    AffineTransform transform(currentTransform);
+    transform.translate(dstRect.location());
+    transform.scale(1.0, -1.0);
+    transform.translate(0, -dstRect.height());
+
+    context->SetTransform(transform);
+    context->DrawBitmap(bitmap.get(), D2D1::RectF(0, 0, dstRect.width(), dstRect.height()));
 
     ::DeleteDC(hdc);
 }
@@ -282,10 +316,6 @@ void GraphicsContext::drawFocusRing(const Path& path, float width, float offset,
 }
 
 void GraphicsContext::drawFocusRing(const Vector<FloatRect>& rects, float width, float offset, const Color& color)
-{
-}
-
-void GraphicsContext::updateDocumentMarkerResources()
 {
 }
 
@@ -475,8 +505,8 @@ void GraphicsContextPlatformPrivate::rotate(float angle)
 
 D2D1_COLOR_F GraphicsContext::colorWithGlobalAlpha(const Color& color) const
 {
-    float colorAlpha = color.alpha() / 255.0f;
-    float globalAlpha = m_state.alpha;
+    float colorAlpha = color.alphaAsFloat();
+    float globalAlpha = m_data->currentGlobalAlpha();
 
     return D2D1::ColorF(color.rgb(), globalAlpha * colorAlpha);
 }
@@ -900,12 +930,53 @@ void GraphicsContext::drawPath(const Path& path)
     flush();
 }
 
-void GraphicsContext::drawWithoutShadow(const FloatRect& /*boundingRect*/, const std::function<void(ID2D1RenderTarget*)>& drawCommands)
+void GraphicsContext::drawWithoutShadow(const FloatRect& /*boundingRect*/, const WTF::Function<void(ID2D1RenderTarget*)>& drawCommands)
 {
     drawCommands(platformContext());
 }
 
-void GraphicsContext::drawWithShadow(const FloatRect& boundingRect, const std::function<void(ID2D1RenderTarget*)>& drawCommands)
+static void drawWithShadowHelper(ID2D1RenderTarget* context, ID2D1Bitmap* bitmap, const Color& shadowColor, const FloatSize& shadowOffset, float shadowBlur)
+{
+    COMPtr<ID2D1DeviceContext> deviceContext;
+    HRESULT hr = context->QueryInterface(&deviceContext);
+    RELEASE_ASSERT(SUCCEEDED(hr));
+
+    // Create the shadow effect
+    COMPtr<ID2D1Effect> shadowEffect;
+    hr = deviceContext->CreateEffect(CLSID_D2D1Shadow, &shadowEffect);
+    RELEASE_ASSERT(SUCCEEDED(hr));
+
+    shadowEffect->SetInput(0, bitmap);
+    shadowEffect->SetValue(D2D1_SHADOW_PROP_COLOR, static_cast<D2D1_VECTOR_4F>(shadowColor));
+    shadowEffect->SetValue(D2D1_SHADOW_PROP_BLUR_STANDARD_DEVIATION, shadowBlur);
+
+    COMPtr<ID2D1Effect> transformEffect;
+    hr = deviceContext->CreateEffect(CLSID_D2D12DAffineTransform, &transformEffect);
+    RELEASE_ASSERT(SUCCEEDED(hr));
+
+    transformEffect->SetInputEffect(0, shadowEffect.get());
+
+    auto translation = D2D1::Matrix3x2F::Translation(shadowOffset.width(), shadowOffset.height());
+    transformEffect->SetValue(D2D1_2DAFFINETRANSFORM_PROP_TRANSFORM_MATRIX, translation);
+
+    COMPtr<ID2D1Effect> compositor;
+    hr = deviceContext->CreateEffect(CLSID_D2D1Composite, &compositor);
+    RELEASE_ASSERT(SUCCEEDED(hr));
+
+    compositor->SetInputEffect(0, transformEffect.get());
+    compositor->SetInput(1, bitmap);
+
+    // Flip the context
+    D2D1_MATRIX_3X2_F ctm;
+    deviceContext->GetTransform(&ctm);
+    auto translate = D2D1::Matrix3x2F::Translation(0.0f, deviceContext->GetSize().height);
+    auto flip = D2D1::Matrix3x2F::Scale(D2D1::SizeF(1.0f, -1.0f));
+    deviceContext->SetTransform(ctm * flip * translate);
+
+    deviceContext->DrawImage(compositor.get(), D2D1_INTERPOLATION_MODE_LINEAR);
+}
+
+void GraphicsContext::drawWithShadow(const FloatRect& boundingRect, const WTF::Function<void(ID2D1RenderTarget*)>& drawCommands)
 {
     auto context = platformContext();
 
@@ -923,43 +994,7 @@ void GraphicsContext::drawWithShadow(const FloatRect& boundingRect, const std::f
     hr = bitmapTarget->GetBitmap(&bitmap);
     RELEASE_ASSERT(SUCCEEDED(hr));
 
-    COMPtr<ID2D1DeviceContext> deviceContext;
-    hr = context->QueryInterface(&deviceContext);
-    RELEASE_ASSERT(SUCCEEDED(hr));
-
-    // Create the shadow effect
-    COMPtr<ID2D1Effect> shadowEffect;
-    hr = deviceContext->CreateEffect(CLSID_D2D1Shadow, &shadowEffect);
-    RELEASE_ASSERT(SUCCEEDED(hr));
-
-    shadowEffect->SetInput(0, bitmap.get());
-    shadowEffect->SetValue(D2D1_SHADOW_PROP_COLOR, static_cast<D2D1_VECTOR_4F>(m_state.shadowColor));
-    shadowEffect->SetValue(D2D1_SHADOW_PROP_BLUR_STANDARD_DEVIATION, m_state.shadowBlur);
-
-    COMPtr<ID2D1Effect> transformEffect;
-    hr = deviceContext->CreateEffect(CLSID_D2D12DAffineTransform, &transformEffect);
-    RELEASE_ASSERT(SUCCEEDED(hr));
-
-    transformEffect->SetInputEffect(0, shadowEffect.get());
-
-    auto translation = D2D1::Matrix3x2F::Translation(m_state.shadowOffset.width(), m_state.shadowOffset.height());
-    transformEffect->SetValue(D2D1_2DAFFINETRANSFORM_PROP_TRANSFORM_MATRIX, translation);
-
-    COMPtr<ID2D1Effect> compositor;
-    hr = deviceContext->CreateEffect(CLSID_D2D1Composite, &compositor);
-    RELEASE_ASSERT(SUCCEEDED(hr));
-
-    compositor->SetInputEffect(0, transformEffect.get());
-    compositor->SetInput(1, bitmap.get());
-
-    // Flip the context
-    D2D1_MATRIX_3X2_F ctm;
-    deviceContext->GetTransform(&ctm);
-    auto translate = D2D1::Matrix3x2F::Translation(0.0f, deviceContext->GetSize().height);
-    auto flip = D2D1::Matrix3x2F::Scale(D2D1::SizeF(1.0f, -1.0f));
-    deviceContext->SetTransform(ctm * flip * translate);
-
-    deviceContext->DrawImage(compositor.get(), D2D1_INTERPOLATION_MODE_LINEAR);
+    drawWithShadowHelper(context, bitmap.get(), m_state.shadowColor, m_state.shadowOffset, m_state.shadowBlur);
 }
 
 void GraphicsContext::fillPath(const Path& path)
@@ -1202,7 +1237,7 @@ void GraphicsContext::fillRectWithRoundedHole(const FloatRect& rect, const Float
     WindRule oldFillRule = fillRule();
     Color oldFillColor = fillColor();
 
-    setFillRule(RULE_EVENODD);
+    setFillRule(WindRule::EvenOdd);
     setFillColor(color);
 
     // fillRectWithRoundedHole() assumes that the edges of rect are clipped out, so we only care about shadows cast around inside the hole.
@@ -1273,7 +1308,7 @@ void GraphicsContext::clipOut(const Path& path)
     boundingRect.appendGeometry(path.platformPath());
 
     COMPtr<ID2D1GeometryGroup> pathToClip;
-    boundingRect.createGeometryWithFillMode(RULE_EVENODD, pathToClip);
+    boundingRect.createGeometryWithFillMode(WindRule::EvenOdd, pathToClip);
 
     m_data->clip(pathToClip.get());
 }
@@ -1321,6 +1356,19 @@ IntRect GraphicsContext::clipBounds() const
     return enclosingIntRect(clipBounds);
 }
 
+void GraphicsContextPlatformPrivate::beginTransparencyLayer(float opacity)
+{
+    TransparencyLayerState transparencyLayer;
+    transparencyLayer.opacity = opacity;
+
+    HRESULT hr = m_renderTarget->CreateCompatibleRenderTarget(&transparencyLayer.renderTarget);
+    RELEASE_ASSERT(SUCCEEDED(hr));
+    m_transparencyLayerStack.append(WTFMove(transparencyLayer));
+
+    m_transparencyLayerStack.last().renderTarget->BeginDraw();
+    m_transparencyLayerStack.last().renderTarget->Clear(D2D1::ColorF(0, 0, 0, 0));
+}
+
 void GraphicsContext::beginPlatformTransparencyLayer(float opacity)
 {
     if (paintingDisabled())
@@ -1330,7 +1378,40 @@ void GraphicsContext::beginPlatformTransparencyLayer(float opacity)
 
     save();
 
-    notImplemented();
+    m_state.alpha = opacity;
+
+    m_data->beginTransparencyLayer(opacity);
+}
+
+void GraphicsContextPlatformPrivate::endTransparencyLayer()
+{
+    auto currentLayer = m_transparencyLayerStack.takeLast();
+    auto renderTarget = currentLayer.renderTarget;
+    if (!renderTarget)
+        return;
+
+    HRESULT hr = renderTarget->EndDraw();
+    RELEASE_ASSERT(SUCCEEDED(hr));
+
+    COMPtr<ID2D1Bitmap> bitmap;
+    hr = renderTarget->GetBitmap(&bitmap);
+    RELEASE_ASSERT(SUCCEEDED(hr));
+
+    auto context = this->renderTarget();
+
+    if (currentLayer.hasShadow)
+        drawWithShadowHelper(context, bitmap.get(), currentLayer.shadowColor, currentLayer.shadowOffset, currentLayer.shadowBlur);
+    else {
+        COMPtr<ID2D1BitmapBrush> bitmapBrush;
+        auto bitmapBrushProperties = D2D1::BitmapBrushProperties();
+        auto brushProperties = D2D1::BrushProperties();
+        HRESULT hr = context->CreateBitmapBrush(bitmap.get(), bitmapBrushProperties, brushProperties, &bitmapBrush);
+        RELEASE_ASSERT(SUCCEEDED(hr));
+
+        auto size = bitmap->GetSize();
+        auto rectInDIP = D2D1::RectF(0, 0, size.width, size.height);
+        context->FillRectangle(rectInDIP, bitmapBrush.get());
+    }
 }
 
 void GraphicsContext::endPlatformTransparencyLayer()
@@ -1338,9 +1419,11 @@ void GraphicsContext::endPlatformTransparencyLayer()
     if (paintingDisabled())
         return;
 
+    m_data->endTransparencyLayer();
+
     ASSERT(!isRecording());
 
-    notImplemented();
+    m_state.alpha = m_data->currentGlobalAlpha();
 
     restore();
 }
@@ -1403,7 +1486,7 @@ void GraphicsContext::clearRect(const FloatRect& rect)
 
         if (rectToClear.contains(renderTargetRect)) {
             renderTarget->SetTags(1, __LINE__);
-            renderTarget->Clear();
+            renderTarget->Clear(D2D1::ColorF(0, 0, 0, 0));
             return;
         }
 
@@ -1412,7 +1495,7 @@ void GraphicsContext::clearRect(const FloatRect& rect)
 
         renderTarget->SetTags(1, __LINE__);
         rectToClear.intersect(renderTargetRect);
-        renderTarget->FillRectangle(rectToClear, solidFillBrush());
+        renderTarget->FillRectangle(rectToClear, brushWithColor(Color(D2D1::ColorF(0, 0, 0, 0))));
     });
 }
 
@@ -1628,7 +1711,7 @@ void GraphicsContext::drawLinesForText(const FloatPoint& point, const DashArray&
     notImplemented();
 }
 
-void GraphicsContext::setURLForRect(const URL& link, const IntRect& destRect)
+void GraphicsContext::setURLForRect(const URL& link, const FloatRect& destRect)
 {
     if (paintingDisabled())
         return;
@@ -1775,9 +1858,13 @@ void GraphicsContext::setPlatformShouldSmoothFonts(bool enable)
     platformContext()->SetTextAntialiasMode(fontSmoothingMode);
 }
 
-void GraphicsContext::setPlatformAlpha(float)
+void GraphicsContext::setPlatformAlpha(float alpha)
 {
-    /* No-op on this platform */
+    if (paintingDisabled())
+        return;
+
+    ASSERT(m_state.alpha == alpha);
+    m_data->setAlpha(alpha);
 }
 
 void GraphicsContext::setPlatformCompositeOperation(CompositeOperator mode, BlendMode blendMode)
@@ -1790,57 +1877,57 @@ void GraphicsContext::setPlatformCompositeOperation(CompositeOperator mode, Blen
     D2D1_BLEND_MODE targetBlendMode = D2D1_BLEND_MODE_SCREEN;
     D2D1_COMPOSITE_MODE targetCompositeMode = D2D1_COMPOSITE_MODE_SOURCE_ATOP; // ???
 
-    if (blendMode != BlendModeNormal) {
+    if (blendMode != BlendMode::Normal) {
         switch (blendMode) {
-        case BlendModeMultiply:
+        case BlendMode::Multiply:
             targetBlendMode = D2D1_BLEND_MODE_MULTIPLY;
             break;
-        case BlendModeScreen:
+        case BlendMode::Screen:
             targetBlendMode = D2D1_BLEND_MODE_SCREEN;
             break;
-        case BlendModeOverlay:
+        case BlendMode::Overlay:
             targetBlendMode = D2D1_BLEND_MODE_OVERLAY;
             break;
-        case BlendModeDarken:
+        case BlendMode::Darken:
             targetBlendMode = D2D1_BLEND_MODE_DARKEN;
             break;
-        case BlendModeLighten:
+        case BlendMode::Lighten:
             targetBlendMode = D2D1_BLEND_MODE_LIGHTEN;
             break;
-        case BlendModeColorDodge:
+        case BlendMode::ColorDodge:
             targetBlendMode = D2D1_BLEND_MODE_COLOR_DODGE;
             break;
-        case BlendModeColorBurn:
+        case BlendMode::ColorBurn:
             targetBlendMode = D2D1_BLEND_MODE_COLOR_BURN;
             break;
-        case BlendModeHardLight:
+        case BlendMode::HardLight:
             targetBlendMode = D2D1_BLEND_MODE_HARD_LIGHT;
             break;
-        case BlendModeSoftLight:
+        case BlendMode::SoftLight:
             targetBlendMode = D2D1_BLEND_MODE_SOFT_LIGHT;
             break;
-        case BlendModeDifference:
+        case BlendMode::Difference:
             targetBlendMode = D2D1_BLEND_MODE_DIFFERENCE;
             break;
-        case BlendModeExclusion:
+        case BlendMode::Exclusion:
             targetBlendMode = D2D1_BLEND_MODE_EXCLUSION;
             break;
-        case BlendModeHue:
+        case BlendMode::Hue:
             targetBlendMode = D2D1_BLEND_MODE_HUE;
             break;
-        case BlendModeSaturation:
+        case BlendMode::Saturation:
             targetBlendMode = D2D1_BLEND_MODE_SATURATION;
             break;
-        case BlendModeColor:
+        case BlendMode::Color:
             targetBlendMode = D2D1_BLEND_MODE_COLOR;
             break;
-        case BlendModeLuminosity:
+        case BlendMode::Luminosity:
             targetBlendMode = D2D1_BLEND_MODE_LUMINOSITY;
             break;
-        case BlendModePlusDarker:
+        case BlendMode::PlusDarker:
             targetBlendMode = D2D1_BLEND_MODE_DARKER_COLOR;
             break;
-        case BlendModePlusLighter:
+        case BlendMode::PlusLighter:
             targetBlendMode = D2D1_BLEND_MODE_LIGHTER_COLOR;
             break;
         default:

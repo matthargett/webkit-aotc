@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009, 2010, 2013-2016 Apple Inc. All rights reserved.
+ * Copyright (C) 2009-2018 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -29,6 +29,8 @@
 
 namespace JSC {
 
+class IsoCellSet;
+
 class ScriptExecutable : public ExecutableBase {
 public:
     typedef ExecutableBase Base;
@@ -40,13 +42,14 @@ public:
 
     const SourceCode& source() const { return m_source; }
     intptr_t sourceID() const { return m_source.providerID(); }
+    const SourceOrigin& sourceOrigin() const { return m_source.provider()->sourceOrigin(); }
     const String& sourceURL() const { return m_source.provider()->url(); }
-    int firstLine() const { return m_firstLine; }
+    int firstLine() const { return m_source.firstLine().oneBasedInt(); }
     void setOverrideLineNumber(int overrideLineNumber) { m_overrideLineNumber = overrideLineNumber; }
     bool hasOverrideLineNumber() const { return m_overrideLineNumber != -1; }
     int overrideLineNumber() const { return m_overrideLineNumber; }
     int lastLine() const { return m_lastLine; }
-    unsigned startColumn() const { return m_startColumn; }
+    unsigned startColumn() const { return m_source.startColumn().oneBasedInt(); }
     unsigned endColumn() const { return m_endColumn; }
     unsigned typeProfilingStartOffset() const { return m_typeProfilingStartOffset; }
     unsigned typeProfilingEndOffset() const { return m_typeProfilingEndOffset; }
@@ -79,14 +82,11 @@ public:
         
     DECLARE_EXPORT_INFO;
 
-    void recordParse(CodeFeatures features, bool hasCapturedVariables, int firstLine, int lastLine, unsigned startColumn, unsigned endColumn)
+    void recordParse(CodeFeatures features, bool hasCapturedVariables, int lastLine, unsigned endColumn)
     {
         m_features = features;
         m_hasCapturedVariables = hasCapturedVariables;
-        m_firstLine = firstLine;
         m_lastLine = lastLine;
-        ASSERT(startColumn != UINT_MAX);
-        m_startColumn = startColumn;
         ASSERT(endColumn != UINT_MAX);
         m_endColumn = endColumn;
     }
@@ -95,6 +95,8 @@ public:
     void installCode(VM&, CodeBlock*, CodeType, CodeSpecializationKind);
     CodeBlock* newCodeBlockFor(CodeSpecializationKind, JSFunction*, JSScope*, JSObject*& exception);
     CodeBlock* newReplacementCodeBlockFor(CodeSpecializationKind);
+
+    void clearCode(IsoCellSet&);
 
     // This function has an interesting GC story. Callers of this function are asking us to create a CodeBlock
     // that is not jettisoned before this function returns. Callers are essentially asking for a strong reference
@@ -115,7 +117,6 @@ protected:
     void finishCreation(VM& vm)
     {
         Base::finishCreation(vm);
-        vm.heap.addExecutable(this); // Balanced by Heap::deleteUnmarkedCompiledCode().
 
 #if ENABLE(CODEBLOCK_SAMPLING)
         if (SamplingTool* sampler = vm.interpreter->sampler())
@@ -135,9 +136,7 @@ protected:
     unsigned m_evalContextType : 2; // EvalContextType
 
     int m_overrideLineNumber;
-    int m_firstLine;
     int m_lastLine;
-    unsigned m_startColumn;
     unsigned m_endColumn;
     unsigned m_typeProfilingStartOffset;
     unsigned m_typeProfilingEndOffset;

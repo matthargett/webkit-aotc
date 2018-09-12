@@ -20,8 +20,7 @@
     Boston, MA 02110-1301, USA.
 */
 
-#ifndef CachedSVGDocumentClient_h
-#define CachedSVGDocumentClient_h
+#pragma once
 
 #include "CachedResourceClient.h"
 
@@ -29,11 +28,9 @@ namespace WebCore {
 
 class CachedSVGDocumentClient : public CachedResourceClient {
 public:
-    virtual ~CachedSVGDocumentClient() { }
+    virtual ~CachedSVGDocumentClient() = default;
     static CachedResourceClientType expectedType() { return SVGDocumentType; }
     CachedResourceClientType resourceClientType() const override { return expectedType(); }
 };
 
 } // namespace WebCore
-
-#endif // CachedSVGDocumentClient_h

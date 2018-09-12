@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015 Apple Inc. All rights reserved.
+ * Copyright (C) 2015-2016 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,6 +32,7 @@
 #include "DFGBlockSet.h"
 #include "DFGGraph.h"
 #include "DFGInsertionSet.h"
+#include "DFGNodeFlowProjection.h"
 #include "DFGPhase.h"
 #include "DFGPredictionPropagationPhase.h"
 #include "DFGVariableAccessDataDump.h"
@@ -41,7 +42,9 @@ namespace JSC { namespace DFG {
 
 namespace {
 
-const bool verbose = false;
+namespace DFGIntegerRangeOptimizationPhaseInternal {
+static const bool verbose = false;
+}
 const unsigned giveUpThreshold = 50;
 
 int64_t clampedSumImpl() { return 0; }
@@ -121,7 +124,7 @@ public:
     {
     }
     
-    Relationship(Node* left, Node* right, Kind kind, int offset = 0)
+    Relationship(NodeFlowProjection left, NodeFlowProjection right, Kind kind, int offset = 0)
         : m_left(left)
         , m_right(right)
         , m_kind(kind)
@@ -132,17 +135,17 @@ public:
         RELEASE_ASSERT(m_left != m_right);
     }
     
-    static Relationship safeCreate(Node* left, Node* right, Kind kind, int offset = 0)
+    static Relationship safeCreate(NodeFlowProjection left, NodeFlowProjection right, Kind kind, int offset = 0)
     {
-        if (!left || !right || left == right)
+        if (!left.isStillValid() || !right.isStillValid() || left == right)
             return Relationship();
         return Relationship(left, right, kind, offset);
     }
 
-    explicit operator bool() const { return m_left; }
+    explicit operator bool() const { return !!m_left; }
     
-    Node* left() const { return m_left; }
-    Node* right() const { return m_right; }
+    NodeFlowProjection left() const { return m_left; }
+    NodeFlowProjection right() const { return m_right; }
     Kind kind() const { return m_kind; }
     int offset() const { return m_offset; }
 
@@ -258,7 +261,7 @@ public:
     // If possible, returns a form of this relationship where the given node is the left
     // side. Returns a null relationship if this relationship cannot say anything about this
     // node.
-    Relationship forNode(Node* node) const
+    Relationship forNode(NodeFlowProjection node) const
     {
         if (m_left == node)
             return *this;
@@ -267,7 +270,7 @@ public:
         return Relationship();
     }
     
-    void setLeft(Node* left)
+    void setLeft(NodeFlowProjection left)
     {
         RELEASE_ASSERT(left != m_right);
         m_left = left;
@@ -796,7 +799,7 @@ private:
         // all possible inequalities between variables and constants, but we focus mainly on cheap
         // cases for now.
 
-        // Here are some of the the arrangements we can merge usefully assuming @c < @d:
+        // Here are some of the arrangements we can merge usefully assuming @c < @d:
         //
         //     @x == @c || @x == @d   =>   @x >= c && @x <= @d
         //     @x >= @c || @x <= @d   =>   TOP
@@ -984,13 +987,13 @@ private:
         RELEASE_ASSERT_NOT_REACHED();
     }
     
-    Node* m_left;
-    Node* m_right;
+    NodeFlowProjection m_left;
+    NodeFlowProjection m_right;
     Kind m_kind;
     int m_offset; // This offset can be arbitrarily large.
 };
 
-typedef HashMap<Node*, Vector<Relationship>> RelationshipMap;
+typedef HashMap<NodeFlowProjection, Vector<Relationship>> RelationshipMap;
 
 class IntegerRangeOptimizationPhase : public Phase {
 public:
@@ -1018,7 +1021,7 @@ public:
             m_insertionSet.execute(m_graph.block(0));
         }
         
-        if (verbose) {
+        if (DFGIntegerRangeOptimizationPhaseInternal::verbose) {
             dataLog("Graph before integer range optimization:\n");
             m_graph.dump();
         }
@@ -1108,9 +1111,8 @@ public:
             
                 m_relationships = m_relationshipsAtHead[block];
             
-                for (unsigned nodeIndex = 0; nodeIndex < block->size(); ++nodeIndex) {
-                    Node* node = block->at(nodeIndex);
-                    if (verbose)
+                for (auto* node : *block) {
+                    if (DFGIntegerRangeOptimizationPhaseInternal::verbose)
                         dataLog("Analysis: at ", node, ": ", listDump(sortedRelationships()), "\n");
                     executeNode(node);
                 }
@@ -1138,6 +1140,7 @@ public:
                         relationshipForTrue = Relationship::safeCreate(
                             terminal->child1().node(), m_zero, Relationship::NotEqual, 0);
                     } else {
+                        // FIXME: Handle CompareBelow and CompareBelowEq.
                         Node* compare = terminal->child1().node();
                         switch (compare->op()) {
                         case CompareEq:
@@ -1195,11 +1198,11 @@ public:
                         RelationshipMap forTrue = m_relationships;
                         RelationshipMap forFalse = m_relationships;
                         
-                        if (verbose)
+                        if (DFGIntegerRangeOptimizationPhaseInternal::verbose)
                             dataLog("Dealing with true:\n");
                         setRelationship(forTrue, relationshipForTrue);
                         if (Relationship relationshipForFalse = relationshipForTrue.inverse()) {
-                            if (verbose)
+                            if (DFGIntegerRangeOptimizationPhaseInternal::verbose)
                                 dataLog("Dealing with false:\n");
                             setRelationship(forFalse, relationshipForFalse);
                         }
@@ -1223,7 +1226,7 @@ public:
             m_relationships = m_relationshipsAtHead[block];
             for (unsigned nodeIndex = 0; nodeIndex < block->size(); ++nodeIndex) {
                 Node* node = block->at(nodeIndex);
-                if (verbose)
+                if (DFGIntegerRangeOptimizationPhaseInternal::verbose)
                     dataLog("Transformation: at ", node, ": ", listDump(sortedRelationships()), "\n");
                 
                 // This ends up being pretty awkward to write because we need to decide if we
@@ -1287,14 +1290,14 @@ public:
                         maxValue = std::min(maxValue, relationship.maxValueOfLeft());
                     }
 
-                    if (verbose)
+                    if (DFGIntegerRangeOptimizationPhaseInternal::verbose)
                         dataLog("    minValue = ", minValue, ", maxValue = ", maxValue, "\n");
                     
                     if (sumOverflows<int>(minValue, node->child2()->asInt32()) ||
                         sumOverflows<int>(maxValue, node->child2()->asInt32()))
                         break;
 
-                    if (verbose)
+                    if (DFGIntegerRangeOptimizationPhaseInternal::verbose)
                         dataLog("    It's in bounds.\n");
                     
                     executeNode(block->at(nodeIndex));
@@ -1314,7 +1317,7 @@ public:
                         if (relationship.minValueOfLeft() >= 0)
                             nonNegative = true;
                         
-                        if (relationship.right() == node->child2()) {
+                        if (relationship.right() == node->child2().node()) {
                             if (relationship.kind() == Relationship::Equal
                                 && relationship.offset() < 0)
                                 lessThanLength = true;
@@ -1327,7 +1330,7 @@ public:
                     
                     if (nonNegative && lessThanLength) {
                         executeNode(block->at(nodeIndex));
-                        node->remove();
+                        node->remove(m_graph);
                         changed = true;
                     }
                     break;
@@ -1337,7 +1340,7 @@ public:
                     if (node->arrayMode().type() != Array::Undecided)
                         break;
 
-                    auto iter = m_relationships.find(node->child2().node());
+                    auto iter = m_relationships.find(m_graph.varArgChild(node, 1).node());
                     if (iter == m_relationships.end())
                         break;
 
@@ -1485,29 +1488,23 @@ private:
             break;
         }
             
-        case GetArrayLength: {
+        case GetArrayLength:
+        case GetVectorLength: {
             setRelationship(Relationship(node, m_zero, Relationship::GreaterThan, -1));
             break;
         }
             
         case Upsilon: {
-            setRelationship(
-                Relationship::safeCreate(
-                    node->child1().node(), node->phi(), Relationship::Equal, 0));
+            setEquivalence(
+                node->child1().node(),
+                NodeFlowProjection(node->phi(), NodeFlowProjection::Shadow));
+            break;
+        }
             
-            auto iter = m_relationships.find(node->child1().node());
-            if (iter != m_relationships.end()) {
-                Vector<Relationship> toAdd;
-                for (Relationship relationship : iter->value) {
-                    Relationship newRelationship = relationship;
-                    if (node->phi() == newRelationship.right())
-                        continue;
-                    newRelationship.setLeft(node->phi());
-                    toAdd.append(newRelationship);
-                }
-                for (Relationship relationship : toAdd)
-                    setRelationship(relationship);
-            }
+        case Phi: {
+            setEquivalence(
+                NodeFlowProjection(node, NodeFlowProjection::Shadow),
+                node);
             break;
         }
             
@@ -1516,6 +1513,26 @@ private:
         }
     }
     
+    void setEquivalence(NodeFlowProjection oldNode, NodeFlowProjection newNode)
+    {
+        setRelationship(Relationship::safeCreate(oldNode, newNode, Relationship::Equal, 0));
+        
+        auto iter = m_relationships.find(oldNode);
+        if (iter != m_relationships.end()) {
+            Vector<Relationship> toAdd;
+            for (Relationship relationship : iter->value) {
+                Relationship newRelationship = relationship;
+                // Avoid creating any kind of self-relationship.
+                if (newNode.node() == newRelationship.right().node())
+                    continue;
+                newRelationship.setLeft(newNode);
+                toAdd.append(newRelationship);
+            }
+            for (Relationship relationship : toAdd)
+                setRelationship(relationship);
+        }
+    }
+            
     void setRelationship(Relationship relationship, unsigned timeToLive = 1)
     {
         setRelationship(m_relationships, relationship, timeToLive);
@@ -1534,7 +1551,7 @@ private:
         if (!relationship)
             return;
         
-        if (verbose)
+        if (DFGIntegerRangeOptimizationPhaseInternal::verbose)
             dataLog("    Setting: ", relationship, " (ttl = ", timeToLive, ")\n");
 
         auto result = relationshipMap.add(
@@ -1588,7 +1605,7 @@ private:
                     if (otherRelationship.vagueness() < relationship.vagueness()
                         && otherRelationship.right()->isInt32Constant()) {
                         Relationship newRelationship = relationship.filterConstant(otherRelationship);
-                        if (verbose && newRelationship != relationship)
+                        if (DFGIntegerRangeOptimizationPhaseInternal::verbose && newRelationship != relationship)
                             dataLog("      Refined to: ", newRelationship, " based on ", otherRelationship, "\n");
                         relationship = newRelationship;
                     }
@@ -1602,7 +1619,7 @@ private:
                     if (otherRelationship.vagueness() > relationship.vagueness()
                         && otherRelationship.right()->isInt32Constant()) {
                         Relationship newRelationship = otherRelationship.filterConstant(relationship);
-                        if (verbose && newRelationship != otherRelationship)
+                        if (DFGIntegerRangeOptimizationPhaseInternal::verbose && newRelationship != otherRelationship)
                             dataLog("      Refined ", otherRelationship, " to: ", newRelationship, "\n");
                         otherRelationship = newRelationship;
                     }
@@ -1625,7 +1642,7 @@ private:
             // @x == @c and @x != @d, where @d > @c, then we want to turn @x != @d into @x < @d.
             
             if (timeToLive && otherRelationship.kind() == Relationship::Equal) {
-                if (verbose)
+                if (DFGIntegerRangeOptimizationPhaseInternal::verbose)
                     dataLog("      Considering: ", otherRelationship, "\n");
                 
                 // We have:
@@ -1661,7 +1678,7 @@ private:
     
     bool mergeTo(RelationshipMap& relationshipMap, BasicBlock* target)
     {
-        if (verbose) {
+        if (DFGIntegerRangeOptimizationPhaseInternal::verbose) {
             dataLog("Merging to ", pointerDump(target), ":\n");
             dataLog("    Incoming: ", listDump(sortedRelationships(relationshipMap)), "\n");
             dataLog("    At head: ", listDump(sortedRelationships(m_relationshipsAtHead[target])), "\n");
@@ -1669,7 +1686,7 @@ private:
         
         if (m_seenBlocks.add(target)) {
             // This is a new block. We copy subject to liveness pruning.
-            auto isLive = [&] (Node* node) {
+            auto isLive = [&] (NodeFlowProjection node) {
                 if (node == m_zero)
                     return true;
                 return target->ssa->liveAtHead.contains(node);
@@ -1683,7 +1700,7 @@ private:
                 for (Relationship relationship : entry.value) {
                     ASSERT(relationship.left() == entry.key);
                     if (isLive(relationship.right())) {
-                        if (verbose)
+                        if (DFGIntegerRangeOptimizationPhaseInternal::verbose)
                             dataLog("  Propagating ", relationship, "\n");
                         values.append(relationship);
                     }
@@ -1701,7 +1718,7 @@ private:
         // assigned would only happen if we have not processed the node's predecessor. We
         // shouldn't process blocks until we have processed the block's predecessor because we
         // are using reverse postorder.
-        Vector<Node*> toRemove;
+        Vector<NodeFlowProjection> toRemove;
         bool changed = false;
         for (auto& entry : m_relationshipsAtHead[target]) {
             auto iter = relationshipMap.find(entry.key);
@@ -1720,12 +1737,12 @@ private:
             Vector<Relationship> mergedRelationships;
             for (Relationship targetRelationship : entry.value) {
                 for (Relationship sourceRelationship : iter->value) {
-                    if (verbose)
+                    if (DFGIntegerRangeOptimizationPhaseInternal::verbose)
                         dataLog("  Merging ", targetRelationship, " and ", sourceRelationship, ":\n");
                     targetRelationship.merge(
                         sourceRelationship,
                         [&] (Relationship newRelationship) {
-                            if (verbose)
+                            if (DFGIntegerRangeOptimizationPhaseInternal::verbose)
                                 dataLog("    Got ", newRelationship, "\n");
 
                             if (newRelationship.right()->isInt32Constant()) {
@@ -1791,7 +1808,7 @@ private:
             entry.value = mergedRelationships;
             changed = true;
         }
-        for (Node* node : toRemove)
+        for (NodeFlowProjection node : toRemove)
             m_relationshipsAtHead[target].remove(node);
         
         return changed;

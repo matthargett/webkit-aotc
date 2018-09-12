@@ -17,8 +17,7 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifndef SVGTextLayoutEngineBaseline_h
-#define SVGTextLayoutEngineBaseline_h
+#pragma once
 
 #include "SVGRenderStyleDefs.h"
 #include <wtf/Noncopyable.h>
@@ -43,11 +42,9 @@ public:
     float calculateGlyphAdvanceAndOrientation(bool isVerticalText, SVGTextMetrics&, float angle, float& xOrientationShift, float& yOrientationShift) const;
 
 private:
-    EAlignmentBaseline dominantBaselineToAlignmentBaseline(bool isVerticalText, const RenderObject* textRenderer) const;
+    AlignmentBaseline dominantBaselineToAlignmentBaseline(bool isVerticalText, const RenderObject* textRenderer) const;
 
     const FontCascade& m_font;
 };
 
 } // namespace WebCore
-
-#endif

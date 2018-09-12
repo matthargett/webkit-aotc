@@ -20,7 +20,8 @@
 
 #pragma once
 
-#include "JSDOMConvert.h"
+#include "JSDOMConvertDictionary.h"
+#include "JSDOMWrapper.h"
 #include "JSEvent.h"
 #include "TestEventConstructor.h"
 
@@ -37,8 +38,8 @@ public:
         return ptr;
     }
 
-    static JSC::JSObject* createPrototype(JSC::VM&, JSC::JSGlobalObject*);
-    static JSC::JSObject* prototype(JSC::VM&, JSC::JSGlobalObject*);
+    static JSC::JSObject* createPrototype(JSC::VM&, JSDOMGlobalObject&);
+    static JSC::JSObject* prototype(JSC::VM&, JSDOMGlobalObject&);
 
     DECLARE_INFO;
 
@@ -48,6 +49,7 @@ public:
     }
 
     static JSC::JSValue getConstructor(JSC::VM&, const JSC::JSGlobalObject*);
+    static void heapSnapshot(JSCell*, JSC::HeapSnapshotBuilder&);
     TestEventConstructor& wrapped() const
     {
         return static_cast<TestEventConstructor&>(Base::wrapped());
@@ -55,12 +57,7 @@ public:
 protected:
     JSTestEventConstructor(JSC::Structure*, JSDOMGlobalObject&, Ref<TestEventConstructor>&&);
 
-    void finishCreation(JSC::VM& vm)
-    {
-        Base::finishCreation(vm);
-        ASSERT(inherits(info()));
-    }
-
+    void finishCreation(JSC::VM&);
 };
 
 JSC::JSValue toJS(JSC::ExecState*, JSDOMGlobalObject*, TestEventConstructor&);

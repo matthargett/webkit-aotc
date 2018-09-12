@@ -31,8 +31,8 @@
 #include "config.h"
 #include "LayoutRect.h"
 
-#include "TextStream.h"
 #include <algorithm>
+#include <wtf/text/TextStream.h>
 
 namespace WebCore {
 
@@ -177,8 +177,10 @@ FloatRect encloseRectToDevicePixels(const LayoutRect& rect, float pixelSnappingF
 
 TextStream& operator<<(TextStream& ts, const LayoutRect& r)
 {
-    // FIXME: These should be printed as floats. Keeping them ints for consistency with previous test expectations.
-    return ts << snappedIntRect(r);
+    if (ts.hasFormattingFlag(TextStream::Formatting::LayoutUnitsAsIntegers))
+        return ts << snappedIntRect(r);
+    
+    return ts << FloatRect(r);
 }
 
 } // namespace WebCore

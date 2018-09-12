@@ -728,7 +728,7 @@ Decimal Decimal::fromString(const String& str)
         const int ch = str[index];
         switch (state) {
         case StateDigit:
-            if (ch >= '0' && ch <= '9') {
+            if (isASCIIDigit(ch)) {
                 if (numberOfDigits < Precision) {
                     ++numberOfDigits;
                     accumulator *= 10;
@@ -743,7 +743,7 @@ Decimal Decimal::fromString(const String& str)
             return nan();
 
         case StateDot:
-            if (ch >= '0' && ch <= '9') {
+            if (isASCIIDigit(ch)) {
                 if (numberOfDigits < Precision) {
                     ++numberOfDigits;
                     ++numberOfDigitsAfterDot;
@@ -757,7 +757,7 @@ Decimal Decimal::fromString(const String& str)
             FALLTHROUGH;
 
         case StateDotDigit:
-            if (ch >= '0' && ch <= '9') {
+            if (isASCIIDigit(ch)) {
                 if (numberOfDigits < Precision) {
                     ++numberOfDigits;
                     ++numberOfDigitsAfterDot;
@@ -783,7 +783,7 @@ Decimal Decimal::fromString(const String& str)
                 break;
             }
 
-            if (ch >= '0' && ch <= '9') {
+            if (isASCIIDigit(ch)) {
                 exponent = ch - '0';
                 state = StateEDigit;
                 break;
@@ -792,7 +792,7 @@ Decimal Decimal::fromString(const String& str)
             return nan();
 
         case StateEDigit:
-            if (ch >= '0' && ch <= '9') {
+            if (isASCIIDigit(ch)) {
                 exponent *= 10;
                 exponent += ch - '0';
                 if (exponent > ExponentMax + Precision) {
@@ -807,7 +807,7 @@ Decimal Decimal::fromString(const String& str)
             return nan();
 
         case StateESign:
-            if (ch >= '0' && ch <= '9') {
+            if (isASCIIDigit(ch)) {
                 exponent = ch - '0';
                 state = StateEDigit;
                 break;
@@ -949,10 +949,10 @@ String Decimal::toString() const
 {
     switch (m_data.formatClass()) {
     case EncodedData::ClassInfinity:
-        return sign() ? ASCIILiteral("-Infinity") : ASCIILiteral("Infinity");
+        return sign() ? "-Infinity"_s : "Infinity"_s;
 
     case EncodedData::ClassNaN:
-        return ASCIILiteral("NaN");
+        return "NaN"_s;
 
     case EncodedData::ClassNormal:
     case EncodedData::ClassZero:

@@ -26,19 +26,17 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef PeriodicWave_h
-#define PeriodicWave_h
+#pragma once
 
 #include "AudioArray.h"
+#include <JavaScriptCore/Float32Array.h>
 #include <memory>
-#include <runtime/Float32Array.h>
 #include <wtf/RefCounted.h>
-#include <wtf/RefPtr.h>
 #include <wtf/Vector.h>
 
 namespace WebCore {
 
-class PeriodicWave : public RefCounted<PeriodicWave> {
+class PeriodicWave final : public RefCounted<PeriodicWave> {
 public:
     static Ref<PeriodicWave> createSine(float sampleRate);
     static Ref<PeriodicWave> createSquare(float sampleRate);
@@ -99,5 +97,3 @@ private:
 };
 
 } // namespace WebCore
-
-#endif // PeriodicWave_h

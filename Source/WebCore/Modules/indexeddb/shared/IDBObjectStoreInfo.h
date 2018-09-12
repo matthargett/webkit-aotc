@@ -23,8 +23,7 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef IDBObjectStoreInfo_h
-#define IDBObjectStoreInfo_h
+#pragma once
 
 #if ENABLE(INDEXED_DATABASE)
 
@@ -38,11 +37,11 @@ namespace WebCore {
 class IDBObjectStoreInfo {
 public:
     WEBCORE_EXPORT IDBObjectStoreInfo();
-    IDBObjectStoreInfo(uint64_t identifier, const String& name, Optional<IDBKeyPath>&&, bool autoIncrement);
+    IDBObjectStoreInfo(uint64_t identifier, const String& name, std::optional<IDBKeyPath>&&, bool autoIncrement);
 
     uint64_t identifier() const { return m_identifier; }
     const String& name() const { return m_name; }
-    const Optional<IDBKeyPath>& keyPath() const { return m_keyPath; }
+    const std::optional<IDBKeyPath>& keyPath() const { return m_keyPath; }
     bool autoIncrement() const { return m_autoIncrement; }
     uint64_t maxIndexID() const { return m_maxIndexID; }
 
@@ -68,12 +67,13 @@ public:
 
 #if !LOG_DISABLED
     String loggingString(int indent = 0) const;
+    String condensedLoggingString() const;
 #endif
 
 private:
     uint64_t m_identifier { 0 };
     String m_name;
-    Optional<IDBKeyPath> m_keyPath;
+    std::optional<IDBKeyPath> m_keyPath;
     bool m_autoIncrement { false };
     uint64_t m_maxIndexID { 0 };
 
@@ -113,4 +113,3 @@ bool IDBObjectStoreInfo::decode(Decoder& decoder, IDBObjectStoreInfo& info)
 } // namespace WebCore
 
 #endif // ENABLE(INDEXED_DATABASE)
-#endif // IDBObjectStoreInfo_h

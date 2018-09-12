@@ -24,13 +24,14 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
  */
 
-#ifndef HistoryItem_h
-#define HistoryItem_h
+#pragma once
 
+#include "BackForwardItemIdentifier.h"
 #include "FloatRect.h"
 #include "FrameLoaderTypes.h"
 #include "IntPoint.h"
 #include "IntRect.h"
+#include "LengthBox.h"
 #include "SerializedScriptValue.h"
 #include <memory>
 #include <wtf/RefCounted.h>
@@ -62,19 +63,31 @@ class HistoryItem : public RefCounted<HistoryItem> {
     friend class PageCache;
 
 public: 
-    static Ref<HistoryItem> create() { return adoptRef(*new HistoryItem); }
+    static Ref<HistoryItem> create()
+    {
+        return adoptRef(*new HistoryItem);
+    }
+
     static Ref<HistoryItem> create(const String& urlString, const String& title)
     {
         return adoptRef(*new HistoryItem(urlString, title));
     }
+
     static Ref<HistoryItem> create(const String& urlString, const String& title, const String& alternateTitle)
     {
         return adoptRef(*new HistoryItem(urlString, title, alternateTitle));
+    }
+
+    static Ref<HistoryItem> create(const String& urlString, const String& title, const String& alternateTitle, BackForwardItemIdentifier identifier)
+    {
+        return adoptRef(*new HistoryItem(urlString, title, alternateTitle, identifier));
     }
     
     WEBCORE_EXPORT ~HistoryItem();
 
     WEBCORE_EXPORT Ref<HistoryItem> copy() const;
+
+    const BackForwardItemIdentifier& identifier() const { return m_identifier; }
 
     // Resets the HistoryItem to its initial state, as returned by create().
     void reset();
@@ -103,6 +116,9 @@ public:
     WEBCORE_EXPORT const IntPoint& scrollPosition() const;
     WEBCORE_EXPORT void setScrollPosition(const IntPoint&);
     void clearScrollPosition();
+
+    WEBCORE_EXPORT bool shouldRestoreScrollPosition() const;
+    WEBCORE_EXPORT void setShouldRestoreScrollPosition(bool);
     
     WEBCORE_EXPORT float pageScaleFactor() const;
     WEBCORE_EXPORT void setPageScaleFactor(float);
@@ -172,8 +188,8 @@ public:
     IntRect unobscuredContentRect() const { return m_unobscuredContentRect; }
     void setUnobscuredContentRect(IntRect unobscuredContentRect) { m_unobscuredContentRect = unobscuredContentRect; }
 
-    FloatSize obscuredInset() const { return m_obscuredInset; }
-    void setObscuredInset(const FloatSize& inset) { m_obscuredInset = inset; }
+    const FloatBoxExtent& obscuredInsets() const { return m_obscuredInsets; }
+    void setObscuredInsets(const FloatBoxExtent& insets) { m_obscuredInsets = insets; }
 
     FloatSize minimumLayoutSizeInScrollViewCoordinates() const { return m_minimumLayoutSizeInScrollViewCoordinates; }
     void setMinimumLayoutSizeInScrollViewCoordinates(FloatSize minimumLayoutSizeInScrollViewCoordinates) { m_minimumLayoutSizeInScrollViewCoordinates = minimumLayoutSizeInScrollViewCoordinates; }
@@ -199,12 +215,19 @@ public:
     void setWasRestoredFromSession(bool wasRestoredFromSession) { m_wasRestoredFromSession = wasRestoredFromSession; }
     bool wasRestoredFromSession() const { return m_wasRestoredFromSession; }
 
+#if !LOG_DISABLED
+    const char* logString() const;
+#endif
+
 private:
     WEBCORE_EXPORT HistoryItem();
     WEBCORE_EXPORT HistoryItem(const String& urlString, const String& title);
     WEBCORE_EXPORT HistoryItem(const String& urlString, const String& title, const String& alternateTitle);
+    WEBCORE_EXPORT HistoryItem(const String& urlString, const String& title, const String& alternateTitle, BackForwardItemIdentifier);
 
     HistoryItem(const HistoryItem&);
+
+    static int64_t generateSequenceNumber();
 
     bool hasSameDocumentTree(HistoryItem& otherItem) const;
 
@@ -216,27 +239,28 @@ private:
     String m_displayTitle;
     
     IntPoint m_scrollPosition;
-    float m_pageScaleFactor;
+    float m_pageScaleFactor { 0 }; // 0 indicates "unset".
     Vector<String> m_documentState;
 
     ShouldOpenExternalURLsPolicy m_shouldOpenExternalURLsPolicy { ShouldOpenExternalURLsPolicy::ShouldNotAllow };
     
     Vector<Ref<HistoryItem>> m_children;
     
-    bool m_lastVisitWasFailure;
-    bool m_isTargetItem;
+    bool m_lastVisitWasFailure { false };
+    bool m_isTargetItem { false };
     bool m_wasRestoredFromSession { false };
+    bool m_shouldRestoreScrollPosition { true };
 
     // If two HistoryItems have the same item sequence number, then they are
     // clones of one another.  Traversing history from one such HistoryItem to
     // another is a no-op.  HistoryItem clones are created for parent and
     // sibling frames when only a subframe navigates.
-    int64_t m_itemSequenceNumber;
+    int64_t m_itemSequenceNumber { generateSequenceNumber() };
 
     // If two HistoryItems have the same document sequence number, then they
     // refer to the same instance of a document.  Traversing history from one
     // such HistoryItem to another preserves the document.
-    int64_t m_documentSequenceNumber;
+    int64_t m_documentSequenceNumber { generateSequenceNumber() };
 
     // Support for HTML5 History
     RefPtr<SerializedScriptValue> m_stateObject;
@@ -254,7 +278,7 @@ private:
     IntRect m_unobscuredContentRect;
     FloatSize m_minimumLayoutSizeInScrollViewCoordinates;
     IntSize m_contentSize;
-    FloatSize m_obscuredInset;
+    FloatBoxExtent m_obscuredInsets;
     float m_scale { 0 }; // Note that UIWebView looks for a non-zero value, so this has to start as 0.
     bool m_scaleIsInitial { false };
     ViewportArguments m_viewportArguments;
@@ -264,13 +288,13 @@ private:
     RetainPtr<id> m_viewState;
     std::unique_ptr<HashMap<String, RetainPtr<id>>> m_transientProperties;
 #endif
-}; //class HistoryItem
 
-} //namespace WebCore
+    BackForwardItemIdentifier m_identifier;
+};
 
-#ifndef NDEBUG
-// Outside the WebCore namespace for ease of invocation from gdb.
+} // namespace WebCore
+
+#if ENABLE(TREE_DEBUGGING)
+// Outside the WebCore namespace for ease of invocation from the debugger.
 extern "C" int showTree(const WebCore::HistoryItem*);
 #endif
-
-#endif // HISTORYITEM_H

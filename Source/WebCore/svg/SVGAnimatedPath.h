@@ -1,5 +1,6 @@
 /*
  * Copyright (C) Research In Motion Limited 2011, 2012. All rights reserved.
+ * Copyright (C) 2018 Apple Inc. All rights reserved.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -17,14 +18,18 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifndef SVGAnimatedPath_h
-#define SVGAnimatedPath_h
+#pragma once
 
+#include "SVGAnimatedPathSegListPropertyTearOff.h"
 #include "SVGAnimatedTypeAnimator.h"
+#include "SVGAttributeAccessor.h"
 
 namespace WebCore {
 
 class SVGAnimationElement;
+
+using SVGAnimatedPathSegList = SVGAnimatedPathSegListPropertyTearOff;
+using SVGAnimatedPathSegListAttribute = SVGAnimatedAttributeList<SVGAnimatedPathSegList>;
 
 class SVGAnimatedPathAnimator final : public SVGAnimatedTypeAnimator {
 public:
@@ -46,5 +51,3 @@ private:
 };
 
 } // namespace WebCore
-
-#endif

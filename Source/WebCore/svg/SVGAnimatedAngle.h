@@ -1,5 +1,6 @@
 /*
  * Copyright (C) Research In Motion Limited 2010. All rights reserved.
+ * Copyright (C) 2018 Apple Inc. All rights reserved.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -17,26 +18,19 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifndef SVGAnimatedAngle_h
-#define SVGAnimatedAngle_h
+#pragma once
 
 #include "SVGAngle.h"
 #include "SVGAnimatedPropertyTearOff.h"
 #include "SVGAnimatedTypeAnimator.h"
+#include "SVGAttribute.h"
 
 namespace WebCore {
 
-typedef SVGAnimatedPropertyTearOff<SVGAngle> SVGAnimatedAngle;
-
-// Helper macros to declare/define a SVGAnimatedAngle object. SVGAnimatedAngle is only used in the SVG DOM for SVGMarkerElement.
-#define DECLARE_ANIMATED_ANGLE(UpperProperty, LowerProperty) \
-DECLARE_ANIMATED_PROPERTY(SVGAnimatedAngle, SVGAngle, UpperProperty, LowerProperty, )
-
-// Only used for SVGMarkerElements orientAttr, which maps to SVGAnimatedAngle orientAngle and SVGAnimatedEnumeration orientType.
-#define DEFINE_ANIMATED_ANGLE_AND_ENUMERATION(OwnerType, DOMAttribute, SVGDOMAttributeIdentifier, UpperProperty, LowerProperty) \
-DEFINE_ANIMATED_PROPERTY(AnimatedAngle, OwnerType, DOMAttribute, SVGDOMAttributeIdentifier, UpperProperty, LowerProperty)
-
 class SVGAnimationElement;
+
+using SVGAnimatedAngle = SVGAnimatedPropertyTearOff<SVGAngle>;
+using SVGAnimatedAngleAttribute = SVGAnimatedAttribute<SVGAnimatedAngle>;
 
 class SVGAnimatedAngleAnimator final : public SVGAnimatedTypeAnimator {
 public:
@@ -56,5 +50,3 @@ public:
 };
 
 } // namespace WebCore
-
-#endif

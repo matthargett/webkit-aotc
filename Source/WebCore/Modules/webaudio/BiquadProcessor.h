@@ -22,8 +22,7 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef BiquadProcessor_h
-#define BiquadProcessor_h
+#pragma once
 
 #include "AudioDSPKernel.h"
 #include "AudioDSPKernelProcessor.h"
@@ -48,7 +47,7 @@ enum class BiquadFilterType {
     Allpass
 };
 
-class BiquadProcessor : public AudioDSPKernelProcessor {
+class BiquadProcessor final : public AudioDSPKernelProcessor {
 public:
     BiquadProcessor(AudioContext&, float sampleRate, size_t numberOfChannels, bool autoInitialize);
 
@@ -94,5 +93,3 @@ private:
 };
 
 } // namespace WebCore
-
-#endif // BiquadProcessor_h

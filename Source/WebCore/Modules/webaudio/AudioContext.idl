@@ -51,9 +51,9 @@ enum AudioContextState {
     // All panning is relative to this listener.
     readonly attribute AudioListener listener;
 
-    Promise suspend();
-    Promise resume();
-    Promise close();
+    Promise<void> suspend();
+    Promise<void> resume();
+    Promise<void> close();
 
     readonly attribute AudioContextState state;
     attribute EventHandler onstatechange;
@@ -85,7 +85,7 @@ enum AudioContextState {
     ConvolverNode createConvolver();
     DynamicsCompressorNode createDynamicsCompressor();
     AnalyserNode createAnalyser();
-    [MayThrowException] ScriptProcessorNode createScriptProcessor(unsigned long bufferSize, optional unsigned long numberOfInputChannels = 2, optional unsigned long numberOfOutputChannels = 2);
+    [MayThrowException] ScriptProcessorNode createScriptProcessor(optional unsigned long bufferSize = 0, optional unsigned long numberOfInputChannels = 2, optional unsigned long numberOfOutputChannels = 2);
     OscillatorNode createOscillator();
     [MayThrowException] PeriodicWave createPeriodicWave(Float32Array real, Float32Array imag);
 

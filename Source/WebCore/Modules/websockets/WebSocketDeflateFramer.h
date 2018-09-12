@@ -28,10 +28,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef WebSocketDeflateFramer_h
-#define WebSocketDeflateFramer_h
-
-#if ENABLE(WEB_SOCKETS)
+#pragma once
 
 #if USE(ZLIB)
 #include "WebSocketDeflater.h"
@@ -105,8 +102,4 @@ private:
 #endif
 };
 
-}
-
-#endif // ENABLE(WEB_SOCKETS)
-
-#endif // WebSocketDeflateFramer_h
+} // namespace WebCore

@@ -26,41 +26,32 @@
 #include "config.h"
 #include "IdChangeInvalidation.h"
 
-#include "DocumentRuleSets.h"
 #include "ElementChildIterator.h"
-#include "ShadowRoot.h"
-#include "StyleResolver.h"
-#include "StyleScope.h"
+#include "StyleInvalidationFunctions.h"
 
 namespace WebCore {
 namespace Style {
-
-static bool mayBeAffectedByHostStyle(ShadowRoot& shadowRoot, const AtomicString& changedId)
-{
-    auto& shadowRuleSets = shadowRoot.styleScope().resolver().ruleSets();
-    if (shadowRuleSets.authorStyle().hostPseudoClassRules().isEmpty())
-        return false;
-
-    return shadowRuleSets.features().idsInRules.contains(changedId.impl());
-}
 
 void IdChangeInvalidation::invalidateStyle(const AtomicString& changedId)
 {
     if (changedId.isEmpty())
         return;
 
-    auto& ruleSets = m_element.styleResolver().ruleSets();
+    bool mayAffectStyle = false;
+    bool mayAffectStyleInShadowTree = false;
 
-    bool mayAffectStyle = ruleSets.features().idsInRules.contains(changedId.impl());
-
-    auto* shadowRoot = m_element.shadowRoot();
-    if (!mayAffectStyle && shadowRoot && mayBeAffectedByHostStyle(*shadowRoot, changedId))
+    traverseRuleFeatures(m_element, [&] (const RuleFeatureSet& features, bool mayAffectShadowTree) {
+        if (!features.idsInRules.contains(changedId))
+            return;
         mayAffectStyle = true;
+        if (mayAffectShadowTree)
+            mayAffectStyleInShadowTree = true;
+    });
 
     if (!mayAffectStyle)
         return;
 
-    if (m_element.shadowRoot() && ruleSets.authorStyle().hasShadowPseudoElementRules()) {
+    if (mayAffectStyleInShadowTree) {
         m_element.invalidateStyleForSubtree();
         return;
     }
@@ -69,7 +60,8 @@ void IdChangeInvalidation::invalidateStyle(const AtomicString& changedId)
 
     // This could be easily optimized for fine-grained descendant invalidation similar to ClassChangeInvalidation.
     // However using ids for dynamic styling is rare and this is probably not worth the memory cost of the required data structures.
-    bool mayAffectDescendantStyle = ruleSets.features().idsMatchingAncestorsInRules.contains(changedId.impl());
+    auto& ruleSets = m_element.styleResolver().ruleSets();
+    bool mayAffectDescendantStyle = ruleSets.features().idsMatchingAncestorsInRules.contains(changedId);
     if (mayAffectDescendantStyle)
         m_element.invalidateStyleForSubtree();
     else

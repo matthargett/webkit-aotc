@@ -45,10 +45,21 @@ namespace WebCore {
     macro(DOMNodeRemovedFromDocument) \
     macro(DOMSubtreeModified) \
     macro(abort) \
+    macro(accessiblecontextmenu) \
+    macro(accessibleclick) \
+    macro(accessibledecrement) \
+    macro(accessibledismiss) \
+    macro(accessiblefocus) \
+    macro(accessibleincrement) \
+    macro(accessiblescrollintoview) \
+    macro(accessiblesetvalue) \
+    macro(accessibleselect) \
+    macro(activate) \
     macro(active) \
     macro(addsourcebuffer) \
     macro(addstream) \
     macro(addtrack) \
+    macro(animationcancel) \
     macro(animationend) \
     macro(animationiteration) \
     macro(animationstart) \
@@ -67,6 +78,7 @@ namespace WebCore {
     macro(blocked) \
     macro(blur) \
     macro(boundary) \
+    macro(bufferedamountlow) \
     macro(cached) \
     macro(cancel) \
     macro(canplay) \
@@ -82,13 +94,16 @@ namespace WebCore {
     macro(compositionstart) \
     macro(compositionupdate) \
     macro(connect) \
+    macro(connectionstatechange) \
     macro(connecting) \
     macro(contextmenu) \
+    macro(controllerchange) \
     macro(copy) \
     macro(cuechange) \
     macro(cut) \
     macro(datachannel) \
     macro(dblclick) \
+    macro(devicechange) \
     macro(devicemotion) \
     macro(deviceorientation) \
     macro(dischargingtimechange) \
@@ -102,12 +117,15 @@ namespace WebCore {
     macro(drop) \
     macro(durationchange) \
     macro(emptied) \
+    macro(encrypted) \
     macro(end) \
     macro(endEvent) \
     macro(ended) \
     macro(enter) \
     macro(error) \
     macro(exit) \
+    macro(fetch) \
+    macro(finish) \
     macro(focus) \
     macro(focusin) \
     macro(focusout) \
@@ -127,9 +145,11 @@ namespace WebCore {
     macro(icegatheringstatechange) \
     macro(inactive) \
     macro(input) \
+    macro(install) \
     macro(invalid) \
     macro(keydown) \
     macro(keypress) \
+    macro(keystatuseschange) \
     macro(keyup) \
     macro(languagechange) \
     macro(levelchange) \
@@ -142,7 +162,9 @@ namespace WebCore {
     macro(loadingerror) \
     macro(loadstart) \
     macro(mark) \
+    macro(merchantvalidation) \
     macro(message) \
+    macro(messageerror) \
     macro(mousedown) \
     macro(mouseenter) \
     macro(mouseleave) \
@@ -167,7 +189,9 @@ namespace WebCore {
     macro(pageshow) \
     macro(paste) \
     macro(pause) \
+    macro(payerdetailchange) \
     macro(paymentauthorized) \
+    macro(paymentmethodchange) \
     macro(paymentmethodselected) \
     macro(play) \
     macro(playing) \
@@ -178,6 +202,7 @@ namespace WebCore {
     macro(progress) \
     macro(ratechange) \
     macro(readystatechange) \
+    macro(rejectionhandled) \
     macro(removesourcebuffer) \
     macro(removestream) \
     macro(removetrack) \
@@ -194,8 +219,10 @@ namespace WebCore {
     macro(select) \
     macro(selectionchange) \
     macro(selectstart) \
-    macro(shippingmethodselected) \
+    macro(shippingaddresschange) \
     macro(shippingcontactselected) \
+    macro(shippingmethodselected) \
+    macro(shippingoptionchange) \
     macro(show) \
     macro(signalingstatechange) \
     macro(slotchange) \
@@ -225,11 +252,16 @@ namespace WebCore {
     macro(touchmove) \
     macro(touchstart) \
     macro(track) \
+    macro(transitioncancel) \
     macro(transitionend) \
+    macro(transitionrun) \
+    macro(transitionstart) \
+    macro(unhandledrejection) \
     macro(unload) \
     macro(unmute) \
     macro(update) \
     macro(updateend) \
+    macro(updatefound) \
     macro(updateready) \
     macro(updatestart) \
     macro(upgradeneeded) \
@@ -237,7 +269,16 @@ namespace WebCore {
     macro(versionchange) \
     macro(visibilitychange) \
     macro(volumechange) \
+    macro(vrdisplayactivate) \
+    macro(vrdisplayblur) \
+    macro(vrdisplayconnect) \
+    macro(vrdisplaydeactivate) \
+    macro(vrdisplaydisconnect) \
+    macro(vrdisplayfocus) \
+    macro(vrdisplaypresentchange) \
     macro(waiting) \
+    macro(waitingforkey) \
+    macro(webglcontextchanged) \
     macro(webglcontextcreationerror) \
     macro(webglcontextlost) \
     macro(webglcontextrestored) \
@@ -249,7 +290,6 @@ namespace WebCore {
     macro(webkitTransitionEnd) \
     macro(webkitbeginfullscreen) \
     macro(webkitcurrentplaybacktargetiswirelesschanged) \
-    macro(webkitdeviceproximity) \
     macro(webkitendfullscreen) \
     macro(webkitfullscreenchange) \
     macro(webkitfullscreenerror) \
@@ -308,11 +348,13 @@ public:
     bool isWheelEventType(const AtomicString& eventType) const;
     bool isGestureEventType(const AtomicString& eventType) const;
     bool isTouchEventType(const AtomicString& eventType) const;
+    bool isTouchScrollBlockingEventType(const AtomicString& eventType) const;
 #if ENABLE(GAMEPAD)
     bool isGamepadEventType(const AtomicString& eventType) const;
 #endif
 
     std::array<std::reference_wrapper<const AtomicString>, 5> touchEventNames() const;
+    std::array<std::reference_wrapper<const AtomicString>, 3> gestureEventNames() const;
 
 private:
     EventNames(); // Private to prevent accidental call to EventNames() instead of eventNames().
@@ -333,6 +375,12 @@ inline bool EventNames::isGestureEventType(const AtomicString& eventType) const
     return eventType == gesturestartEvent || eventType == gesturechangeEvent || eventType == gestureendEvent;
 }
 
+inline bool EventNames::isTouchScrollBlockingEventType(const AtomicString& eventType) const
+{
+    return eventType == touchstartEvent
+        || eventType == touchmoveEvent;
+}
+
 inline bool EventNames::isTouchEventType(const AtomicString& eventType) const
 {
     return eventType == touchstartEvent
@@ -351,6 +399,11 @@ inline bool EventNames::isWheelEventType(const AtomicString& eventType) const
 inline std::array<std::reference_wrapper<const AtomicString>, 5> EventNames::touchEventNames() const
 {
     return { { touchstartEvent, touchmoveEvent, touchendEvent, touchcancelEvent, touchforcechangeEvent } };
+}
+
+inline std::array<std::reference_wrapper<const AtomicString>, 3> EventNames::gestureEventNames() const
+{
+    return { { gesturestartEvent, gesturechangeEvent, gestureendEvent } };
 }
 
 #if ENABLE(GAMEPAD)

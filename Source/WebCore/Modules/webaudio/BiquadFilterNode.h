@@ -22,8 +22,7 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef BiquadFilterNode_h
-#define BiquadFilterNode_h
+#pragma once
 
 #include "AudioBasicProcessorNode.h"
 #include "BiquadProcessor.h"
@@ -32,7 +31,7 @@ namespace WebCore {
 
 class AudioParam;
 
-class BiquadFilterNode : public AudioBasicProcessorNode {
+class BiquadFilterNode final : public AudioBasicProcessorNode {
 public:
     static Ref<BiquadFilterNode> create(AudioContext& context, float sampleRate)
     {
@@ -58,5 +57,3 @@ private:
 };
 
 } // namespace WebCore
-
-#endif // BiquadFilterNode_h

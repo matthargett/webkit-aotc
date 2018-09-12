@@ -27,11 +27,10 @@
  */
 
 #import "config.h"
-#import "WebCoreObjCExtras.h"
-#import "WebCoreNSStringExtras.h"
+#import "URLParser.h"
 #import "WebCoreNSURLExtras.h"
-#import "WebCoreSystemInterface.h"
-#import <functional>
+#import <pal/spi/cf/CFNetworkSPI.h>
+#import <wtf/Function.h>
 #import <wtf/HexNumber.h>
 #import <wtf/ObjcRuntimeExtras.h>
 #import <wtf/RetainPtr.h>
@@ -47,17 +46,53 @@
 
 typedef void (* StringRangeApplierFunction)(NSString *string, NSRange range, void *context);
 
-static pthread_once_t IDNScriptWhiteListFileRead = PTHREAD_ONCE_INIT;
 static uint32_t IDNScriptWhiteList[(USCRIPT_CODE_LIMIT + 31) / 32];
-
-
-@interface NSURLProtocol (WKNSURLProtocolInternal)
-+ (Class)_protocolClassForRequest:(NSURLRequest *)request;
-@end
 
 namespace WebCore {
 
-static BOOL isLookalikeCharacter(UChar32 charCode)
+static bool isArmenianLookalikeCharacter(UChar32 codePoint)
+{
+    return codePoint == 0x0548 || codePoint == 0x054D || codePoint == 0x0578 || codePoint == 0x057D;
+}
+
+static bool isArmenianScriptCharacter(UChar32 codePoint)
+{
+    UErrorCode error = U_ZERO_ERROR;
+    UScriptCode script = uscript_getScript(codePoint, &error);
+    if (error != U_ZERO_ERROR) {
+        LOG_ERROR("got ICU error while trying to look at scripts: %d", error);
+        return false;
+    }
+
+    return script == USCRIPT_ARMENIAN;
+}
+
+
+template<typename CharacterType> inline bool isASCIIDigitOrValidHostCharacter(CharacterType charCode)
+{
+    if (!isASCIIDigitOrPunctuation(charCode))
+        return false;
+
+    // Things the URL Parser rejects:
+    switch (charCode) {
+    case '#':
+    case '%':
+    case '/':
+    case ':':
+    case '?':
+    case '@':
+    case '[':
+    case '\\':
+    case ']':
+        return false;
+    default:
+        return true;
+    }
+}
+
+
+
+static BOOL isLookalikeCharacter(std::optional<UChar32> previousCodePoint, UChar32 charCode)
 {
     // This function treats the following as unsafe, lookalike characters:
     // any non-printable character, any character considered as whitespace,
@@ -92,6 +127,7 @@ static BOOL isLookalikeCharacter(UChar32 charCode)
         case 0x05F4: /* HEBREW PUNCTUATION GERSHAYIM */
         case 0x0609: /* ARABIC-INDIC PER MILLE SIGN */
         case 0x060A: /* ARABIC-INDIC PER TEN THOUSAND SIGN */
+        case 0x0650: /* ARABIC KASRA */
         case 0x0660: /* ARABIC INDIC DIGIT ZERO */
         case 0x066A: /* ARABIC PERCENT SIGN */
         case 0x06D4: /* ARABIC FULL STOP */
@@ -101,6 +137,15 @@ static BOOL isLookalikeCharacter(UChar32 charCode)
         case 0x0703: /* SYRIAC SUPRALINEAR COLON */
         case 0x0704: /* SYRIAC SUBLINEAR COLON */
         case 0x1735: /* PHILIPPINE SINGLE PUNCTUATION */
+        case 0x1D04: /* LATIN LETTER SMALL CAPITAL C */
+        case 0x1D0F: /* LATIN LETTER SMALL CAPITAL O */
+        case 0x1D1C: /* LATIN LETTER SMALL CAPITAL U */
+        case 0x1D20: /* LATIN LETTER SMALL CAPITAL V */
+        case 0x1D21: /* LATIN LETTER SMALL CAPITAL W */
+        case 0x1D22: /* LATIN LETTER SMALL CAPITAL Z */
+        case 0x1ECD: /* LATIN SMALL LETTER O WITH DOT BELOW */
+        case 0x2010: /* HYPHEN */
+        case 0x2011: /* NON-BREAKING HYPHEN */
         case 0x2024: /* ONE DOT LEADER */
         case 0x2027: /* HYPHENATION POINT */
         case 0x2039: /* SINGLE LEFT-POINTING ANGLE QUOTATION MARK */
@@ -121,14 +166,15 @@ static BOOL isLookalikeCharacter(UChar32 charCode)
         case 0x215D: /* VULGAR FRACTION FIVE EIGHTHS */
         case 0x215E: /* VULGAR FRACTION SEVEN EIGHTHS */
         case 0x215F: /* FRACTION NUMERATOR ONE */
+        case 0x2212: /* MINUS SIGN */
         case 0x2215: /* DIVISION SLASH */
         case 0x2216: /* SET MINUS */
         case 0x2236: /* RATIO */
         case 0x233F: /* APL FUNCTIONAL SYMBOL SLASH BAR */
         case 0x23AE: /* INTEGRAL EXTENSION */
         case 0x244A: /* OCR DOUBLE BACKSLASH */
-        case 0x2571: /* BOX DRAWINGS LIGHT DIAGONAL UPPER RIGHT TO LOWER LEFT */
-        case 0x2572: /* BOX DRAWINGS LIGHT DIAGONAL UPPER LEFT TO LOWER RIGHT */
+        case 0x2571: /* DisplayType::Box DRAWINGS LIGHT DIAGONAL UPPER RIGHT TO LOWER LEFT */
+        case 0x2572: /* DisplayType::Box DRAWINGS LIGHT DIAGONAL UPPER LEFT TO LOWER RIGHT */
         case 0x29F6: /* SOLIDUS WITH OVERBAR */
         case 0x29F8: /* BIG SOLIDUS */
         case 0x2AFB: /* TRIPLE SOLIDUS BINARY RELATION */
@@ -157,6 +203,13 @@ static BOOL isLookalikeCharacter(UChar32 charCode)
         case 0x33AF: /* SQUARE RAD OVER S SQUARED */
         case 0x33C6: /* SQUARE C OVER KG */
         case 0x33DF: /* SQUARE A OVER M */
+        case 0x05B9: /* HEBREW POINT HOLAM */
+        case 0x05BA: /* HEBREW POINT HOLAM HASER FOR VAV */
+        case 0x05C1: /* HEBREW POINT SHIN DOT */
+        case 0x05C2: /* HEBREW POINT SIN DOT */
+        case 0x05C4: /* HEBREW MARK UPPER DOT */
+        case 0xA731: /* LATIN LETTER SMALL CAPITAL S */
+        case 0xA771: /* LATIN SMALL LETTER DUM */
         case 0xA789: /* MODIFIER LETTER COLON */
         case 0xFE14: /* PRESENTATION FORM FOR VERTICAL SEMICOLON */
         case 0xFE15: /* PRESENTATION FORM FOR VERTICAL EXCLAMATION MARK */
@@ -174,8 +227,23 @@ static BOOL isLookalikeCharacter(UChar32 charCode)
         case 0x1F512: /* LOCK */
         case 0x1F513: /* OPEN LOCK */
             return YES;
-        default:
+        case 0x0307: /* COMBINING DOT ABOVE */
+            return previousCodePoint == 0x0237 /* LATIN SMALL LETTER DOTLESS J */
+                || previousCodePoint == 0x0131 /* LATIN SMALL LETTER DOTLESS I */
+                || previousCodePoint == 0x05D5; /* HEBREW LETTER VAV */
+        case 0x0548: /* ARMENIAN CAPITAL LETTER VO */
+        case 0x054D: /* ARMENIAN CAPITAL LETTER SEH */
+        case 0x0578: /* ARMENIAN SMALL LETTER VO */
+        case 0x057D: /* ARMENIAN SMALL LETTER SEH */
+            return previousCodePoint
+                && !isASCIIDigitOrValidHostCharacter(previousCodePoint.value())
+                && !isArmenianScriptCharacter(previousCodePoint.value());
+        case '.':
             return NO;
+        default:
+            return previousCodePoint
+                && isArmenianLookalikeCharacter(previousCodePoint.value())
+                && !(isArmenianScriptCharacter(charCode) || isASCIIDigitOrValidHostCharacter(charCode));
     }
 }
 
@@ -215,28 +283,27 @@ static BOOL readIDNScriptWhiteListFile(NSString *filename)
     return YES;
 }
 
-static void readIDNScriptWhiteList(void)
-{
-    // Read white list from library.
-    NSArray *dirs = NSSearchPathForDirectoriesInDomains(NSLibraryDirectory, NSAllDomainsMask, YES);
-    int numDirs = [dirs count];
-    for (int i = 0; i < numDirs; i++) {
-        if (readIDNScriptWhiteListFile([[dirs objectAtIndex:i] stringByAppendingPathComponent:@"IDNScriptWhiteList.txt"]))
-            return;
-    }
-    
-    // Fall back on white list inside bundle.
-    NSBundle *bundle = [NSBundle bundleWithIdentifier:@"com.apple.WebCore"];
-    
-    if (!readIDNScriptWhiteListFile([bundle pathForResource:@"IDNScriptWhiteList" ofType:@"txt"]))
-        CRASH();
-}
-
 static BOOL allCharactersInIDNScriptWhiteList(const UChar *buffer, int32_t length)
 {
-    pthread_once(&IDNScriptWhiteListFileRead, readIDNScriptWhiteList);
+    static dispatch_once_t flag;
+    dispatch_once(&flag, ^{
+        // Read white list from library.
+        NSArray *dirs = NSSearchPathForDirectoriesInDomains(NSLibraryDirectory, NSAllDomainsMask, YES);
+        int numDirs = [dirs count];
+        for (int i = 0; i < numDirs; i++) {
+            if (readIDNScriptWhiteListFile([[dirs objectAtIndex:i] stringByAppendingPathComponent:@"IDNScriptWhiteList.txt"]))
+                return;
+        }
+
+        // Fall back on white list inside bundle.
+        NSBundle *bundle = [NSBundle bundleWithIdentifier:@"com.apple.WebCore"];
+
+        if (!readIDNScriptWhiteListFile([bundle pathForResource:@"IDNScriptWhiteList" ofType:@"txt"]))
+            CRASH();
+    });
     
     int32_t i = 0;
+    std::optional<UChar32> previousCodePoint;
     while (i < length) {
         UChar32 c;
         U16_NEXT(buffer, i, length, c)
@@ -258,13 +325,14 @@ static BOOL allCharactersInIDNScriptWhiteList(const UChar *buffer, int32_t lengt
         if (!(IDNScriptWhiteList[index] & mask))
             return NO;
         
-        if (isLookalikeCharacter(c))
+        if (isLookalikeCharacter(previousCodePoint, c))
             return NO;
+        previousCodePoint = c;
     }
     return YES;
 }
 
-static bool isSecondLevelDomainNameAllowedByTLDRules(const UChar* buffer, int32_t length, const std::function<bool(UChar)>& characterIsAllowed)
+static bool isSecondLevelDomainNameAllowedByTLDRules(const UChar* buffer, int32_t length, const WTF::Function<bool(UChar)>& characterIsAllowed)
 {
     ASSERT(length > 0);
 
@@ -293,7 +361,7 @@ static bool isSecondLevelDomainNameAllowedByTLDRules(const UChar* buffer, int32_
 static bool isRussianDomainNameCharacter(UChar ch)
 {
     // Only modern Russian letters, digits and dashes are allowed.
-    return (ch >= 0x0430 && ch <= 0x044f) || ch == 0x0451 || (ch >= '0' && ch <= '9') || ch == '-';
+    return (ch >= 0x0430 && ch <= 0x044f) || ch == 0x0451 || isASCIIDigit(ch) || ch == '-';
 }
 
 static BOOL allCharactersAllowedByTLDRules(const UChar* buffer, int32_t length)
@@ -384,7 +452,7 @@ static BOOL allCharactersAllowedByTLDRules(const UChar* buffer, int32_t length)
     };
     CHECK_RULES_IF_SUFFIX_MATCHES(cyrillicBEL, [](UChar ch) {
         // Russian and Byelorussian letters, digits and dashes are allowed.
-        return (ch >= 0x0430 && ch <= 0x044f) || ch == 0x0451 || ch == 0x0456 || ch == 0x045E || ch == 0x2019 || (ch >= '0' && ch <= '9') || ch == '-';
+        return (ch >= 0x0430 && ch <= 0x044f) || ch == 0x0451 || ch == 0x0456 || ch == 0x045E || ch == 0x2019 || isASCIIDigit(ch) || ch == '-';
     });
 
     // http://www.nic.kz/docs/poryadok_vnedreniya_kaz_ru.pdf
@@ -396,7 +464,7 @@ static BOOL allCharactersAllowedByTLDRules(const UChar* buffer, int32_t length)
     };
     CHECK_RULES_IF_SUFFIX_MATCHES(cyrillicKAZ, [](UChar ch) {
         // Kazakh letters, digits and dashes are allowed.
-        return (ch >= 0x0430 && ch <= 0x044f) || ch == 0x0451 || ch == 0x04D9 || ch == 0x0493 || ch == 0x049B || ch == 0x04A3 || ch == 0x04E9 || ch == 0x04B1 || ch == 0x04AF || ch == 0x04BB || ch == 0x0456 || (ch >= '0' && ch <= '9') || ch == '-';
+        return (ch >= 0x0430 && ch <= 0x044f) || ch == 0x0451 || ch == 0x04D9 || ch == 0x0493 || ch == 0x049B || ch == 0x04A3 || ch == 0x04E9 || ch == 0x04B1 || ch == 0x04AF || ch == 0x04BB || ch == 0x0456 || isASCIIDigit(ch) || ch == '-';
     });
 
     // http://uanic.net/docs/documents-ukr/Rules%20of%20UKR_v4.0.pdf
@@ -408,7 +476,7 @@ static BOOL allCharactersAllowedByTLDRules(const UChar* buffer, int32_t length)
     };
     CHECK_RULES_IF_SUFFIX_MATCHES(cyrillicUKR, [](UChar ch) {
         // Russian and Ukrainian letters, digits and dashes are allowed.
-        return (ch >= 0x0430 && ch <= 0x044f) || ch == 0x0451 || ch == 0x0491 || ch == 0x0404 || ch == 0x0456 || ch == 0x0457 || (ch >= '0' && ch <= '9') || ch == '-';
+        return (ch >= 0x0430 && ch <= 0x044f) || ch == 0x0451 || ch == 0x0491 || ch == 0x0404 || ch == 0x0456 || ch == 0x0457 || isASCIIDigit(ch) || ch == '-';
     });
 
     // http://www.rnids.rs/data/DOKUMENTI/idn-srb-policy-termsofuse-v1.4-eng.pdf
@@ -420,7 +488,7 @@ static BOOL allCharactersAllowedByTLDRules(const UChar* buffer, int32_t length)
     };
     CHECK_RULES_IF_SUFFIX_MATCHES(cyrillicSRB, [](UChar ch) {
         // Serbian letters, digits and dashes are allowed.
-        return (ch >= 0x0430 && ch <= 0x0438) || (ch >= 0x043A && ch <= 0x0448) || ch == 0x0452 || ch == 0x0458 || ch == 0x0459 || ch == 0x045A || ch == 0x045B || ch == 0x045F || (ch >= '0' && ch <= '9') || ch == '-';
+        return (ch >= 0x0430 && ch <= 0x0438) || (ch >= 0x043A && ch <= 0x0448) || ch == 0x0452 || ch == 0x0458 || ch == 0x0459 || ch == 0x045A || ch == 0x045B || ch == 0x045F || isASCIIDigit(ch) || ch == '-';
     });
 
     // http://marnet.mk/doc/pravilnik-mk-mkd.pdf
@@ -432,7 +500,7 @@ static BOOL allCharactersAllowedByTLDRules(const UChar* buffer, int32_t length)
     };
     CHECK_RULES_IF_SUFFIX_MATCHES(cyrillicMKD, [](UChar ch) {
         // Macedonian letters, digits and dashes are allowed.
-        return (ch >= 0x0430 && ch <= 0x0438) || (ch >= 0x043A && ch <= 0x0448) || ch == 0x0453 || ch == 0x0455 || ch == 0x0458 || ch == 0x0459 || ch == 0x045A || ch == 0x045C || ch == 0x045F || (ch >= '0' && ch <= '9') || ch == '-';
+        return (ch >= 0x0430 && ch <= 0x0438) || (ch >= 0x043A && ch <= 0x0448) || ch == 0x0453 || ch == 0x0455 || ch == 0x0458 || ch == 0x0459 || ch == 0x045A || ch == 0x045C || ch == 0x045F || isASCIIDigit(ch) || ch == '-';
     });
 
     // https://www.mon.mn/cs/
@@ -444,7 +512,7 @@ static BOOL allCharactersAllowedByTLDRules(const UChar* buffer, int32_t length)
     };
     CHECK_RULES_IF_SUFFIX_MATCHES(cyrillicMON, [](UChar ch) {
         // Mongolian letters, digits and dashes are allowed.
-        return (ch >= 0x0430 && ch <= 0x044f) || ch == 0x0451 || ch == 0x04E9 || ch == 0x04AF || (ch >= '0' && ch <= '9') || ch == '-';
+        return (ch >= 0x0430 && ch <= 0x044f) || ch == 0x0451 || ch == 0x04E9 || ch == 0x04AF || isASCIIDigit(ch) || ch == '-';
     });
 
     // Not a known top level domain with special rules.
@@ -467,7 +535,7 @@ static NSString *mapHostNameWithRange(NSString *string, NSRange range, BOOL enco
     
     if (encode && [string rangeOfString:@"%" options:NSLiteralSearch range:range].location != NSNotFound) {
         NSString *substring = [string substringWithRange:range];
-        substring = CFBridgingRelease(CFURLCreateStringByReplacingPercentEscapes(NULL, (CFStringRef)substring, CFSTR("")));
+        substring = CFBridgingRelease(CFURLCreateStringByReplacingPercentEscapes(nullptr, (CFStringRef)substring, CFSTR("")));
         if (substring) {
             string = substring;
             range = NSMakeRange(0, [string length]);
@@ -478,8 +546,9 @@ static NSString *mapHostNameWithRange(NSString *string, NSRange range, BOOL enco
     [string getCharacters:sourceBuffer range:range];
     
     UErrorCode uerror = U_ZERO_ERROR;
-    int32_t numCharactersConverted = (encode ? uidna_IDNToASCII : uidna_IDNToUnicode)(sourceBuffer, length, destinationBuffer, HOST_NAME_BUFFER_LENGTH, UIDNA_ALLOW_UNASSIGNED, NULL, &uerror);
-    if (U_FAILURE(uerror)) {
+    UIDNAInfo processingDetails = UIDNA_INFO_INITIALIZER;
+    int32_t numCharactersConverted = (encode ? uidna_nameToASCII : uidna_nameToUnicode)(&URLParser::internationalDomainNameTranscoder(), sourceBuffer, length, destinationBuffer, HOST_NAME_BUFFER_LENGTH, &processingDetails, &uerror);
+    if (length && (U_FAILURE(uerror) || processingDetails.errors)) {
         *error = YES;
         return nil;
     }
@@ -549,7 +618,7 @@ static void collectRangesThatNeedMapping(NSString *string, NSRange range, void *
     if (!error && !needsMapping)
         return;
     
-    NSMutableArray **array = (NSMutableArray **)context;
+    __strong NSMutableArray **array = (__strong NSMutableArray **)context;
     if (!*array)
         *array = [[NSMutableArray alloc] init];
     
@@ -654,7 +723,7 @@ static void applyHostNameFunctionToURLString(NSString *string, StringRangeApplie
     
     // Maybe we should implement this using a character buffer instead?
     
-    if (hasCaseInsensitivePrefix(string, @"mailto:")) {
+    if (protocolIs(string, "mailto")) {
         applyHostNameFunctionToMailToURLString(string, f, context);
         return;
     }
@@ -704,8 +773,10 @@ static NSString *mapHostNames(NSString *string, BOOL encode)
     if (!hostNameRanges)
         return string;
 
-    if (![hostNameRanges count])
+    if (![hostNameRanges count]) {
+        [hostNameRanges release];
         return nil;
+    }
     
     // Do the mapping.
     NSMutableString *mutableCopy = [string mutableCopy];
@@ -722,7 +793,7 @@ static NSString *mapHostNames(NSString *string, BOOL encode)
 static NSString *stringByTrimmingWhitespace(NSString *string)
 {
     NSMutableString *trimmed = [[string mutableCopy] autorelease];
-    CFStringTrimWhitespace((CFMutableStringRef)trimmed);
+    CFStringTrimWhitespace((__bridge CFMutableStringRef)trimmed);
     return trimmed;
 }
 
@@ -731,26 +802,23 @@ NSURL *URLByTruncatingOneCharacterBeforeComponent(NSURL *URL, CFURLComponentType
     if (!URL)
         return nil;
     
-    CFRange fragRg = CFURLGetByteRangeForComponent((CFURLRef)URL, component, NULL);
+    CFRange fragRg = CFURLGetByteRangeForComponent((__bridge CFURLRef)URL, component, nullptr);
     if (fragRg.location == kCFNotFound)
         return URL;
-    
-    UInt8 *urlBytes, buffer[2048];
-    CFIndex numBytes = CFURLGetBytes((CFURLRef)URL, buffer, 2048);
+
+    Vector<UInt8, URL_BYTES_BUFFER_LENGTH> urlBytes(URL_BYTES_BUFFER_LENGTH);
+    CFIndex numBytes = CFURLGetBytes((__bridge CFURLRef)URL, urlBytes.data(), urlBytes.size());
     if (numBytes == -1) {
-        numBytes = CFURLGetBytes((CFURLRef)URL, NULL, 0);
-        urlBytes = static_cast<UInt8*>(malloc(numBytes));
-        CFURLGetBytes((CFURLRef)URL, urlBytes, numBytes);
-    } else
-        urlBytes = buffer;
-        
-    NSURL *result = (NSURL *)CFURLCreateWithBytes(NULL, urlBytes, fragRg.location - 1, kCFStringEncodingUTF8, NULL);
+        numBytes = CFURLGetBytes((__bridge CFURLRef)URL, nullptr, 0);
+        urlBytes.grow(numBytes);
+        CFURLGetBytes((__bridge CFURLRef)URL, urlBytes.data(), numBytes);
+    }
+
+    CFURLRef result = CFURLCreateWithBytes(nullptr, urlBytes.data(), fragRg.location - 1, kCFStringEncodingUTF8, nullptr);
     if (!result)
-        result = (NSURL *)CFURLCreateWithBytes(NULL, urlBytes, fragRg.location - 1, kCFStringEncodingISOLatin1, NULL);
+        result = CFURLCreateWithBytes(nullptr, urlBytes.data(), fragRg.location - 1, kCFStringEncodingISOLatin1, nullptr);
         
-    if (urlBytes != buffer)
-        free(urlBytes);
-    return result ? [result autorelease] : URL;
+    return result ? CFBridgingRelease(result) : URL;
 }
 
 static NSURL *URLByRemovingResourceSpecifier(NSURL *URL)
@@ -779,9 +847,9 @@ NSURL *URLWithData(NSData *data, NSURL *baseURL)
         // (e.g calls to NSURL -path). However, this function is not tolerant of illegal UTF-8 sequences, which
         // could either be a malformed string or bytes in a different encoding, like shift-jis, so we fall back
         // onto using ISO Latin 1 in those cases.
-        result = CFBridgingRelease(CFURLCreateAbsoluteURLWithBytes(NULL, bytes, length, kCFStringEncodingUTF8, (CFURLRef)baseURL, YES));
+        result = CFBridgingRelease(CFURLCreateAbsoluteURLWithBytes(nullptr, bytes, length, kCFStringEncodingUTF8, (__bridge CFURLRef)baseURL, YES));
         if (!result)
-            result = CFBridgingRelease(CFURLCreateAbsoluteURLWithBytes(NULL, bytes, length, kCFStringEncodingISOLatin1, (CFURLRef)baseURL, YES));
+            result = CFBridgingRelease(CFURLCreateAbsoluteURLWithBytes(nullptr, bytes, length, kCFStringEncodingISOLatin1, (__bridge CFURLRef)baseURL, YES));
     } else
         result = [NSURL URLWithString:@""];
 
@@ -804,8 +872,8 @@ static NSData *dataWithUserTypedString(NSString *string)
         UInt8 c = inBytes[i];
         if (c <= 0x20 || c >= 0x7f) {
             *p++ = '%';
-            *p++ = uncheckedHexDigit(c >> 4);
-            *p++ = uncheckedHexDigit(c & 0xf);
+            *p++ = upperNibbleToASCIIHexDigit(c);
+            *p++ = lowerNibbleToASCIIHexDigit(c);
             outLength += 3;
         } else {
             *p++ = c;
@@ -816,7 +884,7 @@ static NSData *dataWithUserTypedString(NSString *string)
     return [NSData dataWithBytesNoCopy:outBytes length:outLength]; // adopts outBytes
 }
 
-NSURL *URLWithUserTypedString(NSString *string, NSURL *URL)
+NSURL *URLWithUserTypedString(NSString *string, NSURL *nsURL)
 {
     if (!string)
         return nil;
@@ -825,11 +893,18 @@ NSURL *URLWithUserTypedString(NSString *string, NSURL *URL)
     if (!string)
         return nil;
 
+    // Let's check whether the URL is bogus.
+    URL url { URL { nsURL }, string };
+    if (!url.createCFURL())
+        return nil;
+
+    // FIXME: https://bugs.webkit.org/show_bug.cgi?id=186057
+    // We should be able to use url.createCFURL instead of using directly CFURL parsing routines.
     NSData *data = dataWithUserTypedString(string);
     if (!data)
         return [NSURL URLWithString:@""];
 
-    return URLWithData(data, URL);
+    return URLWithData(data, nsURL);
 }
 
 NSURL *URLWithUserTypedStringDeprecated(NSString *string, NSURL *URL)
@@ -851,32 +926,27 @@ NSURL *URLWithUserTypedStringDeprecated(NSString *string, NSURL *URL)
 static BOOL hasQuestionMarkOnlyQueryString(NSURL *URL)
 {
     CFRange rangeWithSeparators;
-    CFURLGetByteRangeForComponent((CFURLRef)URL, kCFURLComponentQuery, &rangeWithSeparators);
+    CFURLGetByteRangeForComponent((__bridge CFURLRef)URL, kCFURLComponentQuery, &rangeWithSeparators);
     if (rangeWithSeparators.location != kCFNotFound && rangeWithSeparators.length == 1)
         return YES;
 
     return NO;
 }
 
-#define completeURL (CFURLComponentType)-1
-
 NSData *dataForURLComponentType(NSURL *URL, CFURLComponentType componentType)
 {
-    static const int URLComponentTypeBufferLength = 2048;
-    
-    UInt8 staticAllBytesBuffer[URLComponentTypeBufferLength];
-    UInt8 *allBytesBuffer = staticAllBytesBuffer;
-    
-    CFIndex bytesFilled = CFURLGetBytes((CFURLRef)URL, allBytesBuffer, URLComponentTypeBufferLength);
+    Vector<UInt8, URL_BYTES_BUFFER_LENGTH> allBytesBuffer(URL_BYTES_BUFFER_LENGTH);
+    CFIndex bytesFilled = CFURLGetBytes((__bridge CFURLRef)URL, allBytesBuffer.data(), allBytesBuffer.size());
     if (bytesFilled == -1) {
-        CFIndex bytesToAllocate = CFURLGetBytes((CFURLRef)URL, NULL, 0);
-        allBytesBuffer = static_cast<UInt8 *>(malloc(bytesToAllocate));
-        bytesFilled = CFURLGetBytes((CFURLRef)URL, allBytesBuffer, bytesToAllocate);
+        CFIndex bytesToAllocate = CFURLGetBytes((__bridge CFURLRef)URL, nullptr, 0);
+        allBytesBuffer.grow(bytesToAllocate);
+        bytesFilled = CFURLGetBytes((__bridge CFURLRef)URL, allBytesBuffer.data(), bytesToAllocate);
     }
     
+    const CFURLComponentType completeURL = (CFURLComponentType)-1;
     CFRange range;
     if (componentType != completeURL) {
-        range = CFURLGetByteRangeForComponent((CFURLRef)URL, componentType, NULL);
+        range = CFURLGetByteRangeForComponent((__bridge CFURLRef)URL, componentType, nullptr);
         if (range.location == kCFNotFound)
             return nil;
     } else {
@@ -884,7 +954,7 @@ NSData *dataForURLComponentType(NSURL *URL, CFURLComponentType componentType)
         range.length = bytesFilled;
     }
     
-    NSData *componentData = [NSData dataWithBytes:allBytesBuffer + range.location length:range.length]; 
+    NSData *componentData = [NSData dataWithBytes:allBytesBuffer.data() + range.location length:range.length]; 
     
     const unsigned char *bytes = static_cast<const unsigned char *>([componentData bytes]);
     NSMutableData *resultData = [NSMutableData data];
@@ -899,8 +969,8 @@ NSData *dataForURLComponentType(NSURL *URL, CFURLComponentType componentType)
         if (c <= 0x20 || c >= 0x7f) {
             char escaped[3];
             escaped[0] = '%';
-            escaped[1] = uncheckedHexDigit(c >> 4);
-            escaped[2] = uncheckedHexDigit(c & 0xf);
+            escaped[1] = upperNibbleToASCIIHexDigit(c);
+            escaped[2] = lowerNibbleToASCIIHexDigit(c);
             [resultData appendBytes:escaped length:3];    
         } else {
             char b[1];
@@ -909,27 +979,24 @@ NSData *dataForURLComponentType(NSURL *URL, CFURLComponentType componentType)
         }               
     }
     
-    if (staticAllBytesBuffer != allBytesBuffer)
-        free(allBytesBuffer);
-    
     return resultData;
 }
 
 static NSURL *URLByRemovingComponentAndSubsequentCharacter(NSURL *URL, CFURLComponentType component)
 {
-    CFRange range = CFURLGetByteRangeForComponent((CFURLRef)URL, component, 0);
+    CFRange range = CFURLGetByteRangeForComponent((__bridge CFURLRef)URL, component, 0);
     if (range.location == kCFNotFound)
         return URL;
     
     // Remove one subsequent character.
     range.length++;
 
-    Vector<UInt8, 2048> buffer(2048);
-    CFIndex numBytes = CFURLGetBytes((CFURLRef)URL, buffer.data(), 2048);
+    Vector<UInt8, URL_BYTES_BUFFER_LENGTH> buffer(URL_BYTES_BUFFER_LENGTH);
+    CFIndex numBytes = CFURLGetBytes((__bridge CFURLRef)URL, buffer.data(), buffer.size());
     if (numBytes == -1) {
-        numBytes = CFURLGetBytes((CFURLRef)URL, NULL, 0);
+        numBytes = CFURLGetBytes((__bridge CFURLRef)URL, nullptr, 0);
         buffer.grow(numBytes);
-        CFURLGetBytes((CFURLRef)URL, buffer.data(), numBytes);
+        CFURLGetBytes((__bridge CFURLRef)URL, buffer.data(), numBytes);
     }
     UInt8* urlBytes = buffer.data();
         
@@ -940,11 +1007,11 @@ static NSURL *URLByRemovingComponentAndSubsequentCharacter(NSURL *URL, CFURLComp
         
     memmove(urlBytes + range.location, urlBytes + range.location + range.length, numBytes - range.location + range.length);
     
-    NSURL *result = (NSURL *)CFURLCreateWithBytes(NULL, urlBytes, numBytes - range.length, kCFStringEncodingUTF8, NULL);
+    CFURLRef result = CFURLCreateWithBytes(nullptr, urlBytes, numBytes - range.length, kCFStringEncodingUTF8, nullptr);
     if (!result)
-        result = (NSURL *)CFURLCreateWithBytes(NULL, urlBytes, numBytes - range.length, kCFStringEncodingISOLatin1, NULL);
+        result = CFURLCreateWithBytes(nullptr, urlBytes, numBytes - range.length, kCFStringEncodingISOLatin1, nullptr);
                 
-    return result ? [result autorelease] : URL;
+    return result ? CFBridgingRelease(result) : URL;
 }
 
 NSURL *URLByRemovingUserInfo(NSURL *URL)
@@ -972,18 +1039,18 @@ NSURL *URLByCanonicalizingURL(NSURL *URL)
 NSData *originalURLData(NSURL *URL)
 {
     UInt8 *buffer = (UInt8 *)malloc(URL_BYTES_BUFFER_LENGTH);
-    CFIndex bytesFilled = CFURLGetBytes((CFURLRef)URL, buffer, URL_BYTES_BUFFER_LENGTH);
+    CFIndex bytesFilled = CFURLGetBytes((__bridge CFURLRef)URL, buffer, URL_BYTES_BUFFER_LENGTH);
     if (bytesFilled == -1) {
-        CFIndex bytesToAllocate = CFURLGetBytes((CFURLRef)URL, NULL, 0);
+        CFIndex bytesToAllocate = CFURLGetBytes((__bridge CFURLRef)URL, nullptr, 0);
         buffer = (UInt8 *)realloc(buffer, bytesToAllocate);
-        bytesFilled = CFURLGetBytes((CFURLRef)URL, buffer, bytesToAllocate);
+        bytesFilled = CFURLGetBytes((__bridge CFURLRef)URL, buffer, bytesToAllocate);
         ASSERT(bytesFilled == bytesToAllocate);
     }
     
     // buffer is adopted by the NSData
     NSData *data = [NSData dataWithBytesNoCopy:buffer length:bytesFilled freeWhenDone:YES];
     
-    NSURL *baseURL = (NSURL *)CFURLGetBaseURL((CFURLRef)URL);
+    NSURL *baseURL = (__bridge NSURL *)CFURLGetBaseURL((__bridge CFURLRef)URL);
     if (baseURL)
         return originalURLData(URLWithData(data, baseURL));
     return data;
@@ -992,17 +1059,18 @@ NSData *originalURLData(NSURL *URL)
 static CFStringRef createStringWithEscapedUnsafeCharacters(CFStringRef string)
 {
     CFIndex length = CFStringGetLength(string);
-    Vector<UChar, 2048> sourceBuffer(length);
+    Vector<UChar, URL_BYTES_BUFFER_LENGTH> sourceBuffer(length);
     CFStringGetCharacters(string, CFRangeMake(0, length), sourceBuffer.data());
     
-    Vector<UChar, 2048> outBuffer;
+    Vector<UChar, URL_BYTES_BUFFER_LENGTH> outBuffer;
     
+    std::optional<UChar32> previousCodePoint;
     CFIndex i = 0;
     while (i < length) {
         UChar32 c;
         U16_NEXT(sourceBuffer, i, length, c)
         
-        if (isLookalikeCharacter(c)) {
+        if (isLookalikeCharacter(previousCodePoint, c)) {
             uint8_t utf8Buffer[4];
             CFIndex offset = 0;
             UBool failure = false;
@@ -1011,8 +1079,8 @@ static CFStringRef createStringWithEscapedUnsafeCharacters(CFStringRef string)
             
             for (CFIndex j = 0; j < offset; ++j) {
                 outBuffer.append('%');
-                outBuffer.append(uncheckedHexDigit(utf8Buffer[j] >> 4));
-                outBuffer.append(uncheckedHexDigit(utf8Buffer[j] & 0xf));
+                outBuffer.append(upperNibbleToASCIIHexDigit(utf8Buffer[j]));
+                outBuffer.append(lowerNibbleToASCIIHexDigit(utf8Buffer[j]));
             }
         } else {
             UChar utf16Buffer[2];
@@ -1023,9 +1091,10 @@ static CFStringRef createStringWithEscapedUnsafeCharacters(CFStringRef string)
             for (CFIndex j = 0; j < offset; ++j)
                 outBuffer.append(utf16Buffer[j]);
         }
+        previousCodePoint = c;
     }
     
-    return CFStringCreateWithCharacters(NULL, outBuffer.data(), outBuffer.size());
+    return CFStringCreateWithCharacters(nullptr, outBuffer.data(), outBuffer.size());
 }
 
 NSString *userVisibleString(NSURL *URL)
@@ -1038,13 +1107,13 @@ NSString *userVisibleString(NSURL *URL)
     
     const unsigned char *p = before;
     int bufferLength = (length * 3) + 1;
-    char *after = static_cast<char *>(malloc(bufferLength)); // large enough to %-escape every character
-    char *q = after;
+    Vector<char, URL_BYTES_BUFFER_LENGTH> after(bufferLength); // large enough to %-escape every character
+    char *q = after.data();
     for (int i = 0; i < length; i++) {
         unsigned char c = p[i];
         // unescape escape sequences that indicate bytes greater than 0x7f
-        if (c == '%' && (i + 1 < length && isHexDigit(p[i + 1])) && i + 2 < length && isHexDigit(p[i + 2])) {
-            unsigned char u = (uncheckedHexDigitValue(p[i + 1]) << 4) | uncheckedHexDigitValue(p[i + 2]);
+        if (c == '%' && (i + 1 < length && isASCIIHexDigit(p[i + 1])) && i + 2 < length && isASCIIHexDigit(p[i + 2])) {
+            auto u = toASCIIHexValue(p[i + 1], p[i + 2]);
             if (u > 0x7f) {
                 // unescape
                 *q++ = u;
@@ -1066,32 +1135,30 @@ NSString *userVisibleString(NSURL *URL)
     *q = '\0';
     
     // Check string to see if it can be converted to display using UTF-8  
-    NSString *result = [NSString stringWithUTF8String:after];
+    NSString *result = [NSString stringWithUTF8String:after.data()];
     if (!result) {
         // Could not convert to UTF-8.
         // Convert characters greater than 0x7f to escape sequences.
         // Shift current string to the end of the buffer
         // then we will copy back bytes to the start of the buffer 
         // as we convert.
-        int afterlength = q - after;
-        char *p = after + bufferLength - afterlength - 1;
-        memmove(p, after, afterlength + 1); // copies trailing '\0'
-        char *q = after;
+        int afterlength = q - after.data();
+        char *p = after.data() + bufferLength - afterlength - 1;
+        memmove(p, after.data(), afterlength + 1); // copies trailing '\0'
+        char *q = after.data();
         while (*p) {
             unsigned char c = *p;
             if (c > 0x7f) {
                 *q++ = '%';
-                *q++ = uncheckedHexDigit(c >> 4);
-                *q++ = uncheckedHexDigit(c & 0xf);
+                *q++ = upperNibbleToASCIIHexDigit(c);
+                *q++ = lowerNibbleToASCIIHexDigit(c);
             } else
                 *q++ = *p;
             p++;
         }
         *q = '\0';
-        result = [NSString stringWithUTF8String:after];
+        result = [NSString stringWithUTF8String:after.data()];
     }
-    
-    free(after);
     
     if (mayNeedHostNameDecoding) {
         // FIXME: Is it good to ignore the failure of mapHostNames and keep result intact?
@@ -1101,7 +1168,7 @@ NSString *userVisibleString(NSURL *URL)
     }
 
     result = [result precomposedStringWithCanonicalMapping];
-    return CFBridgingRelease(createStringWithEscapedUnsafeCharacters((CFStringRef)result));
+    return CFBridgingRelease(createStringWithEscapedUnsafeCharacters((__bridge CFStringRef)result));
 }
 
 BOOL isUserVisibleURL(NSString *string)
@@ -1111,7 +1178,7 @@ BOOL isUserVisibleURL(NSString *string)
     
     char static_buffer[1024];
     const char *p;
-    BOOL success = CFStringGetCString((CFStringRef)string, static_buffer, 1023, kCFStringEncodingUTF8);
+    BOOL success = CFStringGetCString((__bridge CFStringRef)string, static_buffer, 1023, kCFStringEncodingUTF8);
     p = success ? static_buffer : [string UTF8String];
     
     int length = strlen(p);
@@ -1124,8 +1191,8 @@ BOOL isUserVisibleURL(NSString *string)
         if (c <= 0x20 || c == 0x7f) {
             valid = NO;
             break;
-        } else if (c == '%' && (i + 1 < length && isHexDigit(p[i + 1])) && i + 2 < length && isHexDigit(p[i + 2])) {
-            unsigned char u = (uncheckedHexDigitValue(p[i + 1]) << 4) | uncheckedHexDigitValue(p[i + 2]);
+        } else if (c == '%' && (i + 1 < length && isASCIIHexDigit(p[i + 1])) && i + 2 < length && isASCIIHexDigit(p[i + 2])) {
+            auto u = toASCIIHexValue(p[i + 1], p[i + 2]);
             if (u > 0x7f) {
                 valid = NO;
                 break;

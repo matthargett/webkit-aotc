@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2016 Ericsson AB. All rights reserved.
+ * Copyright (C) 2017 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -37,72 +38,75 @@
 
 namespace WebCore {
 
-#define STRING_FUNCTION(name) \
-    static const String& name##String() \
-    { \
-        static NeverDestroyed<const String> name { ASCIILiteral(#name) }; \
-        return name; \
-    }
-
-STRING_FUNCTION(sendrecv)
-STRING_FUNCTION(sendonly)
-STRING_FUNCTION(recvonly)
-STRING_FUNCTION(inactive)
-
-Ref<RTCRtpTransceiver> RTCRtpTransceiver::create(RefPtr<RTCRtpSender>&& sender, RefPtr<RTCRtpReceiver>&& receiver)
-{
-    return adoptRef(*new RTCRtpTransceiver(WTFMove(sender), WTFMove(receiver)));
-}
-
-String RTCRtpTransceiver::getNextMid()
-{
-    static unsigned mid = 0;
-    return String::number(++mid);
-}
-
-RTCRtpTransceiver::RTCRtpTransceiver(RefPtr<RTCRtpSender>&& sender, RefPtr<RTCRtpReceiver>&& receiver)
-    : m_direction(Direction::Sendrecv)
-    , m_sender(sender)
-    , m_receiver(receiver)
+RTCRtpTransceiver::RTCRtpTransceiver(Ref<RTCRtpSender>&& sender, Ref<RTCRtpReceiver>&& receiver, std::unique_ptr<RTCRtpTransceiverBackend>&& backend)
+    : m_direction(RTCRtpTransceiverDirection::Sendrecv)
+    , m_sender(WTFMove(sender))
+    , m_receiver(WTFMove(receiver))
     , m_iceTransport(RTCIceTransport::create())
+    , m_backend(WTFMove(backend))
 {
 }
 
-const String& RTCRtpTransceiver::directionString() const
+String RTCRtpTransceiver::mid() const
 {
-    switch (m_direction) {
-    case Direction::Sendrecv: return sendrecvString();
-    case Direction::Sendonly: return sendonlyString();
-    case Direction::Recvonly: return recvonlyString();
-    case Direction::Inactive: return inactiveString();
-    }
-
-    ASSERT_NOT_REACHED();
-    return inactiveString();
+    return m_backend ? m_backend->mid() : String { };
 }
 
 bool RTCRtpTransceiver::hasSendingDirection() const
 {
-    return m_direction == Direction::Sendrecv || m_direction == Direction::Sendonly;
+    return m_direction == RTCRtpTransceiverDirection::Sendrecv || m_direction == RTCRtpTransceiverDirection::Sendonly;
 }
+
+RTCRtpTransceiverDirection RTCRtpTransceiver::direction() const
+{
+    if (!m_backend)
+        return m_direction;
+    return m_backend->direction();
+}
+
+std::optional<RTCRtpTransceiverDirection> RTCRtpTransceiver::currentDirection() const
+{
+    if (!m_backend)
+        return std::nullopt;
+    return m_backend->currentDirection();
+}
+
+void RTCRtpTransceiver::setDirection(RTCRtpTransceiverDirection direction)
+{
+    m_direction = direction;
+    if (m_backend)
+        m_backend->setDirection(direction);
+}
+
 
 void RTCRtpTransceiver::enableSendingDirection()
 {
-    if (m_direction == Direction::Recvonly)
-        m_direction = Direction::Sendrecv;
-    else if (m_direction == Direction::Inactive)
-        m_direction = Direction::Sendonly;
+    if (m_direction == RTCRtpTransceiverDirection::Recvonly)
+        m_direction = RTCRtpTransceiverDirection::Sendrecv;
+    else if (m_direction == RTCRtpTransceiverDirection::Inactive)
+        m_direction = RTCRtpTransceiverDirection::Sendonly;
 }
 
 void RTCRtpTransceiver::disableSendingDirection()
 {
-    if (m_direction == Direction::Sendrecv)
-        m_direction = Direction::Recvonly;
-    else if (m_direction == Direction::Sendonly)
-        m_direction = Direction::Inactive;
+    if (m_direction == RTCRtpTransceiverDirection::Sendrecv)
+        m_direction = RTCRtpTransceiverDirection::Recvonly;
+    else if (m_direction == RTCRtpTransceiverDirection::Sendonly)
+        m_direction = RTCRtpTransceiverDirection::Inactive;
 }
 
-void RtpTransceiverSet::append(RefPtr<RTCRtpTransceiver>&& transceiver)
+void RTCRtpTransceiver::stop()
+{
+    if (m_stopped)
+        return;
+    m_stopped = true;
+    m_receiver->stop();
+    m_sender->stop();
+    if (m_backend)
+        m_backend->stop();
+}
+
+void RtpTransceiverSet::append(Ref<RTCRtpTransceiver>&& transceiver)
 {
     m_senders.append(transceiver->sender());
     m_receivers.append(transceiver->receiver());

@@ -1,4 +1,4 @@
-#!/usr/bin/perl -w
+#!/usr/bin/env perl
 
 # Copyright (C) 2005, 2007 Apple Inc. All rights reserved.
 #
@@ -29,11 +29,12 @@
 # Simplified "debug" script for debugging the WebKit2 MiniBrowser.
 
 use strict;
+use warnings;
 use FindBin;
 use lib $FindBin::Bin;
 use webkitdirs;
 
-printHelpAndExitForRunAndDebugWebKitAppIfNeeded(INCLUDE_OPTIONS_FOR_DEBUGGING);
+printHelpAndExitForRunAndDebugWebKitAppIfNeeded();
 
 setConfiguration();
 

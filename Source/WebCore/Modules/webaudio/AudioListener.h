@@ -26,8 +26,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef AudioListener_h
-#define AudioListener_h
+#pragma once
 
 #include "FloatPoint3D.h"
 #include <wtf/Ref.h>
@@ -37,7 +36,7 @@ namespace WebCore {
 
 // AudioListener maintains the state of the listener in the audio scene as defined in the OpenAL specification.
 
-class AudioListener : public RefCounted<AudioListener> {
+class AudioListener final : public RefCounted<AudioListener> {
 public:
     static Ref<AudioListener> create()
     {
@@ -89,6 +88,4 @@ private:
     double m_speedOfSound;
 };
 
-} // WebCore
-
-#endif // AudioListener_h
+} // namespace WebCore

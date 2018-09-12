@@ -58,12 +58,13 @@ Atomic<ICStats*> ICStats::s_instance;
 
 ICStats::ICStats()
 {
-    m_thread = createThread(
+    m_thread = Thread::create(
         "JSC ICStats",
         [this] () {
             LockHolder locker(m_lock);
             for (;;) {
-                m_condition.waitForSeconds(m_lock, 1, [this] () -> bool { return m_shouldStop; });
+                m_condition.waitFor(
+                    m_lock, Seconds(1), [this] () -> bool { return m_shouldStop; });
                 if (m_shouldStop)
                     break;
                 
@@ -83,7 +84,7 @@ ICStats::~ICStats()
         m_condition.notifyAll();
     }
     
-    waitForThreadCompletion(m_thread);
+    m_thread->waitForCompletion();
 }
 
 void ICStats::add(const ICEvent& event)

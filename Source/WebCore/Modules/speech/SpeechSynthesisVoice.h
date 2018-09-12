@@ -23,8 +23,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef SpeechSynthesisVoice_h
-#define SpeechSynthesisVoice_h
+#pragma once
 
 #if ENABLE(SPEECH_SYNTHESIS)
 
@@ -36,7 +35,7 @@ namespace WebCore {
 
 class SpeechSynthesisVoice : public RefCounted<SpeechSynthesisVoice> {
 public:
-    virtual ~SpeechSynthesisVoice() { }
+    virtual ~SpeechSynthesisVoice() = default;
     static Ref<SpeechSynthesisVoice> create(PlatformSpeechSynthesisVoice&);
 
     const String& voiceURI() const { return m_platformVoice->voiceURI(); }
@@ -56,5 +55,3 @@ private:
 } // namespace WebCore
 
 #endif // ENABLE(SPEECH_SYNTHESIS)
-
-#endif // SpeechSynthesisVoice_h

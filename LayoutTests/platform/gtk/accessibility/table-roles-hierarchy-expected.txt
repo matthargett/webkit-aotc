@@ -5,6 +5,7 @@ No	Country	Capital
 All	3 countries	3 capitals
 
 
+
 This shows the hierarchy of table roles.
 
 role: AXRole: AXTable
@@ -28,4 +29,7 @@ role: AXRole: AXTable
         role: AXRole: AXRowHeader
         role: AXRole: AXCell
         role: AXRole: AXCell
+PASS successfullyParsed is true
+
+TEST COMPLETE
 

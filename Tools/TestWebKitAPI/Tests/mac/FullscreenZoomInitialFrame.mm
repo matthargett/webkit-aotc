@@ -34,6 +34,7 @@
 #import <WebKit/WKViewPrivate.h>
 #import <WebKit/WKPreferencesPrivate.h>
 #import <wtf/RetainPtr.h>
+#import <wtf/mac/AppKitCompatibilityDeclarations.h>
 
 @interface NSWindowController (WebKitFullScreenAdditions)
 - (NSRect)initialFrame;
@@ -87,12 +88,15 @@ public:
     void setPageScale(WKView *, double);
     void sendMouseDownEvent(WebView *, NSEvent *);
     void sendMouseDownEvent(WKView *, NSEvent *);
+
+private:
+    RetainPtr<id <WebUIDelegate>> m_delegate;
 };
 
 void FullscreenZoomInitialFrame::initializeView(WebView *webView)
 {
-    // Released in teardownView.
-    webView.UIDelegate = [[FullscreenStateDelegate alloc] init];
+    m_delegate = adoptNS([[FullscreenStateDelegate alloc] init]);
+    webView.UIDelegate = m_delegate.get();
 
     RetainPtr<WebPreferences> customPreferences = adoptNS([[WebPreferences alloc] initWithIdentifier:@"FullscreenZoomInitialFramePreferences"]);
     [customPreferences setFullScreenEnabled:YES];
@@ -101,9 +105,9 @@ void FullscreenZoomInitialFrame::initializeView(WebView *webView)
 
 void FullscreenZoomInitialFrame::teardownView(WebView *webView)
 {
-    id uiDelegate = webView.UIDelegate;
+    EXPECT_TRUE(webView.UIDelegate == m_delegate.get());
     webView.UIDelegate = nil;
-    [uiDelegate release];
+    m_delegate = nil;
 }
 
 void FullscreenZoomInitialFrame::initializeView(WKView *wkView)
@@ -150,12 +154,12 @@ void FullscreenZoomInitialFrame::sendMouseDownEvent(WKView *wkView, NSEvent *eve
 template <typename View>
 void FullscreenZoomInitialFrame::runTest(View view)
 {
-    RetainPtr<NSWindow> window = adoptNS([[NSWindow alloc] initWithContentRect:view.frame styleMask:NSBorderlessWindowMask backing:NSBackingStoreBuffered defer:NO]);
+    RetainPtr<NSWindow> window = adoptNS([[NSWindow alloc] initWithContentRect:view.frame styleMask:NSWindowStyleMaskBorderless backing:NSBackingStoreBuffered defer:NO]);
     [window.get().contentView addSubview:view];
 
     setPageScale(view, 2);
 
-    NSEvent *event = [NSEvent mouseEventWithType:NSLeftMouseDown location:NSMakePoint(5, 5) modifierFlags:0 timestamp:0 windowNumber:window.get().windowNumber context:0 eventNumber:0 clickCount:0 pressure:0];
+    NSEvent *event = [NSEvent mouseEventWithType:NSEventTypeLeftMouseDown location:NSMakePoint(5, 5) modifierFlags:0 timestamp:0 windowNumber:window.get().windowNumber context:0 eventNumber:0 clickCount:0 pressure:0];
 
     isWaitingForPageSignalToContinue = true;
     didGetPageSignalToContinue = false;
@@ -185,12 +189,8 @@ TEST_F(FullscreenZoomInitialFrame, WebKit)
     runWebKit1Test();
 }
 
-#if __MAC_OS_X_VERSION_MIN_REQUIRED > 101000
 // FIXME:<rdar://problem/20504403>
 TEST_F(FullscreenZoomInitialFrame, DISABLED_WebKit2)
-#else
-TEST_F(FullscreenZoomInitialFrame, WebKit2)
-#endif
 {
     runWebKit2Test();
 }

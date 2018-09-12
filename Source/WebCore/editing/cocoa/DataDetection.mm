@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014 Apple, Inc.  All rights reserved.
+ * Copyright (C) 2014-2017 Apple, Inc.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -26,10 +26,11 @@
 #import "config.h"
 #import "DataDetection.h"
 
+#if ENABLE(DATA_DETECTION)
+
 #import "Attr.h"
 #import "CSSStyleDeclaration.h"
-#import "DataDetectorsSPI.h"
-#import "DataDetectorsUISPI.h"
+#import "Editing.h"
 #import "ElementAncestorIterator.h"
 #import "ElementTraversal.h"
 #import "FrameView.h"
@@ -47,10 +48,19 @@
 #import "TextIterator.h"
 #import "VisiblePosition.h"
 #import "VisibleUnits.h"
-#import "htmlediting.h"
+#import <pal/spi/ios/DataDetectorsUISPI.h>
+#import <pal/spi/mac/DataDetectorsSPI.h>
+#import <wtf/cf/TypeCastsCF.h>
 #import <wtf/text/StringBuilder.h>
 
 #import "DataDetectorsCoreSoftLink.h"
+
+#if PLATFORM(MAC) && __MAC_OS_X_VERSION_MIN_REQUIRED >= 101400
+template <>
+struct WTF::CFTypeTrait<DDResultRef> {
+    static inline CFTypeID typeID(void) { return DDResultGetCFTypeID(); }
+};
+#endif
 
 namespace WebCore {
 
@@ -76,11 +86,15 @@ static RetainPtr<DDActionContext> detectItemAtPositionWithRange(VisiblePosition 
     RefPtr<Range> mainResultRange;
     CFIndex resultCount = CFArrayGetCount(results.get());
     for (CFIndex i = 0; i < resultCount; i++) {
-        DDResultRef result = (DDResultRef)CFArrayGetValueAtIndex(results.get(), i);
+#if __MAC_OS_X_VERSION_MIN_REQUIRED >= 101400
+        DDResultRef result = checked_cf_cast<DDResultRef>(CFArrayGetValueAtIndex(results.get(), i));
+#else
+        DDResultRef result = static_cast<DDResultRef>(const_cast<CF_BRIDGED_TYPE(id) void*>(CFArrayGetValueAtIndex(results.get(), i)));
+#endif
         CFRange resultRangeInContext = DDResultGetRange(result);
         if (hitLocation >= resultRangeInContext.location && (hitLocation - resultRangeInContext.location) < resultRangeInContext.length) {
             mainResult = result;
-            mainResultRange = TextIterator::subrange(contextRange.get(), resultRangeInContext.location, resultRangeInContext.length);
+            mainResultRange = TextIterator::subrange(*contextRange, resultRangeInContext.location, resultRangeInContext.length);
             break;
         }
     }
@@ -89,7 +103,7 @@ static RetainPtr<DDActionContext> detectItemAtPositionWithRange(VisiblePosition 
         return nullptr;
 
     RetainPtr<DDActionContext> actionContext = adoptNS([allocDDActionContextInstance() init]);
-    [actionContext setAllResults:@[ (id)mainResult ]];
+    [actionContext setAllResults:@[ (__bridge id)mainResult ]];
     [actionContext setMainResult:mainResult];
 
     Vector<FloatQuad> quads;
@@ -150,19 +164,18 @@ RetainPtr<DDActionContext> DataDetection::detectItemAroundHitTestResult(const Hi
 #endif // PLATFORM(MAC)
 
 #if PLATFORM(IOS)
+
+bool DataDetection::canBePresentedByDataDetectors(const URL& url)
+{
+    return [softLink_DataDetectorsCore_DDURLTapAndHoldSchemes() containsObject:(NSString *)url.protocol().toStringWithoutCopying().convertToASCIILowercase()];
+}
+
 bool DataDetection::isDataDetectorLink(Element& element)
 {
     if (!is<HTMLAnchorElement>(element))
         return false;
 
-#if __IPHONE_OS_VERSION_MIN_REQUIRED >= 100000
-    return [softLink_DataDetectorsCore_DDURLTapAndHoldSchemes() containsObject:(NSString *)downcast<HTMLAnchorElement>(element).href().protocol().toStringWithoutCopying().convertToASCIILowercase()];
-#else
-    if (equalIgnoringASCIICase(element.attributeWithoutSynchronization(x_apple_data_detectorsAttr), "true"))
-        return true;
-    URL url = downcast<HTMLAnchorElement>(element).href();
-    return url.protocolIs("mailto") || url.protocolIs("tel");
-#endif
+    return canBePresentedByDataDetectors(downcast<HTMLAnchorElement>(element).href());
 }
 
 bool DataDetection::requiresExtendedContext(Element& element)
@@ -177,7 +190,6 @@ String DataDetection::dataDetectorIdentifier(Element& element)
 
 bool DataDetection::shouldCancelDefaultAction(Element& element)
 {
-#if __IPHONE_OS_VERSION_MIN_REQUIRED >= 100000
     if (!isDataDetectorLink(element))
         return false;
     
@@ -190,8 +202,7 @@ bool DataDetection::shouldCancelDefaultAction(Element& element)
     NSArray *results = element.document().frame()->dataDetectionResults();
     if (!results)
         return false;
-    Vector<String> resultIndices;
-    resultAttribute.string().split('/', resultIndices);
+    Vector<String> resultIndices = resultAttribute.string().split('/');
     DDResultRef result = [[results objectAtIndex:resultIndices[0].toInt()] coreResult];
     // Handle the case of a signature block, where we need to check the correct subresult.
     for (size_t i = 1; i < resultIndices.size(); i++) {
@@ -199,16 +210,6 @@ bool DataDetection::shouldCancelDefaultAction(Element& element)
         result = (DDResultRef)[results objectAtIndex:resultIndices[i].toInt()];
     }
     return softLink_DataDetectorsCore_DDShouldImmediatelyShowActionSheetForResult(result);
-#else
-    if (!is<HTMLAnchorElement>(element))
-        return false;
-    if (!equalIgnoringASCIICase(element.attributeWithoutSynchronization(x_apple_data_detectorsAttr), "true"))
-        return false;
-    String type = element.getAttribute(x_apple_data_detectors_typeAttr).convertToASCIILowercase();
-    if (type == "misc" || type == "calendar-event" || type == "telephone")
-        return true;
-    return false;
-#endif
 }
 
 static BOOL resultIsURL(DDResultRef result)
@@ -232,9 +233,7 @@ static NSString *constructURLStringForResult(DDResultRef currentResult, NSString
     if (((detectionTypes & DataDetectorTypeAddress) && (DDResultCategoryAddress == category))
         || ((detectionTypes & DataDetectorTypeTrackingNumber) && (CFStringCompare(get_DataDetectorsCore_DDBinderTrackingNumberKey(), type, 0) == kCFCompareEqualTo))
         || ((detectionTypes & DataDetectorTypeFlightNumber) && (CFStringCompare(get_DataDetectorsCore_DDBinderFlightInformationKey(), type, 0) == kCFCompareEqualTo))
-#if __IPHONE_OS_VERSION_MIN_REQUIRED >= 100000
         || ((detectionTypes & DataDetectorTypeLookupSuggestion) && (CFStringCompare(get_DataDetectorsCore_DDBinderParsecSourceKey(), type, 0) == kCFCompareEqualTo))
-#endif
         || ((detectionTypes & DataDetectorTypePhoneNumber) && (DDResultCategoryPhoneNumber == category))
         || ((detectionTypes & DataDetectorTypeLink) && resultIsURL(currentResult))) {
         
@@ -249,7 +248,7 @@ static NSString *constructURLStringForResult(DDResultRef currentResult, NSString
 
 static void removeResultLinksFromAnchor(Element& element)
 {
-    // Perform a depth-first search for anchor nodes, which have the DDURLScheme attribute set to true,
+    // Perform a depth-first search for anchor nodes, which have the data detectors attribute set to true,
     // take their children and insert them before the anchor, and then remove the anchor.
 
     // Note that this is not using ElementChildIterator because we potentially prepend children as we iterate over them.
@@ -274,7 +273,7 @@ static void removeResultLinksFromAnchor(Element& element)
 static bool searchForLinkRemovingExistingDDLinks(Node& startNode, Node& endNode, bool& didModifyDOM)
 {
     didModifyDOM = false;
-    for (Node* node = &startNode; node; node = NodeTraversal::next(*node, &startNode)) {
+    for (Node* node = &startNode; node; node = NodeTraversal::next(*node)) {
         if (is<HTMLAnchorElement>(*node)) {
             auto& anchor = downcast<HTMLAnchorElement>(*node);
             if (!equalIgnoringASCIICase(anchor.attributeWithoutSynchronization(x_apple_data_detectorsAttr), "true"))
@@ -436,11 +435,9 @@ NSArray *DataDetection::detectContentInRange(RefPtr<Range>& contextRange, DataDe
     RetainPtr<DDScanQueryRef> scanQuery = adoptCF(softLink_DataDetectorsCore_DDScanQueryCreate(NULL));
     buildQuery(scanQuery.get(), contextRange.get());
     
-#if __IPHONE_OS_VERSION_MIN_REQUIRED >= 100000
     if (types & DataDetectorTypeLookupSuggestion)
         softLink_DataDetectorsCore_DDScannerEnableOptionalSource(scanner.get(), DDScannerSourceSpotlight, true);
-#endif
-    
+
     // FIXME: we should add a timeout to this call to make sure it doesn't take too much time.
     if (!softLink_DataDetectorsCore_DDScannerScanQuery(scanner.get(), scanQuery.get()))
         return nil;
@@ -493,7 +490,7 @@ NSArray *DataDetection::detectContentInRange(RefPtr<Range>& contextRange, DataDe
         RefPtr<Range> currentRange = iterator.range();
         CFIndex fragmentIndex = queryRange.start.queryIndex;
         if (fragmentIndex == queryRange.end.queryIndex)
-            fragmentRanges.append(TextIterator::subrange(currentRange.get(), queryRange.start.offset, queryRange.end.offset - queryRange.start.offset));
+            fragmentRanges.append(TextIterator::subrange(*currentRange, queryRange.start.offset, queryRange.end.offset - queryRange.start.offset));
         else {
             if (!queryRange.start.offset)
                 fragmentRanges.append(currentRange);
@@ -567,17 +564,14 @@ NSArray *DataDetection::detectContentInRange(RefPtr<Range>& contextRange, DataDe
         }
         
         lastModifiedQueryOffset = queryRange.end;
-#if __IPHONE_OS_VERSION_MIN_REQUIRED >= 100000
         BOOL shouldUseLightLinks = softLink_DataDetectorsCore_DDShouldUseLightLinksForResult(coreResult, [indexPaths[resultIndex] length] > 1);
-#else
-        BOOL shouldUseLightLinks = NO;
-#endif
 
         for (auto& range : resultRanges) {
             auto* parentNode = range->startContainer().parentNode();
             if (!parentNode)
                 continue;
-
+            if (!is<Text>(range->startContainer()))
+                continue;
             auto& currentTextNode = downcast<Text>(range->startContainer());
             Document& document = currentTextNode.document();
             String textNodeData;
@@ -658,4 +652,19 @@ NSArray *DataDetection::detectContentInRange(RefPtr<Range>&, DataDetectorTypes, 
     return nil;
 }
 #endif
+
+const String& DataDetection::dataDetectorURLProtocol()
+{
+    static NeverDestroyed<String> protocol(MAKE_STATIC_STRING_IMPL("x-apple-data-detectors"));
+    return protocol;
+}
+
+bool DataDetection::isDataDetectorURL(const URL& url)
+{
+    return url.protocolIs(dataDetectorURLProtocol());
+}
+
 } // namespace WebCore
+
+#endif
+

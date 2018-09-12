@@ -23,8 +23,7 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef IDBSerialization_h
-#define IDBSerialization_h
+#pragma once
 
 #if ENABLE(INDEXED_DATABASE)
 
@@ -35,8 +34,8 @@ namespace WebCore {
 
 class IDBKeyData;
 
-RefPtr<SharedBuffer> serializeIDBKeyPath(const Optional<IDBKeyPath>&);
-bool deserializeIDBKeyPath(const uint8_t* buffer, size_t bufferSize, Optional<IDBKeyPath>&);
+RefPtr<SharedBuffer> serializeIDBKeyPath(const std::optional<IDBKeyPath>&);
+bool deserializeIDBKeyPath(const uint8_t* buffer, size_t bufferSize, std::optional<IDBKeyPath>&);
 
 RefPtr<SharedBuffer> serializeIDBKeyData(const IDBKeyData&);
 bool deserializeIDBKeyData(const uint8_t* buffer, size_t bufferSize, IDBKeyData&);
@@ -44,4 +43,3 @@ bool deserializeIDBKeyData(const uint8_t* buffer, size_t bufferSize, IDBKeyData&
 } // namespace WebCore
 
 #endif // ENABLE(INDEXED_DATABASE)
-#endif // IDBSerialization_h

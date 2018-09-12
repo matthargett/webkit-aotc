@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014, 2015 Apple Inc. All rights reserved.
+ * Copyright (C) 2014-2017 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -40,20 +40,20 @@ public:
         u.doubleWord = 0xbbadbeef;
     }
 
-    StructureIDBlob(StructureID structureID, IndexingType indexingType, const TypeInfo& typeInfo)
+    StructureIDBlob(StructureID structureID, IndexingType indexingModeIncludingHistory, const TypeInfo& typeInfo)
     {
         u.fields.structureID = structureID;
-        u.fields.indexingType = indexingType;
+        u.fields.indexingModeIncludingHistory = indexingModeIncludingHistory;
         u.fields.type = typeInfo.type();
         u.fields.inlineTypeFlags = typeInfo.inlineTypeFlags();
-        u.fields.defaultCellState = CellState::NewWhite;
+        u.fields.defaultCellState = CellState::DefinitelyWhite;
     }
 
     void operator=(const StructureIDBlob& other) { u.doubleWord = other.u.doubleWord; }
     
     StructureID structureID() const { return u.fields.structureID; }
-    IndexingType indexingType() const { return u.fields.indexingType; }
-    void setIndexingType(IndexingType indexingType) { u.fields.indexingType = indexingType; }
+    IndexingType indexingModeIncludingHistory() const { return u.fields.indexingModeIncludingHistory; }
+    void setIndexingModeIncludingHistory(IndexingType indexingModeIncludingHistory) { u.fields.indexingModeIncludingHistory = indexingModeIncludingHistory; }
     JSType type() const { return u.fields.type; }
     TypeInfo::InlineTypeFlags inlineTypeFlags() const { return u.fields.inlineTypeFlags; }
     
@@ -67,16 +67,16 @@ public:
         return OBJECT_OFFSETOF(StructureIDBlob, u.fields.structureID);
     }
 
-    static ptrdiff_t indexingTypeOffset()
+    static ptrdiff_t indexingModeIncludingHistoryOffset()
     {
-        return OBJECT_OFFSETOF(StructureIDBlob, u.fields.indexingType);
+        return OBJECT_OFFSETOF(StructureIDBlob, u.fields.indexingModeIncludingHistory);
     }
 
 private:
     union {
         struct {
             StructureID structureID;
-            IndexingType indexingType;
+            IndexingType indexingModeIncludingHistory;
             JSType type;
             TypeInfo::InlineTypeFlags inlineTypeFlags;
             CellState defaultCellState;

@@ -28,8 +28,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef UndoStep_h
-#define UndoStep_h
+#pragma once
 
 #include "EditAction.h"
 #include <wtf/RefCounted.h>
@@ -38,13 +37,11 @@ namespace WebCore {
 
 class UndoStep : public RefCounted<UndoStep> {
 public:
-    virtual ~UndoStep() { }
+    virtual ~UndoStep() = default;
 
     virtual void unapply() = 0;
     virtual void reapply() = 0;
     virtual EditAction editingAction() const = 0;
 };
 
-}
-
-#endif
+} // namespace WebCore

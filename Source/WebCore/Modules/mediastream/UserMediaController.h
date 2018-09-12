@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2012 Google Inc. All rights reserved.
- * Copyright (C) 2016 Apple Inc. All rights reserved.
+ * Copyright (C) 2016-2018 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -23,18 +23,19 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef UserMediaController_h
-#define UserMediaController_h
+#pragma once
 
 #if ENABLE(MEDIA_STREAM)
 
 #include "Page.h"
 #include "UserMediaClient.h"
-#include "UserMediaRequest.h"
 
 namespace WebCore {
 
+class UserMediaRequest;
+
 class UserMediaController : public Supplement<Page> {
+    WTF_MAKE_FAST_ALLOCATED;
 public:
     explicit UserMediaController(UserMediaClient*);
     ~UserMediaController();
@@ -46,6 +47,9 @@ public:
 
     void enumerateMediaDevices(MediaDevicesEnumerationRequest&);
     void cancelMediaDevicesEnumerationRequest(MediaDevicesEnumerationRequest&);
+
+    UserMediaClient::DeviceChangeObserverToken addDeviceChangeObserver(WTF::Function<void()>&&);
+    void removeDeviceChangeObserver(UserMediaClient::DeviceChangeObserverToken);
 
     WEBCORE_EXPORT static const char* supplementName();
     static UserMediaController* from(Page* page) { return static_cast<UserMediaController*>(Supplement<Page>::from(page, supplementName())); }
@@ -74,8 +78,16 @@ inline void UserMediaController::cancelMediaDevicesEnumerationRequest(MediaDevic
     m_client->cancelMediaDevicesEnumerationRequest(request);
 }
 
+inline UserMediaClient::DeviceChangeObserverToken UserMediaController::addDeviceChangeObserver(WTF::Function<void()>&& observer)
+{
+    return m_client->addDeviceChangeObserver(WTFMove(observer));
+}
+
+inline void UserMediaController::removeDeviceChangeObserver(UserMediaClient::DeviceChangeObserverToken token)
+{
+    m_client->removeDeviceChangeObserver(token);
+}
+
 } // namespace WebCore
 
 #endif // ENABLE(MEDIA_STREAM)
-
-#endif // UserMediaController_h

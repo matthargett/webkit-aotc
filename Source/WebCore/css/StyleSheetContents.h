@@ -18,18 +18,17 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifndef StyleSheetContents_h
-#define StyleSheetContents_h
+#pragma once
 
-#include "CSSParserMode.h"
+#include "CSSParserContext.h"
 #include "CachePolicy.h"
 #include "URL.h"
+#include <wtf/Function.h>
 #include <wtf/HashMap.h>
-#include <wtf/ListHashSet.h>
 #include <wtf/RefCounted.h>
 #include <wtf/Vector.h>
+#include <wtf/WeakPtr.h>
 #include <wtf/text/AtomicStringHash.h>
-#include <wtf/text/TextPosition.h>
 
 namespace WebCore {
 
@@ -37,13 +36,14 @@ class CSSStyleSheet;
 class CachedCSSStyleSheet;
 class CachedResource;
 class Document;
+class FrameLoader;
 class Node;
 class SecurityOrigin;
 class StyleRuleBase;
 class StyleRuleImport;
 class StyleRuleNamespace;
 
-class StyleSheetContents final : public RefCounted<StyleSheetContents> {
+class StyleSheetContents final : public RefCounted<StyleSheetContents>, public CanMakeWeakPtr<StyleSheetContents> {
 public:
     static Ref<StyleSheetContents> create(const CSSParserContext& context = CSSParserContext(HTMLStandardMode))
     {
@@ -67,12 +67,11 @@ public:
 
     void parseAuthorStyleSheet(const CachedCSSStyleSheet*, const SecurityOrigin*);
     WEBCORE_EXPORT bool parseString(const String&);
-    bool parseStringAtPosition(const String&, const TextPosition&, bool createdByParser);
 
     bool isCacheable() const;
 
     bool isLoading() const;
-    bool subresourcesAllowReuse(CachePolicy) const;
+    bool subresourcesAllowReuse(CachePolicy, FrameLoader&) const;
     WEBCORE_EXPORT bool isLoadingSubresources() const;
 
     void checkLoaded();
@@ -87,7 +86,8 @@ public:
     bool loadCompleted() const { return m_loadCompleted; }
 
     URL completeURL(const String& url) const;
-    bool traverseSubresources(const std::function<bool (const CachedResource&)>& handler) const;
+    bool traverseRules(const WTF::Function<bool (const StyleRuleBase&)>& handler) const;
+    bool traverseSubresources(const WTF::Function<bool (const CachedResource&)>& handler) const;
 
     void setIsUserStyleSheet(bool b) { m_isUserStyleSheet = b; }
     bool isUserStyleSheet() const { return m_isUserStyleSheet; }
@@ -175,6 +175,4 @@ private:
     Vector<CSSStyleSheet*> m_clients;
 };
 
-} // namespace
-
-#endif
+} // namespace WebCore

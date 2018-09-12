@@ -28,48 +28,104 @@
 
 #if ENABLE(SUBTLE_CRYPTO)
 
+#include "CryptoAlgorithmAesKeyParams.h"
 #include "CryptoAlgorithmRegistry.h"
-#include "CryptoKeyDataOctetSequence.h"
+#include "ExceptionOr.h"
+#include "JsonWebKey.h"
+#include <wtf/text/Base64.h>
 #include <wtf/text/WTFString.h>
 
 namespace WebCore {
 
-CryptoKeyAES::CryptoKeyAES(CryptoAlgorithmIdentifier algorithm, const Vector<uint8_t>& key, bool extractable, CryptoKeyUsage usage)
+static inline bool lengthIsValid(size_t length)
+{
+    return (length == CryptoKeyAES::s_length128) || (length == CryptoKeyAES::s_length192) || (length == CryptoKeyAES::s_length256);
+}
+
+CryptoKeyAES::CryptoKeyAES(CryptoAlgorithmIdentifier algorithm, const Vector<uint8_t>& key, bool extractable, CryptoKeyUsageBitmap usage)
     : CryptoKey(algorithm, CryptoKeyType::Secret, extractable, usage)
     , m_key(key)
 {
     ASSERT(isValidAESAlgorithm(algorithm));
 }
 
-CryptoKeyAES::~CryptoKeyAES()
+CryptoKeyAES::CryptoKeyAES(CryptoAlgorithmIdentifier algorithm, Vector<uint8_t>&& key, bool extractable, CryptoKeyUsageBitmap usage)
+    : CryptoKey(algorithm, CryptoKeyType::Secret, extractable, usage)
+    , m_key(WTFMove(key))
 {
+    ASSERT(isValidAESAlgorithm(algorithm));
 }
+
+CryptoKeyAES::~CryptoKeyAES() = default;
 
 bool CryptoKeyAES::isValidAESAlgorithm(CryptoAlgorithmIdentifier algorithm)
 {
     return algorithm == CryptoAlgorithmIdentifier::AES_CTR
         || algorithm == CryptoAlgorithmIdentifier::AES_CBC
-        || algorithm == CryptoAlgorithmIdentifier::AES_CMAC
         || algorithm == CryptoAlgorithmIdentifier::AES_GCM
         || algorithm == CryptoAlgorithmIdentifier::AES_CFB
         || algorithm == CryptoAlgorithmIdentifier::AES_KW;
 }
 
-RefPtr<CryptoKeyAES> CryptoKeyAES::generate(CryptoAlgorithmIdentifier algorithm, size_t lengthBits, bool extractable, CryptoKeyUsage usages)
+RefPtr<CryptoKeyAES> CryptoKeyAES::generate(CryptoAlgorithmIdentifier algorithm, size_t lengthBits, bool extractable, CryptoKeyUsageBitmap usages)
 {
-    if ((lengthBits != 128) && (lengthBits != 192) && (lengthBits != 256))
+    if (!lengthIsValid(lengthBits))
         return nullptr;
     return adoptRef(new CryptoKeyAES(algorithm, randomData(lengthBits / 8), extractable, usages));
 }
 
-std::unique_ptr<KeyAlgorithm> CryptoKeyAES::buildAlgorithm() const
+RefPtr<CryptoKeyAES> CryptoKeyAES::importRaw(CryptoAlgorithmIdentifier algorithm, Vector<uint8_t>&& keyData, bool extractable, CryptoKeyUsageBitmap usages)
 {
-    return std::make_unique<AesKeyAlgorithm>(CryptoAlgorithmRegistry::singleton().nameForIdentifier(algorithmIdentifier()), m_key.size() * 8);
+    if (!lengthIsValid(keyData.size() * 8))
+        return nullptr;
+    return adoptRef(new CryptoKeyAES(algorithm, WTFMove(keyData), extractable, usages));
 }
 
-std::unique_ptr<CryptoKeyData> CryptoKeyAES::exportData() const
+RefPtr<CryptoKeyAES> CryptoKeyAES::importJwk(CryptoAlgorithmIdentifier algorithm, JsonWebKey&& keyData, bool extractable, CryptoKeyUsageBitmap usages, CheckAlgCallback&& callback)
 {
-    return std::make_unique<CryptoKeyDataOctetSequence>(m_key);
+    if (keyData.kty != "oct")
+        return nullptr;
+    if (keyData.k.isNull())
+        return nullptr;
+    Vector<uint8_t> octetSequence;
+    if (!base64URLDecode(keyData.k, octetSequence))
+        return nullptr;
+    if (!callback(octetSequence.size() * 8, keyData.alg))
+        return nullptr;
+    if (usages && !keyData.use.isNull() && keyData.use != "enc")
+        return nullptr;
+    if (keyData.key_ops && ((keyData.usages & usages) != usages))
+        return nullptr;
+    if (keyData.ext && !keyData.ext.value() && extractable)
+        return nullptr;
+
+    return adoptRef(new CryptoKeyAES(algorithm, WTFMove(octetSequence), extractable, usages));
+}
+
+JsonWebKey CryptoKeyAES::exportJwk() const
+{
+    JsonWebKey result;
+    result.kty = "oct";
+    result.k = base64URLEncode(m_key);
+    result.key_ops = usages();
+    result.ext = extractable();
+    return result;
+}
+
+ExceptionOr<size_t> CryptoKeyAES::getKeyLength(const CryptoAlgorithmParameters& parameters)
+{
+    auto& aesParameters = downcast<CryptoAlgorithmAesKeyParams>(parameters);
+    if (!lengthIsValid(aesParameters.length))
+        return Exception { OperationError };
+    return aesParameters.length;
+}
+
+auto CryptoKeyAES::algorithm() const -> KeyAlgorithm
+{
+    CryptoAesKeyAlgorithm result;
+    result.name = CryptoAlgorithmRegistry::singleton().name(algorithmIdentifier());
+    result.length = m_key.size() * 8;
+    return result;
 }
 
 } // namespace WebCore

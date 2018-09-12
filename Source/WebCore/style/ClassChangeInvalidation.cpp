@@ -26,13 +26,10 @@
 #include "config.h"
 #include "ClassChangeInvalidation.h"
 
-#include "DocumentRuleSets.h"
 #include "ElementChildIterator.h"
-#include "ShadowRoot.h"
 #include "SpaceSplitString.h"
-#include "StyleInvalidationAnalysis.h"
-#include "StyleResolver.h"
-#include "StyleScope.h"
+#include "StyleInvalidationFunctions.h"
+#include "StyleInvalidator.h"
 #include <wtf/BitVector.h>
 
 namespace WebCore {
@@ -77,7 +74,7 @@ static ClassChangeVector computeClassChange(const SpaceSplitString& oldClasses, 
         changedClasses.append(newClasses[i].impl());
     }
     for (unsigned i = 0; i < oldSize; ++i) {
-        // If the bit is not set the the corresponding class has been removed.
+        // If the bit is not set the corresponding class has been removed.
         if (remainingClassBits.quickGet(i))
             continue;
         changedClasses.append(oldClasses[i].impl());
@@ -86,58 +83,45 @@ static ClassChangeVector computeClassChange(const SpaceSplitString& oldClasses, 
     return changedClasses;
 }
 
-static bool mayBeAffectedByHostStyle(ShadowRoot& shadowRoot, AtomicStringImpl* changedClass)
-{
-    auto& shadowRuleSets = shadowRoot.styleScope().resolver().ruleSets();
-    if (shadowRuleSets.authorStyle().hostPseudoClassRules().isEmpty())
-        return false;
-    return shadowRuleSets.features().classesInRules.contains(changedClass);
-}
-
-void ClassChangeInvalidation::invalidateStyle(const SpaceSplitString& oldClasses, const SpaceSplitString& newClasses)
+void ClassChangeInvalidation::computeInvalidation(const SpaceSplitString& oldClasses, const SpaceSplitString& newClasses)
 {
     auto changedClasses = computeClassChange(oldClasses, newClasses);
 
-    auto& ruleSets = m_element.styleResolver().ruleSets();
-    auto* shadowRoot = m_element.shadowRoot();
+    bool shouldInvalidateCurrent = false;
+    bool mayAffectStyleInShadowTree = false;
 
-    ClassChangeVector changedClassesAffectingStyle;
-    for (auto* changedClass : changedClasses) {
-        bool mayAffectStyle = ruleSets.features().classesInRules.contains(changedClass);
+    traverseRuleFeatures(m_element, [&] (const RuleFeatureSet& features, bool mayAffectShadowTree) {
+        for (auto* changedClass : changedClasses) {
+            if (mayAffectShadowTree && features.classRules.contains(changedClass))
+                mayAffectStyleInShadowTree = true;
+            if (features.classesAffectingHost.contains(changedClass))
+                shouldInvalidateCurrent = true;
+        }
+    });
 
-        if (!mayAffectStyle && shadowRoot && mayBeAffectedByHostStyle(*shadowRoot, changedClass))
-            mayAffectStyle = true;
-
-        if (mayAffectStyle)
-            changedClassesAffectingStyle.append(changedClass);
-    };
-
-    if (changedClassesAffectingStyle.isEmpty())
-        return;
-
-    if (shadowRoot && ruleSets.authorStyle().hasShadowPseudoElementRules()) {
+    if (mayAffectStyleInShadowTree) {
+        // FIXME: We should do fine-grained invalidation for shadow tree.
         m_element.invalidateStyleForSubtree();
-        return;
     }
 
-    m_element.invalidateStyle();
+    if (shouldInvalidateCurrent)
+        m_element.invalidateStyle();
 
-    if (!childrenOfType<Element>(m_element).first())
-        return;
+    auto& ruleSets = m_element.styleResolver().ruleSets();
 
-    for (auto* changedClass : changedClassesAffectingStyle) {
-        auto* ancestorClassRules = ruleSets.ancestorClassRules(changedClass);
-        if (!ancestorClassRules)
-            continue;
-        m_descendantInvalidationRuleSets.append(ancestorClassRules);
+    for (auto* changedClass : changedClasses) {
+        if (auto* invalidationRuleSets = ruleSets.classInvalidationRuleSets(changedClass)) {
+            for (auto& invalidationRuleSet : *invalidationRuleSets)
+                m_invalidationRuleSets.append(&invalidationRuleSet);
+        }
     }
 }
 
-void ClassChangeInvalidation::invalidateDescendantStyle()
+void ClassChangeInvalidation::invalidateStyleWithRuleSets()
 {
-    for (auto* ancestorClassRules : m_descendantInvalidationRuleSets) {
-        StyleInvalidationAnalysis invalidationAnalysis(*ancestorClassRules);
-        invalidationAnalysis.invalidateStyle(m_element);
+    for (auto* invalidationRuleSet : m_invalidationRuleSets) {
+        Invalidator invalidator(*invalidationRuleSet->ruleSet);
+        invalidator.invalidateStyleWithMatchElement(m_element, invalidationRuleSet->matchElement);
     }
 }
 

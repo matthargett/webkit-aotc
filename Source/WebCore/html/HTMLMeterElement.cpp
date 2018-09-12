@@ -19,14 +19,12 @@
  */
 
 #include "config.h"
-#if ENABLE(METER_ELEMENT)
 #include "HTMLMeterElement.h"
+
+#if ENABLE(METER_ELEMENT)
 
 #include "Attribute.h"
 #include "ElementIterator.h"
-#include "EventNames.h"
-#include "ExceptionCode.h"
-#include "FormDataList.h"
 #include "HTMLDivElement.h"
 #include "HTMLFormElement.h"
 #include "HTMLNames.h"
@@ -37,8 +35,11 @@
 #include "RenderTheme.h"
 #include "ShadowRoot.h"
 #include "UserAgentStyleSheets.h"
+#include <wtf/IsoMallocInlines.h>
 
 namespace WebCore {
+
+WTF_MAKE_ISO_ALLOCATED_IMPL(HTMLMeterElement);
 
 using namespace HTMLNames;
 
@@ -48,9 +49,7 @@ HTMLMeterElement::HTMLMeterElement(const QualifiedName& tagName, Document& docum
     ASSERT(hasTagName(meterTag));
 }
 
-HTMLMeterElement::~HTMLMeterElement()
-{
-}
+HTMLMeterElement::~HTMLMeterElement() = default;
 
 Ref<HTMLMeterElement> HTMLMeterElement::create(const QualifiedName& tagName, Document& document)
 {
@@ -61,7 +60,7 @@ Ref<HTMLMeterElement> HTMLMeterElement::create(const QualifiedName& tagName, Doc
 
 RenderPtr<RenderElement> HTMLMeterElement::createElementRenderer(RenderStyle&& style, const RenderTreePosition&)
 {
-    if (!document().page()->theme().supportsMeter(style.appearance()))
+    if (!RenderTheme::singleton().supportsMeter(style.appearance()))
         return RenderElement::createFor(*this, WTFMove(style));
 
     return createRenderer<RenderMeter>(*this, WTFMove(style));
@@ -224,30 +223,30 @@ RenderMeter* HTMLMeterElement::renderMeter() const
     return nullptr;
 }
 
-void HTMLMeterElement::didAddUserAgentShadowRoot(ShadowRoot* root)
+void HTMLMeterElement::didAddUserAgentShadowRoot(ShadowRoot& root)
 {
     ASSERT(!m_value);
 
     static NeverDestroyed<String> shadowStyle(meterElementShadowUserAgentStyleSheet, String::ConstructFromLiteral);
 
     auto style = HTMLStyleElement::create(HTMLNames::styleTag, document(), false);
-    style->setTextContent(shadowStyle, IGNORE_EXCEPTION);
-    root->appendChild(style);
+    style->setTextContent(shadowStyle);
+    root.appendChild(style);
 
     // Pseudos are set to allow author styling.
     auto inner = HTMLDivElement::create(document());
     inner->setIdAttribute("inner");
     inner->setPseudo("-webkit-meter-inner-element");
-    root->appendChild(inner);
+    root.appendChild(inner);
 
     auto bar = HTMLDivElement::create(document());
     bar->setIdAttribute("bar");
     bar->setPseudo("-webkit-meter-bar");
-    inner->appendChild(bar, ASSERT_NO_EXCEPTION);
+    inner->appendChild(bar);
 
     m_value = HTMLDivElement::create(document());
     m_value->setIdAttribute("value");
-    bar->appendChild(*m_value, ASSERT_NO_EXCEPTION);
+    bar->appendChild(*m_value);
 
     didElementStateChange();
 }

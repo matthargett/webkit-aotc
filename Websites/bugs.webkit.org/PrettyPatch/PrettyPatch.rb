@@ -349,7 +349,7 @@ pre, .text {
   height: 4em;
 }
 
-#statusBubbleContainer.wrap {
+.statusBubble.wrap {
   display: block;
 }
 
@@ -488,9 +488,9 @@ div:focus {
   outline-offset: -1px;
 }
 
-.statusBubble {
+.statusBubble > iframe {
   /* The width/height get set to the bubble contents via postMessage on browsers that support it. */
-  width: 450px;
+  width: 460px;
   height: 20px;
   margin: 2px 2px 0 0;
   border: none;
@@ -523,7 +523,8 @@ div:focus {
     clear: both;
 }
 </style>
-<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js"></script> 
+<script src="https://webkit.org/ajax/libs/jquery/jquery-1.4.2.min.js"></script> 
+<script src="js/status-bubble.js"></script>
 <script src="code-review.js?version=48"></script>
 </head>
 EOF
@@ -777,7 +778,16 @@ END
 
         def self.run_git_apply_on_patch(output_filepath, patch)
             # Apply the git binary patch using git-apply.
-            cmd = GIT_PATH + " apply --directory=" + File.dirname(output_filepath)
+            cmd = GIT_PATH + " apply"
+            # Check if we need to pass --unsafe-paths (git >= 2.3.3)
+            helpcmd = GIT_PATH + " help apply"
+            stdin, stdout, stderr = *Open3.popen3(helpcmd)
+            begin
+                if stdout.read().include? "--unsafe-paths"
+                    cmd += " --unsafe-paths"
+                end
+            end
+            cmd += " --directory=" + File.dirname(output_filepath)
             stdin, stdout, stderr = *Open3.popen3(cmd)
             begin
                 stdin.puts(patch)

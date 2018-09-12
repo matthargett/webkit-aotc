@@ -23,12 +23,14 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
  */
 
-#ifndef VisiblePosition_h
-#define VisiblePosition_h
+#pragma once
 
 #include "EditingBoundary.h"
 #include "Position.h"
-#include "TextFlags.h"
+
+namespace WTF {
+class TextStream;
+}
 
 namespace WebCore {
 
@@ -47,7 +49,6 @@ namespace WebCore {
 
 class InlineBox;
 class Node;
-class TextStream;
 
 class VisiblePosition {
 public:
@@ -96,7 +97,7 @@ public:
     // Rect is local to the returned renderer
     WEBCORE_EXPORT LayoutRect localCaretRect(RenderObject*&) const;
     // Bounds of (possibly transformed) caret in absolute coords
-    WEBCORE_EXPORT IntRect absoluteCaretBounds() const;
+    WEBCORE_EXPORT IntRect absoluteCaretBounds(bool* insideFixed = nullptr) const;
     // Abs x/y position of the caret ignoring transforms.
     // FIXME: navigation with transforms should be smarter.
     WEBCORE_EXPORT int lineDirectionPointForBlockDirectionNavigation() const;
@@ -164,15 +165,13 @@ WEBCORE_EXPORT Element* enclosingBlockFlowElement(const VisiblePosition&);
 bool isFirstVisiblePositionInNode(const VisiblePosition&, const Node*);
 bool isLastVisiblePositionInNode(const VisiblePosition&, const Node*);
 
-TextStream& operator<<(TextStream&, EAffinity);
-TextStream& operator<<(TextStream&, const VisiblePosition&);
+WTF::TextStream& operator<<(WTF::TextStream&, EAffinity);
+WEBCORE_EXPORT WTF::TextStream& operator<<(WTF::TextStream&, const VisiblePosition&);
 
 } // namespace WebCore
 
 #if ENABLE(TREE_DEBUGGING)
-// Outside the WebCore namespace for ease of invocation from gdb.
+// Outside the WebCore namespace for ease of invocation from the debugger.
 void showTree(const WebCore::VisiblePosition*);
 void showTree(const WebCore::VisiblePosition&);
 #endif
-
-#endif // VisiblePosition_h

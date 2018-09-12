@@ -25,15 +25,12 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef SQLTransactionBackend_h
-#define SQLTransactionBackend_h
 
-#include "DatabaseBasicTypes.h"
+#pragma once
+
 #include "SQLTransactionStateMachine.h"
 #include <memory>
-#include <wtf/Deque.h>
 #include <wtf/Forward.h>
-#include <wtf/Lock.h>
 #include <wtf/text/WTFString.h>
 
 namespace WebCore {
@@ -45,7 +42,6 @@ class SQLiteTransaction;
 class SQLStatement;
 class SQLTransaction;
 class SQLTransactionWrapper;
-class SQLValue;
 
 class SQLTransactionBackend : public SQLTransactionStateMachine<SQLTransactionBackend> {
 public:
@@ -79,5 +75,3 @@ private:
 };
 
 } // namespace WebCore
-
-#endif // SQLTransactionBackend_h

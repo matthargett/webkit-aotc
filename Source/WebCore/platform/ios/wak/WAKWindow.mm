@@ -31,7 +31,6 @@
 #import "LegacyTileCache.h"
 #import "PlatformScreen.h"
 #import "WAKViewInternal.h"
-#import "WebCoreSystemInterface.h"
 #import "WebCoreThreadRun.h"
 #import "WebEvent.h"
 #import "WKContentObservation.h"
@@ -438,6 +437,16 @@ static id<OrientationProvider> gOrientationProvider;
     _tileCache->setTilesOpaque(opaque);
 }
 
+- (void)setIsInSnapshottingPaint:(BOOL)isInSnapshottingPaint
+{
+    _isInSnapshottingPaint = isInSnapshottingPaint;
+}
+
+- (BOOL)isInSnapshottingPaint
+{
+    return _isInSnapshottingPaint;
+}
+
 - (void)setEntireWindowVisibleForTesting:(BOOL)entireWindowVisible
 {
     _entireWindowVisibleForTesting = entireWindowVisible;
@@ -673,7 +682,7 @@ static id<OrientationProvider> gOrientationProvider;
     CGRect savedFrozenVisibleRect = _frozenVisibleRect;
     NSLog(@"=================");
     if (!CGRectIsNull(_frozenVisibleRect)) {
-        NSLog(@"VISIBLE RECT IS CACHED: [%6.1f %6.1f %6.1f %6.1f]", _frozenVisibleRect.origin.x, _frozenVisibleRect.origin.y, _frozenVisibleRect.size.width, _frozenVisibleRect.size.height);
+        NSLog(@"Visibility::Visible RECT IS CACHED: [%6.1f %6.1f %6.1f %6.1f]", _frozenVisibleRect.origin.x, _frozenVisibleRect.origin.y, _frozenVisibleRect.size.width, _frozenVisibleRect.size.height);
         _frozenVisibleRect = CGRectNull;
     }
     CGRect visibleRect = [self visibleRect];

@@ -33,14 +33,13 @@
 
 #if ENABLE(WEB_RTC)
 
-#include "EventNames.h"
 #include "MediaStream.h"
 #include "MediaStreamTrack.h"
 #include "RTCRtpTransceiver.h"
 
 namespace WebCore {
 
-Ref<RTCTrackEvent> RTCTrackEvent::create(const AtomicString& type, bool canBubble, bool cancelable, RefPtr<RTCRtpReceiver>&& receiver, RefPtr<MediaStreamTrack>&& track, Vector<RefPtr<MediaStream>>&& streams, RefPtr<RTCRtpTransceiver>&& transceiver)
+Ref<RTCTrackEvent> RTCTrackEvent::create(const AtomicString& type, CanBubble canBubble, IsCancelable cancelable, RefPtr<RTCRtpReceiver>&& receiver, RefPtr<MediaStreamTrack>&& track, Vector<RefPtr<MediaStream>>&& streams, RefPtr<RTCRtpTransceiver>&& transceiver)
 {
     return adoptRef(*new RTCTrackEvent(type, canBubble, cancelable, WTFMove(receiver), WTFMove(track), WTFMove(streams), WTFMove(transceiver)));
 }
@@ -50,7 +49,7 @@ Ref<RTCTrackEvent> RTCTrackEvent::create(const AtomicString& type, const Init& i
     return adoptRef(*new RTCTrackEvent(type, initializer, isTrusted));
 }
 
-RTCTrackEvent::RTCTrackEvent(const AtomicString& type, bool canBubble, bool cancelable, RefPtr<RTCRtpReceiver>&& receiver, RefPtr<MediaStreamTrack>&& track, Vector<RefPtr<MediaStream>>&& streams, RefPtr<RTCRtpTransceiver>&& transceiver)
+RTCTrackEvent::RTCTrackEvent(const AtomicString& type, CanBubble canBubble, IsCancelable cancelable, RefPtr<RTCRtpReceiver>&& receiver, RefPtr<MediaStreamTrack>&& track, Vector<RefPtr<MediaStream>>&& streams, RefPtr<RTCRtpTransceiver>&& transceiver)
     : Event(type, canBubble, cancelable)
     , m_receiver(WTFMove(receiver))
     , m_track(WTFMove(track))

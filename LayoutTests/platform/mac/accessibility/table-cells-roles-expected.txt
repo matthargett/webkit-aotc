@@ -5,6 +5,7 @@ No	Country	Capital
 3.	Ukraine	Kiev
 All	3 countries	3 capitals
 
+
 table2
 No	Country	Capital
 1.	Germany	Berlin
@@ -25,4 +26,7 @@ The table2 cell at (2,0) currently has role  AXRole: AXCell .
 The table2 cell at (1,2) currently has role  AXRole: AXCell .
 The table2 cell at (2,3) currently has role  AXRole: AXCell .
 The table2 cell at (0,2) currently has role  AXRole: AXCell .
+PASS successfullyParsed is true
+
+TEST COMPLETE
 

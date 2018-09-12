@@ -15,7 +15,7 @@ shouldBeType("new Intl.NumberFormat()", "Intl.NumberFormat");
 var classPrefix = "class DerivedNumberFormat extends Intl.NumberFormat {};";
 shouldBeTrue(classPrefix + "(new DerivedNumberFormat) instanceof DerivedNumberFormat");
 shouldBeTrue(classPrefix + "(new DerivedNumberFormat) instanceof Intl.NumberFormat");
-shouldBeTrue(classPrefix + "new DerivedNumberFormat().format(1) === '1'");
+shouldBeTrue(classPrefix + "new DerivedNumberFormat('en').format(1) === '1'");
 shouldBeTrue(classPrefix + "Object.getPrototypeOf(new DerivedNumberFormat) === DerivedNumberFormat.prototype");
 shouldBeTrue(classPrefix + "Object.getPrototypeOf(Object.getPrototypeOf(new DerivedNumberFormat)) === Intl.NumberFormat.prototype");
 
@@ -42,7 +42,6 @@ function testNumberFormat(numberFormat, possibleDifferences) {
 }
 
 // Locale is processed correctly.
-shouldBeTrue("testNumberFormat(Intl.NumberFormat(), [{locale: 'en-US'}])");
 shouldBeTrue("testNumberFormat(Intl.NumberFormat('en'), [{locale: 'en'}])");
 shouldBeTrue("testNumberFormat(Intl.NumberFormat('eN-uS'), [{locale: 'en-US'}])");
 shouldBeTrue("testNumberFormat(Intl.NumberFormat(['en', 'de']), [{locale: 'en'}])");
@@ -52,6 +51,39 @@ shouldBeTrue("testNumberFormat(Intl.NumberFormat('de'), [{locale: 'de'}])");
 shouldBeTrue("testNumberFormat(Intl.NumberFormat('zh-Hans-CN-u-nu-hanidec'), [{locale: 'zh-Hans-CN-u-nu-hanidec', numberingSystem: 'hanidec'}])");
 shouldBeTrue("testNumberFormat(Intl.NumberFormat('ZH-hans-cn-U-Nu-Hanidec'), [{locale: 'zh-Hans-CN-u-nu-hanidec', numberingSystem: 'hanidec'}])");
 shouldBeTrue("testNumberFormat(Intl.NumberFormat('en-u-nu-abcd'), [{locale: 'en'}])");
+
+let numberingSystems = [
+  "arab", "arabext", "bali", "beng", "deva", "fullwide", "gujr", "guru",
+  "hanidec", "khmr", "knda", "laoo", "latn", "limb", "mlym", "mong", "mymr",
+  "orya", "tamldec", "telu", "thai", "tibt"
+]
+for (let numberingSystem of numberingSystems) {
+  shouldBeTrue(`testNumberFormat(Intl.NumberFormat('en-u-nu-${numberingSystem}'), [{locale: 'en-u-nu-${numberingSystem}', numberingSystem: '${numberingSystem}'}])`);
+}
+
+// Numbering system sensitive format().
+shouldBe("Intl.NumberFormat('en-u-nu-arab').format(1234567890)", "'١٬٢٣٤٬٥٦٧٬٨٩٠'");
+shouldBe("Intl.NumberFormat('en-u-nu-arabext').format(1234567890)", "'۱٬۲۳۴٬۵۶۷٬۸۹۰'");
+shouldBe("Intl.NumberFormat('en-u-nu-bali').format(1234567890)", "'᭑,᭒᭓᭔,᭕᭖᭗,᭘᭙᭐'");
+shouldBe("Intl.NumberFormat('en-u-nu-beng').format(1234567890)", "'১,২৩৪,৫৬৭,৮৯০'");
+shouldBe("Intl.NumberFormat('en-u-nu-deva').format(1234567890)", "'१,२३४,५६७,८९०'");
+shouldBe("Intl.NumberFormat('en-u-nu-fullwide').format(1234567890)", "'１,２３４,５６７,８９０'");
+shouldBe("Intl.NumberFormat('en-u-nu-gujr').format(1234567890)", "'૧,૨૩૪,૫૬૭,૮૯૦'");
+shouldBe("Intl.NumberFormat('en-u-nu-guru').format(1234567890)", "'੧,੨੩੪,੫੬੭,੮੯੦'");
+shouldBe("Intl.NumberFormat('en-u-nu-hanidec').format(1234567890)", "'一,二三四,五六七,八九〇'");
+shouldBe("Intl.NumberFormat('en-u-nu-khmr').format(1234567890)", "'១,២៣៤,៥៦៧,៨៩០'");
+shouldBe("Intl.NumberFormat('en-u-nu-knda').format(1234567890)", "'೧,೨೩೪,೫೬೭,೮೯೦'");
+shouldBe("Intl.NumberFormat('en-u-nu-laoo').format(1234567890)", "'໑,໒໓໔,໕໖໗,໘໙໐'");
+shouldBe("Intl.NumberFormat('en-u-nu-latn').format(1234567890)", "'1,234,567,890'");
+shouldBe("Intl.NumberFormat('en-u-nu-limb').format(1234567890)", "'᥇,᥈᥉᥊,᥋᥌᥍,᥎᥏᥆'");
+shouldBe("Intl.NumberFormat('en-u-nu-mlym').format(1234567890)", "'൧,൨൩൪,൫൬൭,൮൯൦'");
+shouldBe("Intl.NumberFormat('en-u-nu-mong').format(1234567890)", "'᠑,᠒᠓᠔,᠕᠖᠗,᠘᠙᠐'");
+shouldBe("Intl.NumberFormat('en-u-nu-mymr').format(1234567890)", "'၁,၂၃၄,၅၆၇,၈၉၀'");
+shouldBe("Intl.NumberFormat('en-u-nu-orya').format(1234567890)", "'୧,୨୩୪,୫୬୭,୮୯୦'");
+shouldBe("Intl.NumberFormat('en-u-nu-tamldec').format(1234567890)", "'௧,௨௩௪,௫௬௭,௮௯௦'");
+shouldBe("Intl.NumberFormat('en-u-nu-telu').format(1234567890)", "'౧,౨౩౪,౫౬౭,౮౯౦'");
+shouldBe("Intl.NumberFormat('en-u-nu-thai').format(1234567890)", "'๑,๒๓๔,๕๖๗,๘๙๐'");
+shouldBe("Intl.NumberFormat('en-u-nu-tibt').format(1234567890)", "'༡,༢༣༤,༥༦༧,༨༩༠'");
 
 // Ignores irrelevant extension keys.
 shouldBeTrue("testNumberFormat(Intl.NumberFormat('zh-Hans-CN-u-aa-aaaa-co-pinyin-nu-hanidec-bb-bbbb'), [{locale: 'zh-Hans-CN-u-nu-hanidec', numberingSystem: 'hanidec'}])");
@@ -215,15 +247,29 @@ for (var validLanguageTag of validLanguageTags) {
     shouldNotThrow("Intl.NumberFormat.supportedLocalesOf('" + validLanguageTag + "')");
 }
 
-// 11.3 Properties of the Intl.NumberFormat Prototype Object
+// 11.4 Properties of the Intl.NumberFormat Prototype Object
 
-// The value of Intl.NumberFormat.prototype.constructor is %NumberFormat%.
+// The Intl.NumberFormat prototype object is itself an ordinary object.
+shouldBe("Object.getPrototypeOf(Intl.NumberFormat.prototype)", "Object.prototype");
+
+// 11.4.1 Intl.NumberFormat.prototype.constructor
+// The initial value of Intl.NumberFormat.prototype.constructor is the intrinsic object %NumberFormat%.
 shouldBe("Intl.NumberFormat.prototype.constructor", "Intl.NumberFormat");
 
-// 11.3.3 Intl.NumberFormat.prototype.format
+// 11.4.2 Intl.NumberFormat.prototype [ @@toStringTag ]
+// The initial value of the @@toStringTag property is the string value "Object".
+shouldBe("Intl.NumberFormat.prototype[Symbol.toStringTag]", "'Object'");
+shouldBe("Object.prototype.toString.call(Intl.NumberFormat.prototype)", "'[object Object]'");
+// This property has the attributes { [[Writable]]: false, [[Enumerable]]: false, [[Configurable]]: true }.
+shouldBeFalse("Object.getOwnPropertyDescriptor(Intl.NumberFormat.prototype, Symbol.toStringTag).writable");
+shouldBeFalse("Object.getOwnPropertyDescriptor(Intl.NumberFormat.prototype, Symbol.toStringTag).enumerable");
+shouldBeTrue("Object.getOwnPropertyDescriptor(Intl.NumberFormat.prototype, Symbol.toStringTag).configurable");
+
+// 11.4.3 Intl.NumberFormat.prototype.format
 
 // This named accessor property returns a function that formats a number according to the effective locale and the formatting options of this NumberFormat object.
-shouldBeType("Intl.NumberFormat.prototype.format", "Function");
+var defaultNFormat = Intl.NumberFormat("en");
+shouldBeType("defaultNFormat.format", "Function");
 
 // The value of the [[Get]] attribute is a function
 shouldBeType("Object.getOwnPropertyDescriptor(Intl.NumberFormat.prototype, 'format').get", "Function");
@@ -236,13 +282,13 @@ shouldBeFalse("Object.getOwnPropertyDescriptor(Intl.NumberFormat.prototype, 'for
 shouldBeTrue("Object.getOwnPropertyDescriptor(Intl.NumberFormat.prototype, 'format').configurable");
 
 // The value of F’s length property is 1.
-shouldBe("Intl.NumberFormat.prototype.format.length", "1");
+shouldBe("defaultNFormat.format.length", "1");
 
 // Throws on non-NumberFormat this.
+shouldThrow("Intl.NumberFormat.prototype.format", "'TypeError: Intl.NumberFormat.prototype.format called on value that\\'s not an object initialized as a NumberFormat'");
 shouldThrow("Object.defineProperty({}, 'format', Object.getOwnPropertyDescriptor(Intl.NumberFormat.prototype, 'format')).format", "'TypeError: Intl.NumberFormat.prototype.format called on value that\\'s not an object initialized as a NumberFormat'");
 
 // The format function is unique per instance.
-shouldBeTrue("Intl.NumberFormat.prototype.format !== Intl.NumberFormat().format");
 shouldBeTrue("new Intl.NumberFormat().format !== new Intl.NumberFormat().format");
 
 // 11.3.4 Format Number Functions
@@ -254,15 +300,12 @@ shouldBeTrue("new Intl.NumberFormat().format !== new Intl.NumberFormat().format"
 // 3. If value is not provided, let value be undefined.
 // 4. Let x be ToNumber(value).
 // 5. ReturnIfAbrupt(x).
-shouldThrow("Intl.NumberFormat.prototype.format({ valueOf() { throw Error('5') } })", "'Error: 5'");
+shouldThrow("defaultNFormat.format({ valueOf() { throw Error('5') } })", "'Error: 5'");
 
 // Format is bound, so calling with alternate "this" has no effect.
-shouldBe("Intl.NumberFormat.prototype.format.call(null, 1.2)", "Intl.NumberFormat().format(1.2)");
-shouldBe("Intl.NumberFormat.prototype.format.call(Intl.DateTimeFormat('ar'), 1.2)", "Intl.NumberFormat().format(1.2)");
-shouldBe("Intl.NumberFormat.prototype.format.call(5, 1.2)", "Intl.NumberFormat().format(1.2)");
-shouldBe("new Intl.NumberFormat().format.call(null, 1.2)", "Intl.NumberFormat().format(1.2)");
-shouldBe("new Intl.NumberFormat().format.call(Intl.DateTimeFormat('ar'), 1.2)", "Intl.NumberFormat().format(1.2)");
-shouldBe("new Intl.NumberFormat().format.call(5, 1.2)", "Intl.NumberFormat().format(1.2)");
+shouldBe("defaultNFormat.format.call(null, 1.2)", "Intl.NumberFormat().format(1.2)");
+shouldBe("defaultNFormat.format.call(Intl.DateTimeFormat('ar'), 1.2)", "Intl.NumberFormat().format(1.2)");
+shouldBe("defaultNFormat.format.call(5, 1.2)", "Intl.NumberFormat().format(1.2)");
 
 // Test various values.
 shouldBe("Intl.NumberFormat('en').format(42)", "'42'");
@@ -280,7 +323,7 @@ shouldBe("Intl.NumberFormat('en').format(Number.MAX_VALUE)", "'179,769,313,486,2
 // Test locales.
 shouldBe("Intl.NumberFormat('en').format(1234.567)", "'1,234.567'");
 shouldBe("Intl.NumberFormat('es').format(1234.567)", "'1.234,567'");
-shouldBe("Intl.NumberFormat('fr').format(1234.567)", "'1 234,567'");
+shouldBe("Intl.NumberFormat('fr').format(1234.567)", "'1\\xA0234,567'");
 
 // Test numbering systems.
 shouldBe("Intl.NumberFormat('en-u-nu-latn').format(1234.567)", "'1,234.567'");
@@ -344,7 +387,7 @@ shouldBe("Intl.NumberFormat('en', {maximumSignificantDigits: 4}).format(1234567)
 // Test the useGrouping option.
 shouldBe("Intl.NumberFormat('en', {useGrouping: true}).format(1234567.123)", "'1,234,567.123'");
 shouldBe("Intl.NumberFormat('es', {useGrouping: true}).format(1234567.123)", "'1.234.567,123'");
-shouldBe("Intl.NumberFormat('fr', {useGrouping: true}).format(1234567.123)", "'1 234 567,123'");
+shouldBe("Intl.NumberFormat('fr', {useGrouping: true}).format(1234567.123)", "'1\\xA0234\\xA0567,123'");
 shouldBe("Intl.NumberFormat('en', {useGrouping: false}).format(1234567.123)", "'1234567.123'");
 shouldBe("Intl.NumberFormat('es', {useGrouping: false}).format(1234567.123)", "'1234567,123'");
 shouldBe("Intl.NumberFormat('fr', {useGrouping: false}).format(1234567.123)", "'1234567,123'");
@@ -354,16 +397,17 @@ shouldBe("Intl.NumberFormat('fr', {useGrouping: false}).format(1234567.123)", "'
 shouldBe("Intl.NumberFormat.prototype.resolvedOptions.length", "0");
 
 // Returns a new object whose properties and attributes are set as if constructed by an object literal.
-shouldBeType("Intl.NumberFormat.prototype.resolvedOptions()", "Object");
+shouldBeType("defaultNFormat.resolvedOptions()", "Object");
 
 // Returns a new object each time.
-shouldBeFalse("Intl.NumberFormat.prototype.resolvedOptions() === Intl.NumberFormat.prototype.resolvedOptions()");
+shouldBeFalse("defaultNFormat.resolvedOptions() === defaultNFormat.resolvedOptions()");
 
 // Throws on non-NumberFormat this.
+shouldThrow("Intl.NumberFormat.prototype.resolvedOptions()", "'TypeError: Intl.NumberFormat.prototype.resolvedOptions called on value that\\'s not an object initialized as a NumberFormat'");
 shouldThrow("Intl.NumberFormat.prototype.resolvedOptions.call(5)", "'TypeError: Intl.NumberFormat.prototype.resolvedOptions called on value that\\'s not an object initialized as a NumberFormat'");
 
 // Returns the default options.
-shouldBe("var options = Intl.NumberFormat.prototype.resolvedOptions(); delete options['locale']; JSON.stringify(options)", '\'{"numberingSystem":"latn","style":"decimal","minimumIntegerDigits":1,"minimumFractionDigits":0,"maximumFractionDigits":3,"useGrouping":true}\'');
+shouldBe("var options = defaultNFormat.resolvedOptions(); delete options['locale']; JSON.stringify(options)", '\'{"numberingSystem":"latn","style":"decimal","minimumIntegerDigits":1,"minimumFractionDigits":0,"maximumFractionDigits":3,"useGrouping":true}\'');
 
 // Legacy compatibility with ECMA-402 1.0
 let legacyInit = "var legacy = Object.create(Intl.NumberFormat.prototype);";

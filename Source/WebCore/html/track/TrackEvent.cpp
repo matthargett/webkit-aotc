@@ -29,29 +29,38 @@
 
 #include "TrackEvent.h"
 
-#include "EventNames.h"
-
 namespace WebCore {
 
-TrackEvent::TrackEvent(const AtomicString& type, bool canBubble, bool cancelable, Ref<TrackBase>&& track)
-    : Event(type, canBubble, cancelable)
-    , m_track(WTFMove(track))
+static inline std::optional<TrackEvent::TrackEventTrack> convertToTrackEventTrack(Ref<TrackBase>&& track)
 {
-}
-
-TrackEvent::TrackEvent(const AtomicString& type, const Init& initializer, IsTrusted isTrusted)
-    : Event(type, initializer, isTrusted)
-{
-    if (initializer.track) {
-        m_track = WTF::switchOn(*initializer.track,
-            [](const auto& trackbase) -> TrackBase* { return trackbase.get(); }
-        );
+    switch (track->type()) {
+    case TrackBase::BaseTrack:
+        return std::nullopt;
+    case TrackBase::TextTrack:
+        return TrackEvent::TrackEventTrack { RefPtr<TextTrack>(&downcast<TextTrack>(track.get())) };
+    case TrackBase::AudioTrack:
+        return TrackEvent::TrackEventTrack { RefPtr<AudioTrack>(&downcast<AudioTrack>(track.get())) };
+    case TrackBase::VideoTrack:
+        return TrackEvent::TrackEventTrack { RefPtr<VideoTrack>(&downcast<VideoTrack>(track.get())) };
     }
+    
+    ASSERT_NOT_REACHED();
+    return std::nullopt;
 }
 
-TrackEvent::~TrackEvent()
+TrackEvent::TrackEvent(const AtomicString& type, CanBubble canBubble, IsCancelable cancelable, Ref<TrackBase>&& track)
+    : Event(type, canBubble, cancelable)
+    , m_track(convertToTrackEventTrack(WTFMove(track)))
 {
 }
+
+TrackEvent::TrackEvent(const AtomicString& type, Init&& initializer, IsTrusted isTrusted)
+    : Event(type, initializer, isTrusted)
+    , m_track(WTFMove(initializer.track))
+{
+}
+
+TrackEvent::~TrackEvent() = default;
 
 EventInterface TrackEvent::eventInterface() const
 {

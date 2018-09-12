@@ -29,6 +29,7 @@
 #import "EventSenderProxy.h"
 #import "PlatformWebView.h"
 #import "TestController.h"
+#import "TestRunnerWKWebView.h"
 
 using namespace WTR;
 
@@ -146,7 +147,6 @@ using namespace WTR;
     // Ignored.
 }
 
-#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 101100
 -(NSSpringLoadingHighlight)springLoadingHighlight
 {
     return NSSpringLoadingHighlightNone;
@@ -155,6 +155,5 @@ using namespace WTR;
 - (void)resetSpringLoading
 {
 }
-#endif
 
 @end

@@ -1,4 +1,5 @@
 # Copyright (C) 2010 Google Inc. All rights reserved.
+# Copyright (C) 2017 Apple Inc. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are
@@ -28,11 +29,13 @@
 
 # FIXME: Is this the right way to do this?
 from webkitpy.tool.steps.addsvnmimetypeforpng import AddSvnMimetypeForPng
+from webkitpy.tool.steps.addradar import AddRadar
 from webkitpy.tool.steps.applypatch import ApplyPatch
 from webkitpy.tool.steps.applypatchwithlocalcommit import ApplyPatchWithLocalCommit
 from webkitpy.tool.steps.applywatchlist import ApplyWatchList
 from webkitpy.tool.steps.attachtobug import AttachToBug
 from webkitpy.tool.steps.build import Build
+from webkitpy.tool.steps.checkpatchrelevance import CheckPatchRelevance
 from webkitpy.tool.steps.checkstyle import CheckStyle
 from webkitpy.tool.steps.cleanworkingdirectory import CleanWorkingDirectory
 from webkitpy.tool.steps.closebug import CloseBug
@@ -57,8 +60,11 @@ from webkitpy.tool.steps.promptforbugortitle import PromptForBugOrTitle
 from webkitpy.tool.steps.reopenbugafterrollout import ReopenBugAfterRollout
 from webkitpy.tool.steps.revertrevision import RevertRevision
 from webkitpy.tool.steps.runtests import RunTests
+from webkitpy.tool.steps.sortxcodeprojectfiles import SortXcodeProjectFiles
+from webkitpy.tool.steps.submittoews import SubmitToEWS
 from webkitpy.tool.steps.suggestreviewers import SuggestReviewers
 from webkitpy.tool.steps.update import Update
 from webkitpy.tool.steps.updatechangelogswithreviewer import UpdateChangeLogsWithReviewer
 from webkitpy.tool.steps.validatechangelogs import ValidateChangeLogs
 from webkitpy.tool.steps.validatereviewer import ValidateReviewer
+from webkitpy.tool.steps.wptchangeexport import WPTChangeExport

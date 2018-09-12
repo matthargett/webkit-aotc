@@ -19,21 +19,22 @@
  *
  */
 
-#ifndef RenderReplaced_h
-#define RenderReplaced_h
+#pragma once
 
 #include "RenderBox.h"
 
 namespace WebCore {
 
 class RenderReplaced : public RenderBox {
+    WTF_MAKE_ISO_ALLOCATED(RenderReplaced);
 public:
     virtual ~RenderReplaced();
 
     LayoutUnit computeReplacedLogicalWidth(ShouldComputePreferred = ComputeActual) const override;
-    LayoutUnit computeReplacedLogicalHeight() const override;
+    LayoutUnit computeReplacedLogicalHeight(std::optional<LayoutUnit> estimatedUsedWidth = std::nullopt) const override;
 
     LayoutRect replacedContentRect(const LayoutSize& intrinsicSize) const;
+    LayoutRect replacedContentRect() const { return replacedContentRect(intrinsicSize()); }
 
     bool hasReplacedLogicalWidth() const;
     bool hasReplacedLogicalHeight() const;
@@ -70,6 +71,8 @@ protected:
     void willBeDestroyed() override;
 
 private:
+    LayoutUnit computeConstrainedLogicalWidth(ShouldComputePreferred) const;
+
     virtual RenderBox* embeddedContentBox() const { return 0; }
     const char* renderName() const override { return "RenderReplaced"; }
 
@@ -80,7 +83,7 @@ private:
 
     LayoutRect clippedOverflowRectForRepaint(const RenderLayerModelObject* repaintContainer) const override;
 
-    VisiblePosition positionForPoint(const LayoutPoint&, const RenderRegion*) final;
+    VisiblePosition positionForPoint(const LayoutPoint&, const RenderFragmentContainer*) final;
     
     bool canBeSelectionLeaf() const override { return true; }
 
@@ -95,5 +98,3 @@ private:
 } // namespace WebCore
 
 SPECIALIZE_TYPE_TRAITS_RENDER_OBJECT(RenderReplaced, isRenderReplaced())
-
-#endif

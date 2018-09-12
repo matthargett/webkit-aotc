@@ -23,14 +23,19 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+import * as assert from 'assert.js';
+import * as WASM from 'WASM.js';
+
 const _initialAllocationSize = 1024;
 const _growAllocationSize = allocated => allocated * 2;
 
-export const varuintMin = 0;
+export const varuint32Min = 0;
+export const varint7Min = -0b1000000;
+export const varint7Max = 0b111111;
 export const varuint7Max = 0b1111111;
-export const varuintMax = ((((1 << 31) >>> 0) - 1) * 2) + 1;
-export const varintMin = -((1 << 31) >>> 0);
-export const varintMax = ((1 << 31) - 1) >>> 0;
+export const varuint32Max = ((((1 << 31) >>> 0) - 1) * 2) + 1;
+export const varint32Min = -((1 << 31) >>> 0);
+export const varint32Max = ((1 << 31) - 1) >>> 0;
 export const varBitsMax = 5;
 
 const _getterRangeCheck = (llb, at, size) => {
@@ -73,6 +78,8 @@ export default class LowLevelBinary {
 
     // Utilities.
     get() { return this._buf; }
+    trim() { this._buf = this._buf.slice(0, this._used); }
+
     hexdump() { return _hexdump(this._buf, this._used); }
     _maybeGrow(bytes) {
         const allocated = this._buf.length;
@@ -98,6 +105,14 @@ export default class LowLevelBinary {
         this._push8(v);
         this._push8(v >>> 8);
     }
+    uint24(v) {
+        if ((v & 0xFFFFFF) >>> 0 !== v)
+            throw new RangeError(`Invalid uint24 ${v}`);
+        this._maybeGrow(3);
+        this._push8(v);
+        this._push8(v >>> 8);
+        this._push8(v >>> 16);
+    }
     uint32(v) {
         if ((v & 0xFFFFFFFF) >>> 0 !== v)
             throw new RangeError(`Invalid uint32 ${v}`);
@@ -107,18 +122,44 @@ export default class LowLevelBinary {
         this._push8(v >>> 16);
         this._push8(v >>> 24);
     }
-    varuint(v) {
-        if (v < varuintMin || varuintMax < v)
-            throw new RangeError(`Invalid varuint ${v} range is [${varuintMin}, ${varuintMax}]`);
+    float(v) {
+        if (isNaN(v))
+            throw new RangeError("unimplemented, NaNs");
+        // Unfortunately, we cannot just view the actual buffer as a Float32Array since it needs to be 4 byte aligned
+        let buffer = new ArrayBuffer(4);
+        let floatView = new Float32Array(buffer);
+        let int8View = new Uint8Array(buffer);
+        floatView[0] = v;
+        for (let byte of int8View)
+            this._push8(byte);
+    }
+
+    double(v) {
+        if (isNaN(v))
+            throw new RangeError("unimplemented, NaNs");
+        // Unfortunately, we cannot just view the actual buffer as a Float64Array since it needs to be 4 byte aligned
+        let buffer = new ArrayBuffer(8);
+        let floatView = new Float64Array(buffer);
+        let int8View = new Uint8Array(buffer);
+        floatView[0] = v;
+        for (let byte of int8View)
+            this._push8(byte);
+    }
+
+    varuint32(v) {
+        assert.isNumber(v);
+        if (v < varuint32Min || varuint32Max < v)
+            throw new RangeError(`Invalid varuint32 ${v} range is [${varuint32Min}, ${varuint32Max}]`);
         while (v >= 0x80) {
             this.uint8(0x80 | (v & 0x7F));
             v >>>= 7;
         }
         this.uint8(v);
     }
-    varint(v) {
-        if (v < varintMin || varintMax < v)
-            throw new RangeError(`Invalid varint ${v} range is [${varintMin}, ${varintMax}]`);
+    varint32(v) {
+        assert.isNumber(v);
+        if (v < varint32Min || varint32Max < v)
+            throw new RangeError(`Invalid varint32 ${v} range is [${varint32Min}, ${varint32Max}]`);
         do {
             const b = v & 0x7F;
             v >>= 7;
@@ -129,15 +170,58 @@ export default class LowLevelBinary {
             this.uint8(0x80 | b);
         } while (true);
     }
+    varuint64(v) {
+        assert.isNumber(v);
+        if (v < varuint32Min || varuint32Max < v)
+            throw new RangeError(`unimplemented: varuint64 larger than 32-bit`);
+        this.varuint32(v); // FIXME implement 64-bit var{u}int https://bugs.webkit.org/show_bug.cgi?id=163420
+    }
+    varint64(v) {
+        assert.isNumber(v);
+        if (v < varint32Min || varint32Max < v)
+            throw new RangeError(`unimplemented: varint64 larger than 32-bit`);
+        this.varint32(v); // FIXME implement 64-bit var{u}int https://bugs.webkit.org/show_bug.cgi?id=163420
+    }
+    varuint1(v) {
+        if (v !== 0 && v !== 1)
+            throw new RangeError(`Invalid varuint1 ${v} range is [0, 1]`);
+        this.varuint32(v);
+    }
+    varint7(v) {
+        if (v < varint7Min || varint7Max < v)
+            throw new RangeError(`Invalid varint7 ${v} range is [${varint7Min}, ${varint7Max}]`);
+        this.varint32(v);
+    }
     varuint7(v) {
-        if (v < varuintMin || varuint7Max < v)
-            throw new RangeError(`Invalid varuint7 ${v} range is [${varuintMin}, ${varuint7Max}]`);
-        this.varuint(v);
+        if (v < varuint32Min || varuint7Max < v)
+            throw new RangeError(`Invalid varuint7 ${v} range is [${varuint32Min}, ${varuint7Max}]`);
+        this.varuint32(v);
+    }
+    block_type(v) {
+        if (!WASM.isValidBlockType(v))
+            throw new Error(`Invalid block type ${v}`);
+        this.varint7(WASM.typeValue[v]);
     }
     string(str) {
-        let patch = this.newPatchable("varuint");
-        for (const char of str)
-            patch.uint16(char.charCodeAt());
+        let patch = this.newPatchable("varuint32");
+        for (const char of str) {
+            // Encode UTF-8 2003 code points.
+            const code = char.codePointAt();
+            if (code <= 0x007F) {
+                const utf8 = code;
+                patch.uint8(utf8);
+            } else if (code <= 0x07FF) {
+                const utf8 = 0x80C0 | ((code & 0x7C0) >> 6) | ((code & 0x3F) << 8);
+                patch.uint16(utf8);
+            } else if (code <= 0xFFFF) {
+                const utf8 = 0x8080E0 | ((code & 0xF000) >> 12) | ((code & 0xFC0) << 2) | ((code & 0x3F) << 16);
+                patch.uint24(utf8);
+            } else if (code <= 0x10FFFF) {
+                const utf8 = (0x808080F0 | ((code & 0x1C0000) >> 18) | ((code & 0x3F000) >> 4) | ((code & 0xFC0) << 10) | ((code & 0x3F) << 24)) >>> 0;
+                patch.uint32(utf8);
+            } else
+                throw new Error(`Unexpectedly large UTF-8 character code point '${char}' 0x${code.toString(16)}`);
+        }
         patch.apply();
     }
 
@@ -151,11 +235,15 @@ export default class LowLevelBinary {
         _getterRangeCheck(this, at, 2);
         return this._buf[at] | (this._buf[at + 1] << 8);
     }
+    getUint24(at) {
+        _getterRangeCheck(this, at, 3);
+        return this._buf[at] | (this._buf[at + 1] << 8) | (this._buf[at + 2] << 16);
+    }
     getUint32(at) {
         _getterRangeCheck(this, at, 4);
         return (this._buf[at] | (this._buf[at + 1] << 8) | (this._buf[at + 2] << 16) | (this._buf[at + 3] << 24)) >>> 0;
     }
-    getVaruint(at) {
+    getVaruint32(at) {
         let v = 0;
         let shift = 0;
         let byte = 0;
@@ -166,10 +254,10 @@ export default class LowLevelBinary {
             shift += 7;
         } while ((byte & 0x80) !== 0);
         if (shift - 7 > 32) throw new RangeError(`Shifting too much at ${at}`);
-        if ((shift == 35) && ((byte & 0xF0) != 0)) throw new Error(`Unexpected non-significant varuint bits in last byte 0x${byte.toString(16)}`);
+        if ((shift == 35) && ((byte & 0xF0) != 0)) throw new Error(`Unexpected non-significant varuint32 bits in last byte 0x${byte.toString(16)}`);
         return { value: v, next: at };
     }
-    getVarint(at) {
+    getVarint32(at) {
         let v = 0;
         let shift = 0;
         let byte = 0;
@@ -179,23 +267,58 @@ export default class LowLevelBinary {
             shift += 7;
         } while ((byte & 0x80) !== 0);
         if (shift - 7 > 32) throw new RangeError(`Shifting too much at ${at}`);
-        if ((shift == 35) && (((byte << 26) >> 30) != ((byte << 25) >> 31))) throw new Error(`Unexpected non-significant varint bits in last byte 0x${byte.toString(16)}`);
+        if ((shift == 35) && (((byte << 26) >> 30) != ((byte << 25) >> 31))) throw new Error(`Unexpected non-significant varint32 bits in last byte 0x${byte.toString(16)}`);
         if ((byte & 0x40) === 0x40) {
             const sext = shift < 32 ? 32 - shift : 0;
             v = (v << sext) >> sext;
         }
         return { value: v, next: at };
     }
+    getVaruint1(at) {
+        const res = this.getVaruint32(at);
+        if (res.value !== 0 && res.value !== 1) throw new Error(`Expected a varuint1, got value ${res.value}`);
+        return res;
+    }
     getVaruint7(at) {
-        const res = this.getVaruint(at);
+        const res = this.getVaruint32(at);
         if (res.value > varuint7Max) throw new Error(`Expected a varuint7, got value ${res.value}`);
         return res;
     }
     getString(at) {
-        const size = this.getVaruint(at);
+        const size = this.getVaruint32(at);
+        const last = size.next + size.value;
+        let i = size.next;
         let str = "";
-        for (let i = size.next; i !== size.next + size.value; i += 2)
-            str += String.fromCharCode(this.getUint16(i));
+        while (i < last) {
+            // Decode UTF-8 2003 code points.
+            const peek = this.getUint8(i);
+            let code;
+            if ((peek & 0x80) === 0x0) {
+                const utf8 = this.getUint8(i);
+                assert.eq(utf8 & 0x80, 0x00);
+                i += 1;
+                code = utf8;
+            } else if ((peek & 0xE0) === 0xC0) {
+                const utf8 = this.getUint16(i);
+                assert.eq(utf8 & 0xC0E0, 0x80C0);
+                i += 2;
+                code = ((utf8 & 0x1F) << 6) | ((utf8 & 0x3F00) >> 8);
+            } else if ((peek & 0xF0) === 0xE0) {
+                const utf8 = this.getUint24(i);
+                assert.eq(utf8 & 0xC0C0F0, 0x8080E0);
+                i += 3;
+                code = ((utf8 & 0xF) << 12) | ((utf8 & 0x3F00) >> 2) | ((utf8 & 0x3F0000) >> 16);
+            } else if ((peek & 0xF8) === 0xF0) {
+                const utf8 = this.getUint32(i);
+                assert.eq((utf8 & 0xC0C0C0F8) | 0, 0x808080F0 | 0);
+                i += 4;
+                code = ((utf8 & 0x7) << 18) | ((utf8 & 0x3F00) << 4) | ((utf8 & 0x3F0000) >> 10) | ((utf8 & 0x3F000000) >> 24);
+            } else
+                throw new Error(`Unexpectedly large UTF-8 initial byte 0x${peek.toString(16)}`);
+            str += String.fromCodePoint(code);
+        }
+        if (i !== last)
+            throw new Error(`String decoding read up to ${i}, expected ${last}, UTF-8 decoding was too greedy`);
         return str;
     }
 };

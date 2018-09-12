@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015-2016 Apple Inc. All rights reserved.
+ * Copyright (C) 2015-2018 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -29,49 +29,19 @@
 
 #include "CaptureDevice.h"
 #include "RealtimeMediaSource.h"
+#include <wtf/WeakPtr.h>
 
 namespace WebCore {
 
-struct CaptureDeviceInfo {
+class CaptureDeviceManager : public CanMakeWeakPtr<CaptureDeviceManager> {
 public:
-    String m_persistentDeviceID;
-    String m_localizedName;
-    String m_groupID;
-
-    String m_sourceId;
-
-    bool m_enabled { false };
-    RealtimeMediaSource::Type m_sourceType { RealtimeMediaSource::None };
-    RealtimeMediaSourceSettings::VideoFacingMode m_position { RealtimeMediaSourceSettings::Unknown };
-};
-
-class CaptureSessionInfo {
-public:
-    virtual ~CaptureSessionInfo() { }
-    virtual bool supportsVideoSize(const String& /* videoSize */) const { return false; }
-    virtual String bestSessionPresetForVideoDimensions(int /* width */, int /* height */) const { return emptyString(); }
-};
-
-class CaptureDeviceManager {
-public:
-    virtual Vector<CaptureDeviceInfo>& captureDeviceList() = 0;
-    virtual void refreshCaptureDeviceList() { }
-    virtual Vector<CaptureDevice> getSourcesInfo();
-    virtual Vector<RefPtr<RealtimeMediaSource>> bestSourcesForTypeAndConstraints(RealtimeMediaSource::Type, MediaConstraints&);
-    virtual RefPtr<RealtimeMediaSource> sourceWithUID(const String&, RealtimeMediaSource::Type, MediaConstraints*);
-
-    virtual bool verifyConstraintsForMediaType(RealtimeMediaSource::Type, const MediaConstraints&, const CaptureSessionInfo*, String&);
+    virtual const Vector<CaptureDevice>& captureDevices() = 0;
+    virtual std::optional<CaptureDevice> captureDeviceWithPersistentID(CaptureDevice::DeviceType, const String&) { return std::nullopt; }
 
 protected:
     virtual ~CaptureDeviceManager();
-    virtual RealtimeMediaSource* createMediaSourceForCaptureDeviceWithConstraints(const CaptureDeviceInfo&, MediaConstraints*) = 0;
-
-    virtual CaptureSessionInfo defaultCaptureSession() const { return CaptureSessionInfo(); }
-    virtual bool sessionSupportsConstraint(const CaptureSessionInfo*, RealtimeMediaSource::Type, const MediaConstraint&);
-    virtual bool isSupportedFrameRate(const MediaConstraint&) const;
-
-    bool captureDeviceFromDeviceID(const String& captureDeviceID, CaptureDeviceInfo& source);
-    CaptureDeviceInfo* bestDeviceForFacingMode(RealtimeMediaSourceSettings::VideoFacingMode);
+    CaptureDevice captureDeviceFromPersistentID(const String& captureDeviceID);
+    void deviceChanged();
 };
 
 } // namespace WebCore

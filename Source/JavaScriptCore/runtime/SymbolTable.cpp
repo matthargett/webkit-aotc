@@ -29,6 +29,7 @@
 #include "config.h"
 #include "SymbolTable.h"
 
+#include "CodeBlock.h"
 #include "JSDestructibleObject.h"
 #include "JSCInlines.h"
 #include "SlotVisitorInlines.h"
@@ -36,7 +37,7 @@
 
 namespace JSC {
 
-const ClassInfo SymbolTable::s_info = { "SymbolTable", 0, 0, CREATE_METHOD_TABLE(SymbolTable) };
+const ClassInfo SymbolTable::s_info = { "SymbolTable", nullptr, nullptr, nullptr, CREATE_METHOD_TABLE(SymbolTable) };
 
 SymbolTableEntry& SymbolTableEntry::copySlow(const SymbolTableEntry& other)
 {
@@ -49,7 +50,7 @@ SymbolTableEntry& SymbolTableEntry::copySlow(const SymbolTableEntry& other)
 
 void SymbolTable::destroy(JSCell* cell)
 {
-    SymbolTable* thisObject = jsCast<SymbolTable*>(cell);
+    SymbolTable* thisObject = static_cast<SymbolTable*>(cell);
     thisObject->SymbolTable::~SymbolTable();
 }
 
@@ -100,19 +101,20 @@ void SymbolTable::finishCreation(VM& vm)
 void SymbolTable::visitChildren(JSCell* thisCell, SlotVisitor& visitor)
 {
     SymbolTable* thisSymbolTable = jsCast<SymbolTable*>(thisCell);
-    
-    visitor.append(&thisSymbolTable->m_arguments);
-    visitor.append(&thisSymbolTable->m_singletonScope);
+    Base::visitChildren(thisSymbolTable, visitor);
+
+    visitor.append(thisSymbolTable->m_arguments);
+    visitor.append(thisSymbolTable->m_singletonScope);
     
     if (thisSymbolTable->m_rareData)
-        visitor.append(&thisSymbolTable->m_rareData->m_codeBlock);
+        visitor.append(thisSymbolTable->m_rareData->m_codeBlock);
     
     // Save some memory. This is O(n) to rebuild and we do so on the fly.
-    ConcurrentJITLocker locker(thisSymbolTable->m_lock);
+    ConcurrentJSLocker locker(thisSymbolTable->m_lock);
     thisSymbolTable->m_localToEntry = nullptr;
 }
 
-const SymbolTable::LocalToEntryVec& SymbolTable::localToEntry(const ConcurrentJITLocker&)
+const SymbolTable::LocalToEntryVec& SymbolTable::localToEntry(const ConcurrentJSLocker&)
 {
     if (UNLIKELY(!m_localToEntry)) {
         unsigned size = 0;
@@ -133,7 +135,7 @@ const SymbolTable::LocalToEntryVec& SymbolTable::localToEntry(const ConcurrentJI
     return *m_localToEntry;
 }
 
-SymbolTableEntry* SymbolTable::entryFor(const ConcurrentJITLocker& locker, ScopeOffset offset)
+SymbolTableEntry* SymbolTable::entryFor(const ConcurrentJSLocker& locker, ScopeOffset offset)
 {
     auto& toEntryVector = localToEntry(locker);
     if (offset.offset() >= toEntryVector.size())
@@ -190,7 +192,7 @@ SymbolTable* SymbolTable::cloneScopePart(VM& vm)
     return result;
 }
 
-void SymbolTable::prepareForTypeProfiling(const ConcurrentJITLocker&)
+void SymbolTable::prepareForTypeProfiling(const ConcurrentJSLocker&)
 {
     if (m_rareData)
         return;
@@ -220,7 +222,7 @@ void SymbolTable::setRareDataCodeBlock(CodeBlock* codeBlock)
     m_rareData->m_codeBlock.set(*codeBlock->vm(), this, codeBlock);
 }
 
-GlobalVariableID SymbolTable::uniqueIDForVariable(const ConcurrentJITLocker&, UniquedStringImpl* key, VM& vm)
+GlobalVariableID SymbolTable::uniqueIDForVariable(const ConcurrentJSLocker&, UniquedStringImpl* key, VM& vm)
 {
     RELEASE_ASSERT(m_rareData);
 
@@ -239,7 +241,7 @@ GlobalVariableID SymbolTable::uniqueIDForVariable(const ConcurrentJITLocker&, Un
     return id;
 }
 
-GlobalVariableID SymbolTable::uniqueIDForOffset(const ConcurrentJITLocker& locker, VarOffset offset, VM& vm)
+GlobalVariableID SymbolTable::uniqueIDForOffset(const ConcurrentJSLocker& locker, VarOffset offset, VM& vm)
 {
     RELEASE_ASSERT(m_rareData);
 
@@ -251,7 +253,7 @@ GlobalVariableID SymbolTable::uniqueIDForOffset(const ConcurrentJITLocker& locke
     return uniqueIDForVariable(locker, iter->value.get(), vm);
 }
 
-RefPtr<TypeSet> SymbolTable::globalTypeSetForOffset(const ConcurrentJITLocker& locker, VarOffset offset, VM& vm)
+RefPtr<TypeSet> SymbolTable::globalTypeSetForOffset(const ConcurrentJSLocker& locker, VarOffset offset, VM& vm)
 {
     RELEASE_ASSERT(m_rareData);
 
@@ -265,7 +267,7 @@ RefPtr<TypeSet> SymbolTable::globalTypeSetForOffset(const ConcurrentJITLocker& l
     return globalTypeSetForVariable(locker, iter->value.get(), vm);
 }
 
-RefPtr<TypeSet> SymbolTable::globalTypeSetForVariable(const ConcurrentJITLocker& locker, UniquedStringImpl* key, VM& vm)
+RefPtr<TypeSet> SymbolTable::globalTypeSetForVariable(const ConcurrentJSLocker& locker, UniquedStringImpl* key, VM& vm)
 {
     RELEASE_ASSERT(m_rareData);
 

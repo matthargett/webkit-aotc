@@ -42,13 +42,13 @@ class WorkerInspectorProxy {
     WTF_MAKE_NONCOPYABLE(WorkerInspectorProxy);
     WTF_MAKE_FAST_ALLOCATED;
 public:
-    WorkerInspectorProxy();
+    WorkerInspectorProxy(const String& identifier);
     ~WorkerInspectorProxy();
 
     // A Worker's inspector messages come in and go out through the Page's WorkerAgent.
     class PageChannel {
     public:
-        virtual ~PageChannel() { }
+        virtual ~PageChannel() = default;
         virtual void sendMessageFromWorkerToFrontend(WorkerInspectorProxy*, const String&) = 0;
     };
 

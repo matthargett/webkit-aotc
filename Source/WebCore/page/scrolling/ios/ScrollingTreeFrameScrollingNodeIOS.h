@@ -36,15 +36,16 @@ namespace WebCore {
 
 class ScrollingTreeFrameScrollingNodeIOS : public ScrollingTreeFrameScrollingNode {
 public:
-    WEBCORE_EXPORT static Ref<ScrollingTreeFrameScrollingNodeIOS> create(ScrollingTree&, ScrollingNodeID);
+    WEBCORE_EXPORT static Ref<ScrollingTreeFrameScrollingNodeIOS> create(ScrollingTree&, ScrollingNodeType, ScrollingNodeID);
     virtual ~ScrollingTreeFrameScrollingNodeIOS();
 
 protected:
-    ScrollingTreeFrameScrollingNodeIOS(ScrollingTree&, ScrollingNodeID);
+    ScrollingTreeFrameScrollingNodeIOS(ScrollingTree&, ScrollingNodeType, ScrollingNodeID);
 
     // ScrollingTreeNode member functions.
-    void updateBeforeChildren(const ScrollingStateNode&) override;
-    void updateAfterChildren(const ScrollingStateNode&) override;
+    void commitStateBeforeChildren(const ScrollingStateNode&) override;
+    void commitStateAfterChildren(const ScrollingStateNode&) override;
+
     void handleWheelEvent(const PlatformWheelEvent&) override { }
 
     FloatPoint scrollPosition() const override;
@@ -53,7 +54,7 @@ protected:
     void updateLayersAfterViewportChange(const FloatRect& fixedPositionRect, double scale) override;
     void updateLayersAfterDelegatedScroll(const FloatPoint&) override;
 
-    void setScrollLayerPosition(const FloatPoint&) override;
+    void setScrollLayerPosition(const FloatPoint&, const FloatRect& layoutViewport) override;
 
     FloatPoint minimumScrollPosition() const override;
     FloatPoint maximumScrollPosition() const override;

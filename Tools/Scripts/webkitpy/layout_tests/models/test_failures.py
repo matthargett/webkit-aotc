@@ -59,10 +59,13 @@ def determine_result_type(failure_list):
         return test_expectations.TIMEOUT
     elif FailureEarlyExit in failure_types:
         return test_expectations.SKIP
+    elif FailureDocumentLeak in failure_types:
+        return test_expectations.LEAK
     elif (FailureMissingResult in failure_types or
           FailureMissingImage in failure_types or
           FailureMissingImageHash in failure_types or
-          FailureMissingAudio in failure_types):
+          FailureMissingAudio in failure_types or
+          FailureNotTested in failure_types):
         return test_expectations.MISSING
     else:
         is_text_failure = FailureTextMismatch in failure_types
@@ -159,9 +162,31 @@ class FailureCrash(TestFailure):
         writer.write_crash_log(crashed_driver_output.crash_log)
 
 
+class FailureLeak(TestFailure):
+    def __init__(self):
+        super(FailureLeak, self).__init__()
+
+    def message(self):
+        return "leak"
+
+
+class FailureDocumentLeak(FailureLeak):
+    def __init__(self, leaked_document_urls=None):
+        super(FailureDocumentLeak, self).__init__()
+        self.leaked_document_urls = leaked_document_urls
+
+    def message(self):
+        return "test leaked document%s %s" % ("s" if len(self.leaked_document_urls) else "", ', '.join(self.leaked_document_urls))
+
+
 class FailureMissingResult(FailureText):
     def message(self):
         return "-expected.txt was missing"
+
+
+class FailureNotTested(FailureText):
+    def message(self):
+        return 'test was not run'
 
 
 class FailureTextMismatch(FailureText):
@@ -265,10 +290,10 @@ class FailureEarlyExit(TestFailure):
 
 # Convenient collection of all failure classes for anything that might
 # need to enumerate over them all.
-ALL_FAILURE_CLASSES = (FailureTimeout, FailureCrash, FailureMissingResult,
+ALL_FAILURE_CLASSES = (FailureTimeout, FailureCrash, FailureMissingResult, FailureNotTested,
                        FailureTextMismatch, FailureMissingImageHash,
                        FailureMissingImage, FailureImageHashMismatch,
                        FailureImageHashIncorrect, FailureReftestMismatch,
                        FailureReftestMismatchDidNotOccur, FailureReftestNoImagesGenerated,
-                       FailureMissingAudio, FailureAudioMismatch,
+                       FailureMissingAudio, FailureAudioMismatch, FailureDocumentLeak,
                        FailureEarlyExit)

@@ -35,10 +35,10 @@ namespace WebCore {
 TileCoverageMap::TileCoverageMap(const TileController& controller)
     : m_controller(controller)
     , m_updateTimer(*this, &TileCoverageMap::updateTimerFired)
-    , m_layer(*controller.rootLayer().createCompatibleLayer(PlatformCALayer::LayerTypeSimpleLayer, this))
-    , m_visibleViewportIndicatorLayer(*controller.rootLayer().createCompatibleLayer(PlatformCALayer::LayerTypeLayer, nullptr))
-    , m_layoutViewportIndicatorLayer(*controller.rootLayer().createCompatibleLayer(PlatformCALayer::LayerTypeLayer, nullptr))
-    , m_coverageRectIndicatorLayer(*controller.rootLayer().createCompatibleLayer(PlatformCALayer::LayerTypeLayer, nullptr))
+    , m_layer(controller.rootLayer().createCompatibleLayer(PlatformCALayer::LayerTypeSimpleLayer, this))
+    , m_visibleViewportIndicatorLayer(controller.rootLayer().createCompatibleLayer(PlatformCALayer::LayerTypeLayer, nullptr))
+    , m_layoutViewportIndicatorLayer(controller.rootLayer().createCompatibleLayer(PlatformCALayer::LayerTypeLayer, nullptr))
+    , m_coverageRectIndicatorLayer(controller.rootLayer().createCompatibleLayer(PlatformCALayer::LayerTypeLayer, nullptr))
     , m_position(FloatPoint(0, controller.topContentInset()))
 {
     m_layer.get().setOpacity(0.75);
@@ -79,7 +79,7 @@ TileCoverageMap::~TileCoverageMap()
 void TileCoverageMap::setNeedsUpdate()
 {
     if (!m_updateTimer.isActive())
-        m_updateTimer.startOneShot(0);
+        m_updateTimer.startOneShot(0_s);
 }
 
 void TileCoverageMap::updateTimerFired()
@@ -105,20 +105,20 @@ void TileCoverageMap::update()
     float indicatorScale = scale * m_controller.tileGrid().scale();
 
     FloatRect mapBounds = containerBounds;
-    mapBounds.scale(indicatorScale, indicatorScale);
+    mapBounds.scale(indicatorScale);
 
     m_layer.get().setPosition(m_position + FloatPoint(2, 2));
     m_layer.get().setBounds(mapBounds);
     m_layer.get().setNeedsDisplay();
 
-    visibleRect.scale(indicatorScale, indicatorScale);
+    visibleRect.scale(indicatorScale);
     visibleRect.expand(2, 2);
     m_visibleViewportIndicatorLayer->setPosition(visibleRect.location());
     m_visibleViewportIndicatorLayer->setBounds(FloatRect(FloatPoint(), visibleRect.size()));
 
     if (auto layoutViewportRect = m_controller.layoutViewportRect()) {
         FloatRect layoutRect = layoutViewportRect.value();
-        layoutRect.scale(indicatorScale, indicatorScale);
+        layoutRect.scale(indicatorScale);
         layoutRect.expand(2, 2);
         m_layoutViewportIndicatorLayer->setPosition(layoutRect.location());
         m_layoutViewportIndicatorLayer->setBounds(FloatRect(FloatPoint(), layoutRect.size()));
@@ -128,7 +128,7 @@ void TileCoverageMap::update()
     } else if (m_layoutViewportIndicatorLayer->superlayer())
         m_layoutViewportIndicatorLayer->removeFromSuperlayer();
 
-    coverageRect.scale(indicatorScale, indicatorScale);
+    coverageRect.scale(indicatorScale);
     coverageRect.expand(2, 2);
     m_coverageRectIndicatorLayer->setPosition(coverageRect.location());
     m_coverageRectIndicatorLayer->setBounds(FloatRect(FloatPoint(), coverageRect.size()));
@@ -152,7 +152,7 @@ void TileCoverageMap::update()
     m_visibleViewportIndicatorLayer.get().setBorderColor(visibleRectIndicatorColor);
 }
 
-void TileCoverageMap::platformCALayerPaintContents(PlatformCALayer* platformCALayer, GraphicsContext& context, const FloatRect&)
+void TileCoverageMap::platformCALayerPaintContents(PlatformCALayer* platformCALayer, GraphicsContext& context, const FloatRect&, GraphicsLayerPaintBehavior)
 {
     ASSERT_UNUSED(platformCALayer, platformCALayer == m_layer.ptr());
     m_controller.tileGrid().drawTileMapContents(context.platformContext(), m_layer.get().bounds());

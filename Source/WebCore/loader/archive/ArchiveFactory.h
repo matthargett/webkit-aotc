@@ -26,8 +26,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef ArchiveFactory_h
-#define ArchiveFactory_h
+#pragma once
 
 #include "Archive.h"
 
@@ -39,11 +38,9 @@ class SharedBuffer;
 
 class ArchiveFactory {
 public:
-    static bool isArchiveMimeType(const String&);
+    static bool isArchiveMIMEType(const String&);
     static RefPtr<Archive> create(const URL&, SharedBuffer* data, const String& mimeType);
     static void registerKnownArchiveMIMETypes();
 };
 
-}
-
-#endif // ArchiveFactory_h
+} // namespace WebCore

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2006 Apple Inc.  All rights reserved.
+ * Copyright (C) 2006-2016 Apple Inc.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -26,12 +26,10 @@
 #include "config.h"
 #include "MainThreadSharedTimer.h"
 
-#include "Page.h"
-#include "Settings.h"
+#include "DeprecatedGlobalSettings.h"
 #include "WebCoreInstanceHandle.h"
 #include "Widget.h"
 #include <wtf/Assertions.h>
-#include <wtf/CurrentTime.h>
 #include <wtf/WindowsExtras.h>
 
 #include <mmsystem.h>
@@ -121,12 +119,12 @@ static void NTAPI queueTimerProc(PVOID, BOOLEAN)
         PostMessage(timerWindowHandle, timerFiredMessage, 0, 0);
 }
 
-void MainThreadSharedTimer::setFireInterval(double interval)
+void MainThreadSharedTimer::setFireInterval(Seconds intervalInSeconds)
 {
     ASSERT(m_firedFunction);
 
+    double interval = intervalInSeconds.milliseconds();
     unsigned intervalInMS;
-    interval *= 1000;
     if (interval > USER_TIMER_MAXIMUM)
         intervalInMS = USER_TIMER_MAXIMUM;
     else
@@ -135,7 +133,7 @@ void MainThreadSharedTimer::setFireInterval(double interval)
     initializeOffScreenTimerWindow();
     bool timerSet = false;
 
-    if (Settings::shouldUseHighResolutionTimers()) {
+    if (DeprecatedGlobalSettings::shouldUseHighResolutionTimers()) {
         if (interval < highResolutionThresholdMsec) {
             if (!highResTimerActive) {
                 highResTimerActive = true;

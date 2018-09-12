@@ -34,23 +34,23 @@
 #include "Document.h"
 #include "JSDOMWrapper.h"
 #include "JSElement.h"
-#include <domjit/DOMJITPatchpoint.h>
-#include <domjit/DOMJITPatchpointParams.h>
-
-using namespace JSC;
+#include "JSHTMLElement.h"
+#include <JavaScriptCore/Snippet.h>
+#include <JavaScriptCore/SnippetParams.h>
 
 namespace WebCore {
+using namespace JSC;
 
-Ref<JSC::DOMJIT::Patchpoint> DocumentDocumentElementDOMJIT::checkDOM()
+Ref<JSC::Snippet> checkSubClassSnippetForJSDocument()
 {
     return DOMJIT::checkDOM<Document>();
 }
 
-Ref<JSC::DOMJIT::CallDOMGetterPatchpoint> DocumentDocumentElementDOMJIT::callDOMGetter()
+Ref<JSC::DOMJIT::CallDOMGetterSnippet> compileDocumentDocumentElementAttribute()
 {
-    Ref<JSC::DOMJIT::CallDOMGetterPatchpoint> patchpoint = JSC::DOMJIT::CallDOMGetterPatchpoint::create();
-    patchpoint->numGPScratchRegisters = 1;
-    patchpoint->setGenerator([=](CCallHelpers& jit, JSC::DOMJIT::PatchpointParams& params) {
+    Ref<JSC::DOMJIT::CallDOMGetterSnippet> snippet = JSC::DOMJIT::CallDOMGetterSnippet::create();
+    snippet->numGPScratchRegisters = 1;
+    snippet->setGenerator([=](CCallHelpers& jit, JSC::SnippetParams& params) {
         JSValueRegs result = params[0].jsValueRegs();
         GPRReg document = params[1].gpr();
         GPRReg globalObject = params[2].gpr();
@@ -69,8 +69,75 @@ Ref<JSC::DOMJIT::CallDOMGetterPatchpoint> DocumentDocumentElementDOMJIT::callDOM
 
         return CCallHelpers::JumpList();
     });
-    patchpoint->effect = JSC::DOMJIT::Effect::forDef(DOMJIT::AbstractHeapRepository::Document_documentElement);
-    return patchpoint;
+    snippet->effect = JSC::DOMJIT::Effect::forDef(DOMJIT::AbstractHeapRepository::Document_documentElement);
+    return snippet;
+}
+
+static void loadLocalName(CCallHelpers& jit, GPRReg htmlElement, GPRReg localNameImpl)
+{
+    jit.loadPtr(CCallHelpers::Address(htmlElement, Element::tagQNameMemoryOffset() + QualifiedName::implMemoryOffset()), localNameImpl);
+    jit.loadPtr(CCallHelpers::Address(localNameImpl, QualifiedName::QualifiedNameImpl::localNameMemoryOffset()), localNameImpl);
+}
+
+Ref<JSC::DOMJIT::CallDOMGetterSnippet> compileDocumentBodyAttribute()
+{
+    Ref<JSC::DOMJIT::CallDOMGetterSnippet> snippet = JSC::DOMJIT::CallDOMGetterSnippet::create();
+    snippet->numGPScratchRegisters = 2;
+    snippet->setGenerator([=](CCallHelpers& jit, JSC::SnippetParams& params) {
+        JSValueRegs result = params[0].jsValueRegs();
+        GPRReg document = params[1].gpr();
+        GPRReg globalObject = params[2].gpr();
+        JSValue globalObjectValue = params[2].value();
+        GPRReg scratch1 = params.gpScratch(0);
+        GPRReg scratch2 = params.gpScratch(1);
+
+        jit.loadPtr(CCallHelpers::Address(document, JSDocument::offsetOfWrapped()), scratch1);
+        DOMJIT::loadDocumentElement(jit, scratch1, scratch1);
+
+        CCallHelpers::JumpList nullCases;
+        CCallHelpers::JumpList successCases;
+        nullCases.append(jit.branchTestPtr(CCallHelpers::Zero, scratch1));
+        nullCases.append(DOMJIT::branchTestIsHTMLFlagOnNode(jit, CCallHelpers::Zero, scratch1));
+        // We ensured that the name of the given element is HTML qualified.
+        // It allows us to perform local name comparison!
+        loadLocalName(jit, scratch1, scratch2);
+        nullCases.append(jit.branchPtr(CCallHelpers::NotEqual, scratch2, CCallHelpers::TrustedImmPtr(HTMLNames::htmlTag->localName().impl())));
+
+        RELEASE_ASSERT(!CAST_OFFSET(Node*, ContainerNode*));
+        RELEASE_ASSERT(!CAST_OFFSET(Node*, Element*));
+        RELEASE_ASSERT(!CAST_OFFSET(Node*, HTMLElement*));
+
+        // Node* node = current.firstChild();
+        // while (node && !is<HTMLElement>(*node))
+        //     node = node->nextSibling();
+        // return downcast<HTMLElement>(node);
+        jit.loadPtr(CCallHelpers::Address(scratch1, ContainerNode::firstChildMemoryOffset()), scratch1);
+
+        CCallHelpers::Label loopStart = jit.label();
+        nullCases.append(jit.branchTestPtr(CCallHelpers::Zero, scratch1));
+        auto notHTMLElementCase = DOMJIT::branchTestIsHTMLFlagOnNode(jit, CCallHelpers::Zero, scratch1);
+        // We ensured that the name of the given element is HTML qualified.
+        // It allows us to perform local name comparison!
+        loadLocalName(jit, scratch1, scratch2);
+        successCases.append(jit.branchPtr(CCallHelpers::Equal, scratch2, CCallHelpers::TrustedImmPtr(HTMLNames::bodyTag->localName().impl())));
+        successCases.append(jit.branchPtr(CCallHelpers::Equal, scratch2, CCallHelpers::TrustedImmPtr(HTMLNames::framesetTag->localName().impl())));
+
+        notHTMLElementCase.link(&jit);
+        jit.loadPtr(CCallHelpers::Address(scratch1, Node::nextSiblingMemoryOffset()), scratch1);
+        jit.jump().linkTo(loopStart, &jit);
+
+        successCases.link(&jit);
+        DOMJIT::toWrapper<HTMLElement>(jit, params, scratch1, globalObject, result, DOMJIT::toWrapperSlow<HTMLElement>, globalObjectValue);
+        auto done = jit.jump();
+
+        nullCases.link(&jit);
+        jit.moveValue(jsNull(), result);
+        done.link(&jit);
+
+        return CCallHelpers::JumpList();
+    });
+    snippet->effect = JSC::DOMJIT::Effect::forDef(DOMJIT::AbstractHeapRepository::Document_body);
+    return snippet;
 }
 
 }

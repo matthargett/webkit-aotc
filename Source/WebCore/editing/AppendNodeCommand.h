@@ -23,8 +23,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
  */
 
-#ifndef AppendNodeCommand_h
-#define AppendNodeCommand_h
+#pragma once
 
 #include "EditCommand.h"
 
@@ -32,13 +31,13 @@ namespace WebCore {
 
 class AppendNodeCommand : public SimpleEditCommand {
 public:
-    static Ref<AppendNodeCommand> create(PassRefPtr<ContainerNode> parent, Ref<Node>&& node, EditAction editingAction)
+    static Ref<AppendNodeCommand> create(Ref<ContainerNode>&& parent, Ref<Node>&& node, EditAction editingAction)
     {
-        return adoptRef(*new AppendNodeCommand(parent, WTFMove(node), editingAction));
+        return adoptRef(*new AppendNodeCommand(WTFMove(parent), WTFMove(node), editingAction));
     }
 
 private:
-    AppendNodeCommand(PassRefPtr<ContainerNode> parent, Ref<Node>&&, EditAction);
+    AppendNodeCommand(Ref<ContainerNode>&& parent, Ref<Node>&&, EditAction);
 
     void doApply() override;
     void doUnapply() override;
@@ -47,10 +46,8 @@ private:
     void getNodesInCommand(HashSet<Node*>&) override;
 #endif
 
-    RefPtr<ContainerNode> m_parent;
+    Ref<ContainerNode> m_parent;
     Ref<Node> m_node;
 };
 
 } // namespace WebCore
-
-#endif // AppendNodeCommand_h

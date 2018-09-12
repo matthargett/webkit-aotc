@@ -22,8 +22,7 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef LineClampValue_h
-#define LineClampValue_h
+#pragma once
 
 #include "RenderStyleConstants.h"
 
@@ -32,12 +31,12 @@ namespace WebCore {
 class LineClampValue {
 public:
     LineClampValue()
-        : m_type(LineClampLineCount)
+        : m_type(LineClamp::LineCount)
         , m_value(-1)
     {
     }
     
-    LineClampValue(int value, ELineClampType type)
+    LineClampValue(int value, LineClamp type)
         : m_type(type)
         , m_value(value)
     {
@@ -45,7 +44,7 @@ public:
     
     int value() const { return m_value; }
     
-    bool isPercentage() const { return m_type == LineClampPercentage; }
+    bool isPercentage() const { return m_type == LineClamp::Percentage; }
 
     bool isNone() const { return m_value == -1; }
 
@@ -60,10 +59,8 @@ public:
     }
     
 private:
-    ELineClampType m_type;
+    LineClamp m_type;
     int m_value;
 };
     
 } // namespace WebCore
-
-#endif // LineClampValue_h

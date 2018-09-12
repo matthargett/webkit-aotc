@@ -50,13 +50,13 @@ public:
         Radio,
         Arrow,
         Icon,
-        Scrollbar
+        Scrollbar,
+        Button
     };
 
     struct Info {
         Type type;
         const char* name;
-        GtkStateFlags state;
         Vector<const char*> classList;
     };
 
@@ -76,6 +76,9 @@ public:
     double opacity() const;
 
     GtkStyleContext* context() const { return m_context.get(); }
+
+    GtkStateFlags state() const;
+    void setState(GtkStateFlags);
 
 protected:
     GtkBorder marginBox() const;
@@ -165,6 +168,13 @@ public:
 
 private:
     OptionSet<Steppers> m_steppers;
+};
+
+class RenderThemeButtonGadget final : public RenderThemeGadget {
+public:
+    RenderThemeButtonGadget(const Info&, RenderThemeGadget* parent, const Vector<RenderThemeGadget::Info> siblings, unsigned position);
+
+    IntSize minimumSize() const override;
 };
 
 } // namespace WebCore

@@ -23,8 +23,7 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef IDBIndexInfo_h
-#define IDBIndexInfo_h
+#pragma once
 
 #if ENABLE(INDEXED_DATABASE)
 
@@ -54,6 +53,7 @@ public:
 
 #if !LOG_DISABLED
     String loggingString(int indent = 0) const;
+    String condensedLoggingString() const;
 #endif
 
     // FIXME: Remove the need for this.
@@ -101,4 +101,3 @@ bool IDBIndexInfo::decode(Decoder& decoder, IDBIndexInfo& info)
 } // namespace WebCore
 
 #endif // ENABLE(INDEXED_DATABASE)
-#endif // IDBIndexInfo_h
